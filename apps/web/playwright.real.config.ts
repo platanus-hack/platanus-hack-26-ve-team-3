@@ -65,7 +65,16 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium-real", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium-real",
+      use: {
+        ...devices["Desktop Chrome"],
+        // Cámara FALSA de Chromium (sin rostro) para que la prueba de vida real cargue Human (medición de peso).
+        launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] },
+      },
+    },
+  ],
   webServer: {
     command: `pnpm exec next build && pnpm exec next start -p ${PORT}`,
     url: baseURL,

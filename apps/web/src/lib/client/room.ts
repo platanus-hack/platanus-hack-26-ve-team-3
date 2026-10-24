@@ -124,8 +124,6 @@ export const HEAVY_ASSETS = [
   "/models/blazeface.bin",
   "/models/facemesh.json",
   "/models/facemesh.bin",
-  "/models/iris.json",
-  "/models/iris.bin",
   "/models/faceres.json",
   "/models/faceres.bin",
   "/models/antispoof.json",

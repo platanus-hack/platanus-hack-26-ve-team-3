@@ -7,7 +7,14 @@ import type { Config, FaceResult, Human as HumanType } from "@vladmandic/human";
 
 export type HumanInstance = HumanType;
 
-const config: Partial<Config> = {
+/**
+ * Solo lo necesario para la inscripción (≈60 teléfonos en el mismo wifi): detector (blazeface), malla (facemesh: el
+ * parpadeo y el giro de la prueba activa salen de sus puntos), descriptor (faceres: dedupe 1:N; edad/género vienen en el
+ * mismo modelo y no se usan), antispoof (`face.real`) y liveness (`face.live`). Apagados: iris (2,6 MB; el parpadeo no lo
+ * necesita), emoción, cuerpo, manos, objetos y segmentación. Si se activa algo aquí, sumar su modelo a /models y a
+ * `HEAVY_ASSETS` (lib/client/room.ts); un test comprueba que coincidan.
+ */
+export const HUMAN_CONFIG: Partial<Config> = {
   modelBasePath: "/models",
   backend: "webgl",
   cacheSensitivity: 0,
@@ -17,7 +24,8 @@ const config: Partial<Config> = {
     enabled: true,
     detector: { rotation: true, maxDetected: 1, minConfidence: 0.5 },
     mesh: { enabled: true },
-    iris: { enabled: true },
+    iris: { enabled: false },
+    attention: { enabled: false },
     description: { enabled: true },
     emotion: { enabled: false },
     antispoof: { enabled: true },
@@ -30,6 +38,15 @@ const config: Partial<Config> = {
   segmentation: { enabled: false },
 };
 
+/**
+ * Autoprueba con la imagen de calentamiento que trae Human (no es una persona nuestra ni una captura): confirma que
+ * con la config recortada siguen saliendo `face.real` (antispoof), `face.live` (liveness), el descriptor (dedupe) y la
+ * malla (parpadeo/giro). Solo se expone en `window` con NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE=1 (pruebas automatizadas).
+ */
+export type HumanSelfTest = { faces: number; real: number | null; live: number | null; embedding: number[]; meshPoints: number; gestures: string[] };
+let selfTest: HumanSelfTest | null = null;
+export const humanSelfTest = (): HumanSelfTest | null => selfTest;
+
 let instance: HumanType | null = null;
 let loading: Promise<HumanType> | null = null;
 
@@ -39,9 +56,18 @@ export async function loadHuman(): Promise<HumanType> {
     loading = (async () => {
       const mod = await import("@vladmandic/human");
       const Human = mod.Human ?? mod.default;
-      const h = new Human(config);
+      const h = new Human(HUMAN_CONFIG);
       await h.load();
-      await h.warmup();
+      const warm = await h.warmup();
+      const f = warm?.face?.[0];
+      selfTest = {
+        faces: warm?.face?.length ?? 0,
+        real: typeof f?.real === "number" ? f.real : null,
+        live: typeof f?.live === "number" ? f.live : null,
+        embedding: f?.embedding ? Array.from(f.embedding) : [],
+        meshPoints: f?.mesh?.length ?? 0,
+        gestures: (warm?.gesture ?? []).map((g) => String(g.gesture)),
+      };
       instance = h;
       return h;
     })();

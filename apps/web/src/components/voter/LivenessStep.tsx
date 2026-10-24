@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiClientError, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { actionLabel, actionSatisfied, averageDescriptors, cameraErrorMessage, loadHuman, pickAction, type HumanInstance, type LivenessAction } from "@/lib/client/human";
+import { actionLabel, actionSatisfied, averageDescriptors, cameraErrorMessage, humanSelfTest, loadHuman, pickAction, type HumanInstance, type LivenessAction } from "@/lib/client/human";
 import type { LivenessOutcome } from "./flowTypes";
 
 /** Umbrales mínimos de antispoof (`face.real`) y liveness (`face.live`) de Human (threat model M5). Siguen siendo demo. */
@@ -77,6 +77,7 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
       setPhase("loading-models");
       const human = await loadHuman();
       humanRef.current = human;
+      if (E2E_FAKE_FACE) (window as unknown as { __quorumHumanSelfTest?: unknown }).__quorumHumanSelfTest = humanSelfTest();
 
       setPhase("starting-camera");
       if (!navigator.mediaDevices?.getUserMedia) throw new DOMException("getUserMedia no disponible", "NotFoundError");
