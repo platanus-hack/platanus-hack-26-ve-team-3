@@ -1,6 +1,6 @@
 import { hashCanonical } from "./hash";
 import { electionScope, groupRoot as computeRoot, MERKLE_TREE_DEPTH, SEMAPHORE_VERSION } from "./identity";
-import { finalHash, type Hex32, type Ledger, type LedgerEntry, type Tally } from "./ledger";
+import { finalHash, memberCommitments, type EnrollmentPolicy, type Hex32, type Ledger, type LedgerEntry, type Tally } from "./ledger";
 import type { DrawResult, DrawRule } from "./draw";
 
 export const AUDIT_PACKAGE_VERSION = "quorum-audit/1";
@@ -25,6 +25,11 @@ export type ElectionManifest = {
    * `manifestHash`. El verificador exige que el evento `Anchored` venga de `registryAddress` con `organizer` igual.
    */
   anchorPolicy?: AnchorPolicy;
+  /**
+   * D-23, modo continuo: se inscriben y votan a la vez. Ausente = modo con fases (padrón congelado al abrir).
+   * Entra en `manifestHash`: K (mínimo de miembros para aceptar votos) y la ventana de raíces se fijan antes de votar.
+   */
+  enrollment?: EnrollmentPolicy;
 };
 
 export type AnchorPolicy = {
@@ -94,10 +99,21 @@ export function buildAuditPackage(input: {
   const { electionId, manifest, ledger } = input;
   if (manifest.electionId !== electionId) throw new Error("manifest.electionId != electionId");
   if (ledger.electionId !== electionId) throw new Error("ledger.electionId != electionId");
+  if (JSON.stringify(manifest.enrollment ?? null) !== JSON.stringify(ledger.enrollment ?? null)) throw new Error("manifest.enrollment != ledger.enrollment");
+  if (ledger.enrollment) {
+    const members = memberCommitments(ledger);
+    if (members.length !== input.commitments.length || members.some((c, i) => c !== input.commitments[i])) throw new Error("commitments != member_added sequence of the ledger");
+  }
   const root = computeRoot(input.commitments);
   if (root !== ledger.groupRoot) throw new Error(`groupRoot from commitments (${root}) != ledger.groupRoot (${ledger.groupRoot})`);
   const commitments = [...input.commitments];
-  const entries = ledger.entries.map((e) => ({ idx: e.idx, prevHash: e.prevHash, hash: e.hash, proof: e.proof }));
+  const entries: LedgerEntry[] = ledger.entries.map((e) =>
+    "member" in e
+      ? { idx: e.idx, prevHash: e.prevHash, hash: e.hash, kind: "member_added" as const, member: { ...e.member } }
+      : e.kind === "ballot"
+        ? { idx: e.idx, prevHash: e.prevHash, hash: e.hash, kind: "ballot" as const, proof: e.proof, groupSize: e.groupSize }
+        : { idx: e.idx, prevHash: e.prevHash, hash: e.hash, proof: e.proof },
+  );
   const t: Tally = { counts: [...input.tally.counts], invalid: input.tally.invalid, total: input.tally.total };
   return {
     version: AUDIT_PACKAGE_VERSION,
