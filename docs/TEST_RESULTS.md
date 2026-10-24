@@ -911,3 +911,14 @@ Ejecutado en el worktree `wt/aprobacion` (macOS, Node 22, pnpm 10.18):
 - Playwright con mocks (`PORT=3341 npx playwright test`): **78 passed, 128 skipped** (capturas), incluye `e2e/review.spec.ts` (8: votante en revisión → aprobado/rechazado; panel con "Casos por revisar (1)", "3 de 9 listos · Hay 1 caso por revisar", avisos al confirmar la apertura, aprobar/rechazar con confirmación) en chromium y mobile-360.
 - E2E real (`QUORUM_E2E_REAL_PORT=3342 pnpm --filter @quorum/web test:e2e:real`): **6 passed (1.3 m)**, incluye `review.real.spec.ts`: dos credenciales distintas con el mismo rostro simulado → la segunda queda en revisión → el organizador aprueba desde el panel → su teléfono sigue solo a ¡Listo! → ambos votan → paquete `auditable`, `manualApprovals: { count: 1, method: "organizer-in-person" }`, verificador `valid: true` con `aprobacion-manual: 1 inscripción aprobada manualmente por el organizador tras coincidencia facial …`.
 - Capturas 360: `docs/screenshots/phase2/revision-01-pendiente-360.png`, `revision-02-panel-caso-360.png`, `revision-03-rechazado-360.png`.
+
+## E2E de punta a punta sobre `main` (2026-10-24 ≈18:10 VET, incluye PR #6, #7 y #8 del restyle)
+- `pnpm typecheck` / `pnpm lint` / `pnpm --filter @quorum/web build`: exit 0.
+- `pnpm test`: contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 27 · verifier 63 · web 237 — 0 fallos.
+- Playwright con mocks (smoke, phase2, lab, room, badge, espera, review, voter-taps): 78 passed (128 omitidos: capturas).
+- `test:e2e:real` (servidor real local): 6 passed — badge, espera, phase2, review (gemelos), room, weight.
+  - Error encontrado y corregido: `review.real` buscaba el botón «Sí, congelar padrón…», renombrado a «Sí, abrir votación» en el restyle (fallo del test, no del producto).
+- Producción (Render, commit d32ee71) con `scripts/load-test.ts --voters 6`: 6/6 inscritos en 1,3 s, 6 votos en 1,74 s (201), 6 dobles votos → 409 `already_voted`, cierre → `auditable` en 0,9 s con ancla real en Base Sepolia (tx `0xce0bf58c2ccff3194cd92402e0a0f9756b1863da02c78c5a6527999ecf6cf55b`), verificador CLI `valid=true` con `anchor_matches` verificado, sorteo 2 ganadores. 0 errores 5xx.
+- Manipulación: el mismo paquete con `tally.counts[0] + 1` → verificador CLI `valid=false`, `tally_matches` = fallo detectado (exit 1).
+- Observación: el ancla fija `finalHash` (ledger), no el recuento; un recuento alterado se detecta por recomputación, no por el ancla.
+- Render ahora ignora cambios solo en `apps/web/e2e/**`, `docs/**`, `**/*.md`, `oficina/**`, `research/**` (no redespliega ni corta el servicio por ellos).
