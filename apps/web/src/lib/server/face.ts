@@ -7,17 +7,30 @@
  * para producción (la clave es adivinable) y solo existe para que la demo corra sin configuración.
  * En producción `FACE_KEY` es obligatoria (se lanza error si NODE_ENV=production y falta).
  */
-import { FaceEnrollInput, FaceEnrollResult, FaceVerifyInput, FaceVerifyResult } from "@quorum/contracts";
+import { FaceEnrollInput, FaceEnrollResult, FaceVerifyInput, FaceVerifyResult, type FaceEnrollResponse } from "@quorum/contracts";
 import { keccak256, stringToBytes } from "viem";
 import { z } from "zod";
-import { canonicalJson, keyFromSecret, open, randomBytes32Hex, seal, sha256Hex, type SealedBlob } from "./crypto";
+import { canonicalJson, keyFromSecret, open, randomBytes32Hex, randomId, seal, sha256Hex, type SealedBlob } from "./crypto";
 import { env, VOTE_NONCE_TTL_MS } from "./env";
 import { HttpError } from "./errors";
 import { withLock } from "./lock";
 import { requireVoter } from "./elections";
 import { getStore, type VoteNonce } from "./store";
 
-function faceKey(): Buffer {
+/** D-21: textos para el votante (sin jerga técnica). */
+export const REVIEW_MESSAGES = {
+  duplicate: "Este rostro ya está inscrito en esta votación",
+  rejected: "No pudimos verificar tu identidad. Habla con el organizador.",
+  full: "Este rostro ya está inscrito en esta votación. Hay muchos casos esperando revisión: habla con el organizador.",
+} as const;
+
+/** D-21: tope de revisiones PENDIENTES por elección (`QUORUM_MAX_PENDING_REVIEWS`, 1..100, default 10). */
+export function maxPendingReviews(): number {
+  const n = Number(process.env.QUORUM_MAX_PENDING_REVIEWS ?? "10");
+  return Number.isInteger(n) && n >= 1 && n <= 100 ? n : 10;
+}
+
+export function faceKey(): Buffer {
   const secret = env.faceKey;
   if (secret) return keyFromSecret(secret);
   if (process.env.NODE_ENV === "production") throw new HttpError("unavailable", "FACE_KEY no configurada");
@@ -65,10 +78,17 @@ export function faceBindingHashOf(electionId: string, voterId: string, sealed: S
 
 /**
  * Inscripción facial (solo en `registration`) con **dedupe 1:N**: compara el descriptor contra todas las
- * plantillas de la misma elección; si alguna supera `FACE_DEDUPE_THRESHOLD` → 409 `duplicate_identity`
- * y NO se guarda nada. Modo demo: descriptor de un modelo local, no es una garantía biométrica fuerte.
+ * plantillas de la misma elección (también las que están en revisión); si alguna supera `FACE_DEDUPE_THRESHOLD`:
+ *  - por defecto → 409 `duplicate_identity` y NO se guarda nada;
+ *  - D-21: si el votante entró con una credencial del evento (`source: "badge"`, que ya es distinta y de un solo uso
+ *    por construcción: `badge_used`) → 202 `{ status: "pending_review" }`: la plantilla se guarda cifrada con
+ *    `pending: true` y se crea una revisión para el organizador. Nunca se guarda con quién coincidió ni la similitud.
+ *    Con `open-alias` (o invitación) NO aplica: sigue el rechazo automático. Tope de pendientes por elección.
+ *  - el mismo votante en revisión reintenta → el mismo `pending_review` (idempotente); rechazado → 409.
+ * `onNewReview` corre justo antes de crear una revisión nueva (la ruta pone ahí su rate limit: si lanza, no se crea).
+ * Modo demo: descriptor de un modelo local, no es una garantía biométrica fuerte.
  */
-export async function enrollFace(input: z.infer<typeof FaceEnrollInput>): Promise<z.infer<typeof FaceEnrollResult>> {
+export async function enrollFace(input: z.infer<typeof FaceEnrollInput>, opts: { onNewReview?: () => void } = {}): Promise<FaceEnrollResponse> {
   const store = await getStore();
   const voter = await requireVoter(input.voterId);
   if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
@@ -76,9 +96,13 @@ export async function enrollFace(input: z.infer<typeof FaceEnrollInput>): Promis
   if (!election || election.status !== "registration") throw new HttpError("closed", "La elección no está en fase de inscripción");
   // Serializado por elección: el dedupe 1:N no puede tener carreras.
   return withLock(`enroll:${voter.electionId}`, async () => {
+    const review = await store.getReviewByVoter(voter.id);
+    if (review?.status === "pending") return { status: "pending_review" as const };
+    if (review?.status === "rejected") throw new HttpError("duplicate_identity", REVIEW_MESSAGES.rejected);
     if (await store.getFaceTemplate(voter.id)) throw new HttpError("forbidden", "Ya existe una prueba de vida para este votante");
     const key = faceKey();
     const threshold = env.faceDedupeThresholdFor(input.descriptor.length);
+    let matched = false;
     for (const tpl of await store.listFaceTemplates(voter.electionId)) {
       // Descriptores de otro modelo (otras dimensiones) no se pueden comparar: aceptarlos saltaría el dedupe.
       if (tpl.dims !== input.descriptor.length) {
@@ -92,11 +116,23 @@ export async function enrollFace(input: z.infer<typeof FaceEnrollInput>): Promis
       }
       // Nunca se revela con quién coincide ni la similitud exacta.
       if (cosineSimilarity(other, input.descriptor) >= threshold) {
-        throw new HttpError("duplicate_identity", "Este rostro ya está inscrito en esta votación");
+        matched = true;
+        break;
       }
     }
     const now = new Date().toISOString();
     const sealed = seal(key, JSON.stringify(input.descriptor));
+    if (matched) {
+      // D-21: solo con identidad distinta verificable (credencial del evento distinta y no usada).
+      const reviewable = voter.source === "badge" && election.eligibility?.method === "event-badge";
+      if (!reviewable) throw new HttpError("duplicate_identity", REVIEW_MESSAGES.duplicate);
+      const pending = (await store.listReviews(voter.electionId)).filter((r) => r.status === "pending").length;
+      if (pending >= maxPendingReviews()) throw new HttpError("duplicate_identity", REVIEW_MESSAGES.full);
+      opts.onNewReview?.();
+      await store.putFaceTemplate({ voterId: voter.id, electionId: voter.electionId, dims: input.descriptor.length, sealed, createdAt: now, pending: true });
+      await store.putReview({ reviewId: randomId("rv"), electionId: voter.electionId, voterId: voter.id, createdAt: now, reason: "face_match", status: "pending", decidedAt: null, decidedBy: null });
+      return { status: "pending_review" as const };
+    }
     const faceBindingHash = faceBindingHashOf(voter.electionId, voter.id, sealed);
     await store.putFaceTemplate({ voterId: voter.id, electionId: voter.electionId, dims: input.descriptor.length, sealed, createdAt: now });
     await store.putVoter({ ...voter, livenessPassedAt: now, faceBindingHash });
@@ -110,7 +146,7 @@ export async function verifyFace(input: z.infer<typeof FaceVerifyInput>): Promis
   const voter = await requireVoter(input.voterId);
   if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
   const template = await store.getFaceTemplate(voter.id);
-  if (!template) throw new HttpError("not_found", "No hay prueba de vida enrolada para este votante");
+  if (!template || template.pending) throw new HttpError("not_found", "No hay prueba de vida enrolada para este votante");
   const threshold = env.faceThresholdFor(input.descriptor.length);
   let stored: number[];
   try {

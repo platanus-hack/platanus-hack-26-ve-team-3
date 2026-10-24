@@ -12,13 +12,16 @@ import {
   DrawResponse,
   Election,
   ElectionResponse,
-  FaceEnrollResult,
+  FaceEnrollResponse,
+  FaceReviewStatus,
   IdentityResult,
   InviteResponse,
   LedgerResponse,
   MarkVotedResult,
   Receipt,
   RollResponse,
+  ReviewsListResponse,
+  ReviewSummary,
   ScheduleResult,
   VotersListResponse,
   CreateElectionInput,
@@ -53,7 +56,10 @@ export const apiV1 = {
     request(`/api/elections/${e(id)}/invites`, org(id, post(body)), InvitesResponse),
 
   /* Inscripción */
-  faceEnroll: (body: { voterId: string; inviteToken: string; descriptor: number[]; consent: true }) => request(`/api/face/enroll`, post(body), FaceEnrollResult),
+  /** 201 `{ ok, faceBindingHash }` o, D-21, 202 `{ status: "pending_review" }` (revisión manual del organizador). */
+  faceEnroll: (body: { voterId: string; inviteToken: string; descriptor: number[]; consent: true }) => request(`/api/face/enroll`, post(body), FaceEnrollResponse),
+  /** D-21: polling del votante mientras su caso está en revisión. */
+  faceReviewStatus: (body: { voterId: string; inviteToken: string }) => request(`/api/face/review`, post(body), FaceReviewStatus),
   linkWallet: (voterId: string, body: { inviteToken: string; walletAddress: string; kind: "kernel" | "eoa-demo"; bindingSignature: string }) =>
     request(`/api/voters/${e(voterId)}/wallet`, post(body), z.unknown()),
   registerIdentity: (voterId: string, body: { inviteToken: string; commitment: string }) => request(`/api/voters/${e(voterId)}/identity`, post(body), IdentityResult),
@@ -85,6 +91,10 @@ export const apiV1 = {
   close: (id: string) => request(`/api/elections/${e(id)}/close`, org(id, post()), Election),
   draw: (id: string) => request(`/api/elections/${e(id)}/draw`, org(id, post()), Election),
   /** Inicio programado (solo en inscripción): `{ inSeconds }`, `{ addSeconds }` o `{ votingStartsAt: ISO | null }`. */
+  /** D-21: casos de coincidencia facial por revisar (sin datos biométricos). */
+  listReviews: (id: string) => request(`/api/elections/${e(id)}/reviews`, org(id), ReviewsListResponse),
+  decideReview: (id: string, reviewId: string, decision: "approve" | "reject") =>
+    request(`/api/elections/${e(id)}/reviews/${e(reviewId)}`, org(id, post({ decision })), ReviewSummary),
   schedule: (id: string, body: ScheduleInput) => request(`/api/elections/${e(id)}/schedule`, org(id, post(body)), ScheduleResult),
 };
 

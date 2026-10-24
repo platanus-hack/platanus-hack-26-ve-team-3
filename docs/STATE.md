@@ -42,3 +42,7 @@
 - `main` = fase 2 completa + flujo simple + cuenta regresiva/inicio programado + credencial QR del evento + rostro rápido (WASM, 7,35 MB por teléfono) + diagnóstico de cámara. Desplegado en Render (https://quorum-sefw.onrender.com) desde `main`.
 - Verde: typecheck, lint, 425 tests, build, 70 Playwright con mocks y 5 E2E reales (credencial, espera, voto completo, sala, peso). Evidencia en `docs/TEST_RESULTS.md`.
 - Pendiente: probar en iPhone/Android reales (A/B `?fb=wasm|humangl`), calibrar el umbral de dedupe 0.70 con cámaras frontales reales.
+
+## 2026-10-24 — revisión manual de duplicados (`feat/aprobacion-manual`, D-21)
+- Gemelos con credenciales distintas: 202 `pending_review` → el organizador aprueba/rechaza en el panel → el teléfono sigue solo. Pendientes se rechazan solas al abrir; panel con "X de Y listos" y avisos antes de abrir. `manualApprovals` en el paquete y en el verificador. Diagnóstico `link:*` en client-log.
+- Verde: typecheck, lint, 508 tests, build, 78 Playwright con mocks, 6 E2E reales. Evidencia en `docs/TEST_RESULTS.md`. Sin PR ni merge (pendiente de aprobación).

@@ -163,3 +163,26 @@ describe("rollPolicy (sala abierta) — declarativa", () => {
     expect(failing(bad)).toEqual(["package_schema"]);
   });
 });
+
+describe("manualApprovals (D-21) — declarativa", () => {
+  it("count > 0 → sigue valid:true y se declara en unsupportedGuarantees con el número", async () => {
+    const pkg = { ...load("valid"), manualApprovals: { count: 1, method: "organizer-in-person", note: "x" } };
+    const r = await verifyPackage(pkg);
+    expect(r.valid).toBe(true);
+    const note = r.unsupportedGuarantees.find((g) => g.startsWith("aprobacion-manual"));
+    expect(note).toMatch(/1 inscripción aprobada manualmente por el organizador tras coincidencia facial/);
+    expect(note).toMatch(/fuera de manifestHash\/checksums/);
+    const two = await verifyPackage({ ...load("valid"), manualApprovals: { count: 2, method: "organizer-in-person" } });
+    expect(two.unsupportedGuarantees.find((g) => g.startsWith("aprobacion-manual"))).toMatch(/2 inscripciones aprobadas manualmente/);
+  });
+
+  it("count 0 → no aparece la nota; método desconocido o campos extra (ids) → package_schema falla", async () => {
+    const zero = await verifyPackage({ ...load("valid"), manualApprovals: { count: 0, method: "organizer-in-person" } });
+    expect(zero.valid).toBe(true);
+    expect(zero.unsupportedGuarantees.some((g) => g.startsWith("aprobacion-manual"))).toBe(false);
+    const badMethod = await verifyPackage({ ...load("valid"), manualApprovals: { count: 1, method: "remote" } });
+    expect(failing(badMethod)).toEqual(["package_schema"]);
+    const withIds = await verifyPackage({ ...load("valid"), manualApprovals: { count: 1, method: "organizer-in-person", voterIds: ["vt_x"] } });
+    expect(failing(withIds)).toEqual(["package_schema"]);
+  });
+});

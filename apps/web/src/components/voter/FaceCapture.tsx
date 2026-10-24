@@ -68,10 +68,19 @@ function platform(): "ios" | "android" | "other" {
   return "other";
 }
 
-/** Pseudoaleatorio sembrado con el voterId: votantes distintos ⇒ vectores casi ortogonales; mismo votante ⇒ mismo vector. */
+/**
+ * Pseudoaleatorio sembrado con el voterId: votantes distintos ⇒ vectores casi ortogonales; mismo votante ⇒ mismo vector.
+ * Solo E2E: `sessionStorage["quorum.e2e.faceSeed"]` fija la semilla (dos "personas" con el mismo rostro, p. ej. gemelos).
+ */
 function syntheticDescriptor(voterId: string): number[] {
+  let forced: string | null = null;
+  try {
+    forced = sessionStorage.getItem("quorum.e2e.faceSeed");
+  } catch {
+    /* sin sessionStorage */
+  }
   let seed = 2166136261;
-  for (const ch of voterId) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
+  for (const ch of forced ?? voterId) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
   return Array.from({ length: DESCRIPTOR_DIMS }, () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return Number((seed / 2 ** 31 - 1).toFixed(6));
@@ -85,7 +94,7 @@ function syntheticDescriptor(voterId: string): number[] {
  * `POST /api/face/enroll` (dedupe 1:N en el servidor). Todo automático: sin botón de captura.
  * Nunca se envían ni guardan imágenes: sólo el descriptor numérico.
  */
-export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserve, onCancel }: { voterId: string; inviteToken: string; onEnrolled: (faceBindingHash: `0x${string}`) => void; onObserve: () => void; onCancel: () => void }) {
+export default function FaceCapture({ voterId, inviteToken, onEnrolled, onPendingReview, onObserve, onCancel }: { voterId: string; inviteToken: string; onEnrolled: (faceBindingHash: `0x${string}`) => void; onPendingReview?: () => void; onObserve: () => void; onCancel: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const humanRef = useRef<HumanInstance | null>(null);
@@ -115,6 +124,13 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
       try {
         setPhase("checking");
         const res = await apiV1.faceEnroll({ voterId, inviteToken, descriptor, consent: true });
+        // D-21: coincidió con alguien ya inscrito pero entró con su propia credencial → revisión del organizador.
+        if ("status" in res) {
+          stopAll();
+          if (onPendingReview) onPendingReview();
+          else throw new Error("Tu caso necesita una revisión rápida. Habla con el organizador.");
+          return;
+        }
         if (!res.ok) throw new Error("El servidor no aceptó la comprobación.");
         try {
           navigator.vibrate?.(60);
@@ -129,7 +145,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
         setPhase("error");
       }
     },
-    [voterId, inviteToken, onEnrolled],
+    [voterId, inviteToken, onEnrolled, onPendingReview, stopAll],
   );
 
   const fakeFace = useCallback(async () => {

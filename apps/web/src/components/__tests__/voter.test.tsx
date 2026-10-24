@@ -191,3 +191,48 @@ describe("VoterFlow · espera con cuenta regresiva", () => {
     expect(await screen.findByRole("radio", { name: "Sí" }, { timeout: 6_000 })).toBeTruthy();
   }, 15_000);
 });
+
+describe("VoterFlow · revisión manual (D-21)", () => {
+  /** La pantalla nombra la credencial FÍSICA del evento (texto pedido por producto); el resto de la jerga sigue prohibida. */
+  const FORBIDDEN_BUT_BADGE = new RegExp(FORBIDDEN.source.replace("credencial|", ""), "i");
+
+  it("en revisión: pantalla simple, consulta hasta 'aprobado' y sigue sola a la vinculación → ¡Listo!", async () => {
+    let decision: "pending_review" | "approved" = "pending_review";
+    let linked = false;
+    const calls = mockFetch((url) => {
+      if (url.endsWith("/api/face/review")) return { status: 200, body: decision === "approved" ? { status: "approved", faceBindingHash: FBH } : { status: "pending_review" } };
+      if (url.endsWith("/wallet")) {
+        linked = true;
+        return { status: 200, body: { id: "v1" } };
+      }
+      if (url.endsWith("/identity")) return { status: 201, body: { ok: true, registeredCount: 2 } };
+      return { status: 200, body: { ...invite("registration", linked ? { livenessPassedAt: "2026-10-24T14:00:00.000Z" } : {}), voter: { ...invite("registration").voter, review: linked ? null : "pending" } } };
+    });
+    const { container } = render(<VoterFlow token="tok" />);
+    expect(await screen.findByText("Tu caso necesita una revisión rápida.")).toBeTruthy();
+    expect(screen.getByText("Muéstrale tu credencial al organizador.")).toBeTruthy();
+    expect(mainText(container)).not.toMatch(FORBIDDEN_BUT_BADGE);
+    expect(mainText(container)).not.toMatch(/coincid|similitud|gemel|duplicad/i);
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/api/face/review"))).toBe(true));
+    expect(calls.find((c) => c.url.endsWith("/api/face/review"))!.body).toEqual({ voterId: "v1", inviteToken: "tok" });
+    decision = "approved";
+    expect(await screen.findByText("¡Listo! Ya estás inscrito.", undefined, { timeout: 20_000 })).toBeTruthy();
+    const linkBody = calls.find((c) => c.url.endsWith("/wallet"))!.body as { bindingSignature: string };
+    expect(linkBody.bindingSignature).toMatch(/^0x[0-9a-f]{130}$/);
+    // Diagnóstico de la vinculación: etapas en orden, sin token, voterId ni dirección.
+    const logs = calls.filter((c) => c.url.endsWith("/api/client-log")).map((c) => c.body as Record<string, unknown>);
+    expect(logs.map((l) => l.stage).filter((st) => String(st).startsWith("link:"))).toEqual(["link:start", "link:wallet", "link:binding", "link:identity", "link:done"]);
+    expect(JSON.stringify(logs)).not.toMatch(/tok|v1|0x[0-9a-f]{40}/);
+  }, 30_000);
+
+  it("rechazado: 'No pudimos verificar tu identidad. Habla con el organizador.'", async () => {
+    mockFetch((url) => {
+      if (url.endsWith("/api/face/review")) return { status: 200, body: { status: "rejected" } };
+      return { status: 200, body: { ...invite("registration"), voter: { ...invite("registration").voter, review: "pending" } } };
+    });
+    const { container } = render(<VoterFlow token="tok" />);
+    expect(await screen.findByRole("heading", { name: "No pudimos verificar tu identidad" }, { timeout: 10_000 })).toBeTruthy();
+    expect(screen.getByText(/Habla con el organizador/)).toBeTruthy();
+    expect(mainText(container)).not.toMatch(FORBIDDEN);
+  });
+});

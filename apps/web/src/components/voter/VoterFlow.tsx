@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2, Clock, UserCheck } from "lucide-react";
 import type { InviteResponse as InviteV1, Receipt } from "@quorum/contracts";
 import type { z } from "zod";
 import { ObserverPanel } from "@/components/room/ObserverPanel";
@@ -44,7 +44,7 @@ const FAST_WINDOW_MS = 10_000;
 /** Si pasado este tiempo desde la hora programada la votación no abrió (p. ej. nadie terminó la inscripción), se dice. */
 const LATE_MS = 60_000;
 
-export type View = "intro" | "face" | "linking" | "waiting" | "ballot" | "receipt" | "voted" | "closed" | "not-linked" | "other-device" | "observer" | "draft";
+export type View = "intro" | "face" | "review" | "review-rejected" | "linking" | "waiting" | "ballot" | "receipt" | "voted" | "closed" | "not-linked" | "other-device" | "observer" | "draft";
 type Local = { identity: VaultInfo | null; registered: boolean; receipt: StoredReceipt | null; pendingFace: `0x${string}` | null };
 
 function readLocal(electionId: string, voterId: string): Local {
@@ -59,6 +59,9 @@ export function autoView(invite: InviteV1, local: Local, roomConsent: boolean): 
   // `votedAt` (autodeclarado, granularidad de día) también cuenta: otro navegador no ofrece votar de nuevo.
   if (local.receipt || invite.voter.votedAt) return "voted";
   if (phase === "registration") {
+    // D-21: coincidencia facial con credencial propia → el organizador revisa el caso.
+    if (invite.voter.review === "pending") return "review";
+    if (invite.voter.review === "rejected") return "review-rejected";
     if (local.identity && local.registered && invite.voter.walletAddress) return "waiting";
     const face = local.pendingFace ?? local.identity?.faceBindingHash ?? null;
     if (invite.voter.livenessPassedAt) return face ? "linking" : "other-device";
@@ -243,11 +246,29 @@ export function VoterFlow({ token }: { token: string }) {
               setFaceHash(hash);
               setView("linking");
             }}
+            onPendingReview={() => setView("review")}
             onCancel={() => setView("intro")}
             onObserve={() => setView("observer")}
           />
         </VoterShell>
       );
+
+    case "review":
+      return (
+        <ReviewPending
+          voterId={voterId}
+          inviteToken={token}
+          onApproved={(hash) => {
+            savePendingFace(voterId, hash);
+            setFaceHash(hash);
+            setView("linking");
+          }}
+          onRejected={() => setView("review-rejected")}
+        />
+      );
+
+    case "review-rejected":
+      return <Watch title="No pudimos verificar tu identidad" body="Habla con el organizador. Mientras tanto, puedes seguir la votación sin votar." electionId={electionId} />;
 
     case "linking": {
       const hash = faceHash ?? local.pendingFace ?? local.identity?.faceBindingHash ?? null;
@@ -401,6 +422,57 @@ function OtherDevice({ electionId }: { electionId?: string }) {
       <h1 className="text-title font-bold leading-tight">Ya empezaste en otro teléfono</h1>
       <p>Tu rostro ya se comprobó desde otro teléfono o navegador. Abre este mismo enlace en ese teléfono para terminar.</p>
       {electionId ? <ObserverPanel electionId={electionId} /> : null}
+    </VoterShell>
+  );
+}
+
+const REVIEW_POLL_MS = 3000;
+
+/**
+ * D-21: "Tu caso necesita una revisión rápida": el rostro coincidió con alguien ya inscrito pero la persona entró con su
+ * propia credencial. Consulta cada 3 s hasta que el organizador apruebe (→ vinculación, sola) o rechace.
+ */
+function ReviewPending({ voterId, inviteToken, onApproved, onRejected }: { voterId: string; inviteToken: string; onApproved: (hash: `0x${string}`) => void; onRejected: () => void }) {
+  const done = useRef(false);
+  const handlers = useRef({ onApproved, onRejected });
+  useEffect(() => {
+    handlers.current = { onApproved, onRejected };
+  }, [onApproved, onRejected]);
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      if (done.current || document.visibilityState !== "visible") return;
+      try {
+        const r = await apiV1.faceReviewStatus({ voterId, inviteToken });
+        if (cancelled || done.current) return;
+        if (r.status === "approved" && r.faceBindingHash) {
+          done.current = true;
+          handlers.current.onApproved(r.faceBindingHash as `0x${string}`);
+        } else if (r.status === "rejected" || r.status === "none") {
+          done.current = true;
+          handlers.current.onRejected();
+        }
+      } catch {
+        /* sin red: se reintenta en el próximo turno */
+      }
+    };
+    void tick();
+    const t = window.setInterval(() => void tick(), REVIEW_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [voterId, inviteToken]);
+
+  return (
+    <VoterShell className="items-center text-center">
+      <StepIndicator current={2} />
+      <UserCheck className="size-20 text-primary" aria-hidden="true" strokeWidth={1.75} />
+      <h1 className="text-title font-bold leading-tight">Tu caso necesita una revisión rápida.</h1>
+      <p className="text-heading">Muéstrale tu credencial al organizador.</p>
+      <p role="status" aria-live="polite" className="flex items-center gap-2 text-muted-foreground" data-testid="review-pending">
+        <span className="q-spinner" aria-hidden="true" /> Esperando al organizador… Deja esta página abierta.
+      </p>
     </VoterShell>
   );
 }

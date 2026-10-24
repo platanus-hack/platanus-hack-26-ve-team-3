@@ -6,6 +6,7 @@
 import type { Config, FaceResult, Human as HumanType } from "@vladmandic/human";
 import { downloadFaceModels, lastDownloadTotal, releaseDownloadedFiles, resolveBackend, wasmSimdSupported, withDownloadedFiles, type FaceBackend } from "./face-download";
 import { TFJS_VERSION } from "./face-models";
+import { clientLog } from "./clientLog";
 
 export * from "./face-download";
 
@@ -128,21 +129,8 @@ export async function loadHuman(): Promise<HumanType> {
   return loading;
 }
 
-/**
- * Diagnóstico mínimo para el ensayo con teléfonos reales: en qué paso va la cámara y cuánto tarda. Va a los logs del
- * servidor (`/api/client-log`). Nunca lleva imagen, descriptor, nombre ni token: solo etapa, tiempos y navegador.
- */
-export function clientLog(stage: string, data: Record<string, string | number | boolean | undefined> = {}): void {
-  try {
-    const clean = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
-    const body = JSON.stringify({ stage, ...clean, ua: navigator.userAgent.slice(0, 160) });
-    if (!navigator.sendBeacon?.("/api/client-log", new Blob([body], { type: "application/json" }))) {
-      void fetch("/api/client-log", { method: "POST", body, headers: { "content-type": "application/json" }, keepalive: true }).catch(() => undefined);
-    }
-  } catch {
-    /* el diagnóstico nunca rompe el flujo */
-  }
-}
+/** Diagnóstico a los logs del servidor (vive en `clientLog.ts`, también lo usa la vinculación del teléfono). */
+export { clientLog };
 
 /* ---------- Prueba de vida activa: mirar → girar la cabeza → volver a mirar ---------- */
 

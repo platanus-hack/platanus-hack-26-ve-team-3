@@ -17,8 +17,10 @@ import { copyText } from "@/lib/client/download";
 import { formatDateTime, formatInt, formatPercent } from "@/lib/client/format";
 import { appendVoters, consumeTokenReveal, loadOrgToken, loadVoters, rememberElection, saveOrgToken, type StoredVoter } from "@/lib/client/orgStore";
 import { hasAuditPackage, nextOrganizerAction, phaseLabel } from "@/lib/client/phases";
-import type { Aggregates as AggregatesV1, Election as ElectionV1, VotersListResponse as VotersListV1 } from "@quorum/contracts";
+import type { Aggregates as AggregatesV1, Election as ElectionV1, ReviewSummary, VotersListResponse as VotersListV1 } from "@quorum/contracts";
+import { casesLabel, openWarnings, readinessLine, type Readiness } from "@/lib/client/reviews";
 import { CandidatesList } from "./CandidatesEditor";
+import { ReviewsCard } from "./ReviewsCard";
 import { RoomCard, openProjector } from "@/components/room/RoomCard";
 
 type Channel = "dry-run" | "wame";
@@ -50,6 +52,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const [newList, setNewList] = useState("");
   const [adding, setAdding] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<ReviewSummary[] | null>(null);
 
   // Token del organizador: se lee de sessionStorage y, la primera vez tras crear la elección, se muestra con "guárdalo".
   useEffect(() => {
@@ -73,8 +76,14 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         if (cancelled) return;
         setElection(e);
         rememberElection(e.id, e.title);
-        const [t, v] = await Promise.allSettled([apiV1.getTally(electionId), apiV1.listVoters(electionId)]);
+        const [t, v, rv] = await Promise.allSettled([
+          apiV1.getTally(electionId),
+          apiV1.listVoters(electionId),
+          // D-21: casos por revisar (solo con token y durante la inscripción).
+          token && e.status === "registration" ? apiV1.listReviews(electionId) : Promise.resolve(null),
+        ]);
         if (cancelled) return;
+        setReviews(rv.status === "fulfilled" && rv.value ? rv.value.reviews : null);
         setTally(t.status === "fulfilled" ? t.value : null);
         if (v.status === "fulfilled") {
           setVoters(v.value.voters ?? null);
@@ -207,6 +216,10 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const action = nextOrganizerAction(phase, { candidates: (election.candidates?.length ?? 0) });
   const shownCounts = counts ?? (voters ? { invited: voters.filter((v) => v.state === "invited").length, registered: voters.filter((v) => v.state === "registered").length, voted: voters.filter((v) => v.state === "voted").length } : null);
   const canAddVoters = phase === "draft" || phase === "registration";
+  const pendingReviews = reviews?.filter((r) => r.status === "pending").length ?? 0;
+  // "X de Y listos": terminaron la inscripción (identidad en el padrón) de los que entraron.
+  const readiness: Readiness | null = counts ? { ready: counts.withIdentity, total: counts.total, pending: pendingReviews } : null;
+  const warnings = action?.id === "open" && readiness ? openWarnings(readiness) : [];
   const inviteLinkFor = (id: string) => inviteResults?.find((r) => r.voterId === id)?.link ?? localVoters.find((v) => v.id === id)?.inviteUrl ?? null;
 
   return (
@@ -310,11 +323,29 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           <CardContent className="flex flex-col gap-2">
             {action ? (
               !confirming ? (
-                <Button onClick={() => setConfirming(true)} disabled={!token} data-testid="phase-action">
-                  {action.label}
-                </Button>
+                <>
+                  <Button onClick={() => setConfirming(true)} disabled={!token} data-testid="phase-action">
+                    {action.label}
+                  </Button>
+                  {action.id === "open" && readiness ? (
+                    <p className="text-small text-muted-foreground" data-testid="open-readiness">
+                      {readinessLine(readiness)}
+                      {readiness.pending > 0 ? (
+                        <>
+                          {" · "}
+                          <strong className="text-warning-strong">{casesLabel(readiness.pending)}</strong>
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
+                </>
               ) : (
                 <div className="flex flex-col gap-2 rounded-md border border-danger/50 p-2">
+                  {warnings.map((w) => (
+                    <p key={w} className="text-small font-semibold" data-testid="open-warning">
+                      {w}
+                    </p>
+                  ))}
                   <p className="text-small">{action.confirm} ¿Confirmas?</p>
                   <div className="flex flex-wrap gap-2">
                     <Button variant="danger" size="sm" onClick={act} loading={acting}>
@@ -362,7 +393,11 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </Alert>
       ) : null}
 
-      {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} onPhaseChange={reload} eligibility={election.eligibility} onElectionChange={setElection} /> : null}
+      {phase === "registration" && reviews && (reviews.length > 0 || election.eligibility?.method === "event-badge") ? (
+        <ReviewsCard electionId={electionId} reviews={reviews} hasToken={Boolean(token)} onDecided={reload} />
+      ) : null}
+
+      {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} onPhaseChange={reload} eligibility={election.eligibility} onElectionChange={setElection} readiness={readiness} /> : null}
 
       <Card>
         <CardHeader>

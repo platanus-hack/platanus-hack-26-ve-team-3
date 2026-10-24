@@ -15,6 +15,7 @@ import { countdownText, formatStartTime, timed, useCountdown, useServerClock } f
 import { copyText } from "@/lib/client/download";
 import { formatInt } from "@/lib/client/format";
 import { loadOrgToken } from "@/lib/client/orgStore";
+import { casesLabel, openWarnings, readinessLine, type Readiness } from "@/lib/client/reviews";
 import { roomApi } from "@/lib/client/room";
 import { remaining, useNow } from "./useNow";
 
@@ -36,7 +37,7 @@ export function openProjector(electionId: string) {
  * Tarjeta "Sala abierta" del panel (fase `registration`): tope y minutos, Abrir / Ampliar / Cerrar, código y enlace,
  * botón "Proyectar". Datos de `GET/POST/DELETE /api/elections/:id/room` con Bearer.
  */
-export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onElectionChange }: { electionId: string; hasToken: boolean; onPhaseChange?: () => void; eligibility?: Election["eligibility"]; onElectionChange?: (e: Election) => void }) {
+export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onElectionChange, readiness }: { electionId: string; hasToken: boolean; onPhaseChange?: () => void; eligibility?: Election["eligibility"]; onElectionChange?: (e: Election) => void; readiness?: Readiness | null }) {
   const now = useNow(1000);
   const { offset, record } = useServerClock();
   const [status, setStatus] = useState<RoomStatus | null>(null);
@@ -230,6 +231,11 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
               <div className="flex flex-wrap gap-2">
                 {confirmStart ? (
                   <div className="flex flex-wrap items-center gap-2 rounded-md border border-danger/50 p-2">
+                    {(readiness ? openWarnings(readiness) : []).map((w) => (
+                      <span key={w} className="w-full text-small font-semibold" data-testid="start-now-warning">
+                        {w}
+                      </span>
+                    ))}
                     <span className="text-small">Se congela el padrón y se cierra la sala. ¿Abrir la votación ahora?</span>
                     <Button size="sm" variant="danger" onClick={startNow} loading={busy === "start"} data-testid="start-now-confirm">
                       Sí, abrir ahora
@@ -243,6 +249,12 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
                     <Play aria-hidden="true" /> Abrir ahora
                   </Button>
                 )}
+                {readiness && !confirmStart ? (
+                  <span className="inline-flex items-center text-small text-muted-foreground" data-testid="start-readiness">
+                    {readinessLine(readiness)}
+                    {readiness.pending > 0 ? <strong className="ml-1 text-warning-strong">· {casesLabel(readiness.pending)}</strong> : null}
+                  </span>
+                ) : null}
                 <Button size="sm" variant="secondary" onClick={() => reschedule({ inSeconds: 300 })} disabled={busy !== null} data-testid="start-in-5">
                   <CalendarClock aria-hidden="true" /> Empezar en 5 min
                 </Button>

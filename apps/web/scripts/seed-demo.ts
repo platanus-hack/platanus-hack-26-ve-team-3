@@ -115,7 +115,9 @@ async function main() {
       const { voters } = await addVoters(election.id, { voters: [{ displayName: `Vecino ${i + 1} (simulado)` }] });
       v = voters[0];
     }
-    const { faceBindingHash } = await enrollFace({ voterId: v.id, inviteToken: v.inviteToken, descriptor: syntheticDescriptor(1000 + i), consent: true });
+    const enrolled = await enrollFace({ voterId: v.id, inviteToken: v.inviteToken, descriptor: syntheticDescriptor(1000 + i), consent: true });
+    if (!("faceBindingHash" in enrolled)) throw new Error("enroll quedó en revisión manual (no esperado en la simulación)");
+    const { faceBindingHash } = enrolled;
     const account = privateKeyToAccount(generatePrivateKey()); // wallet eoa-demo efímera; la clave no se guarda
     const bindingSignature = await account.signTypedData({
       domain: faceBindingDomain(),

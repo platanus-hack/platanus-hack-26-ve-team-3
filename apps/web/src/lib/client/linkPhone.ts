@@ -10,6 +10,7 @@
 import type { Address, Hex } from "viem";
 import type { WalletMode } from "@quorum/wallet";
 import { apiV1 } from "./apiV1";
+import { clientLog, shortError } from "./clientLog";
 import { markRegistered, peekIdentity, sealIdentity, type VaultInfo, type WalletUnlock } from "./identityVault";
 import { createBrowserIdentity } from "./zk";
 
@@ -41,28 +42,46 @@ export async function linkThisPhone(args: {
   onProgress?: (p: LinkProgress) => void;
 }): Promise<LinkResult> {
   const { electionId, voterId, inviteToken, faceBindingHash, linkedAddress, onProgress } = args;
-  onProgress?.({ step: 1, of: 4 });
-  const { wallet, fellBack } = await loadWallet();
-  const { signature } = await wallet.signFaceBinding({ electionId, voterId, faceBindingHash });
+  // Diagnóstico (sin datos personales): etapa + ms desde el inicio, para ver dónde se traba en teléfonos reales.
+  const t0 = Date.now();
+  let stage = "link:start";
+  const log = (s: string, extra: Record<string, string | number | boolean | undefined> = {}) => {
+    stage = s;
+    clientLog(s, { ms: Date.now() - t0, ...extra });
+  };
+  try {
+    log("link:start");
+    onProgress?.({ step: 1, of: 4 });
+    const { wallet, fellBack } = await loadWallet();
+    const { signature } = await wallet.signFaceBinding({ electionId, voterId, faceBindingHash });
+    log("link:wallet", { kind: wallet.mode, source: fellBack ? "fallback" : "primary" });
 
-  onProgress?.({ step: 2, of: 4 });
-  const alreadyLinked = Boolean(linkedAddress && linkedAddress.toLowerCase() === wallet.address.toLowerCase());
-  if (!alreadyLinked) await apiV1.linkWallet(voterId, { inviteToken, walletAddress: wallet.address, kind: wallet.mode, bindingSignature: signature });
+    onProgress?.({ step: 2, of: 4 });
+    const alreadyLinked = Boolean(linkedAddress && linkedAddress.toLowerCase() === wallet.address.toLowerCase());
+    if (!alreadyLinked) await apiV1.linkWallet(voterId, { inviteToken, walletAddress: wallet.address, kind: wallet.mode, bindingSignature: signature });
+    log("link:binding", { got: alreadyLinked });
 
-  onProgress?.({ step: 3, of: 4 });
-  const existing = peekIdentity(electionId);
-  let commitment = existing && existing.voterId === voterId && existing.v === 3 ? existing.commitment : null;
-  if (!commitment) {
-    const id = await createBrowserIdentity();
-    await sealIdentity(electionId, { voterId, faceBindingHash, address: wallet.address, walletMode: wallet.mode }, id);
-    commitment = id.commitment;
+    onProgress?.({ step: 3, of: 4 });
+    const existing = peekIdentity(electionId);
+    let commitment = existing && existing.voterId === voterId && existing.v === 3 ? existing.commitment : null;
+    if (!commitment) {
+      const id = await createBrowserIdentity();
+      await sealIdentity(electionId, { voterId, faceBindingHash, address: wallet.address, walletMode: wallet.mode }, id);
+      commitment = id.commitment;
+    }
+    log("link:identity");
+
+    onProgress?.({ step: 4, of: 4 });
+    const res = await apiV1.registerIdentity(voterId, { inviteToken, commitment });
+    if (!res.ok) throw new Error("El servidor no aceptó la inscripción.");
+    markRegistered(electionId, commitment);
+    log("link:done");
+    return { address: wallet.address, mode: wallet.mode, commitment, registeredCount: res.registeredCount, fellBack, persisted: wallet.persisted };
+  } catch (e) {
+    // `step` = última etapa completada; `error` = mensaje corto sin direcciones ni tokens.
+    clientLog("link:error", { ms: Date.now() - t0, step: stage, error: shortError(e) });
+    throw e;
   }
-
-  onProgress?.({ step: 4, of: 4 });
-  const res = await apiV1.registerIdentity(voterId, { inviteToken, commitment });
-  if (!res.ok) throw new Error("El servidor no aceptó la inscripción.");
-  markRegistered(electionId, commitment);
-  return { address: wallet.address, mode: wallet.mode, commitment, registeredCount: res.registeredCount, fellBack, persisted: wallet.persisted };
 }
 
 /** Abre una inscripción v2 (legado) volviendo a firmar FaceBinding con la wallet de este navegador, sin interacción. */
