@@ -54,6 +54,13 @@ describe("AuditChecklist con salidas REALES del verificador", () => {
     expect(screen.getByTestId("input-artifact-digest").getAttribute("title")).toMatch(/^sha256:[0-9a-f]{64}$/);
   }, 30_000);
 
+  it("check.status del verificador manda: 'no evaluado' es ámbar ('no verificable') aunque passed sea true; nunca verde", () => {
+    expect(checkStatus({ passed: true, status: "no evaluado", reason: "ancla presente" })).toBe("no verificable");
+    expect(checkStatus({ passed: true, status: "verificado" })).toBe("verificado");
+    expect(checkStatus({ passed: true, status: "fallo detectado" })).toBe("fallo detectado");
+    expect(checkStatus({ passed: false })).toBe("fallo detectado");
+  });
+
   it("total alterado: 'fallo detectado' con la causa visible", async () => {
     const r = await realResult("tampered_total.json");
     render(<AuditChecklist result={r} />);

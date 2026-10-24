@@ -12,14 +12,19 @@ import { formatDateTime, shortHash } from "@/lib/client/format";
  * - sin checks evaluados (p. ej. verifier-not-integrated) → "no verificable"
  */
 export function overallStatus(result: AuditResult): HonestStatus {
+  if (result.checks.some((c) => checkStatus(c) === "fallo detectado")) return "fallo detectado";
   if (result.valid === true) return "verificado";
-  if (result.checks.some((c) => c.passed === false)) return "fallo detectado";
   return "no verificable";
 }
 
-/** Un check que pasó pero declara "no evaluado" (p. ej. ancla sin RPC) NO es una verificación: se pinta "no verificable". */
-export function checkStatus(c: { passed: boolean; reason?: string }): HonestStatus {
-  if (!c.passed) return "fallo detectado";
+/**
+ * Estado honesto de un check. Si el verificador trae `status` (tres estados: "verificado" | "fallo detectado" |
+ * "no evaluado") manda ese campo; "no evaluado" se pinta "no verificable" (ámbar), nunca verde.
+ * Sin `status` (verificadores anteriores): un check que pasó pero cuya razón empieza por "no evaluado" tampoco es verde.
+ */
+export function checkStatus(c: { passed: boolean; reason?: string; status?: "verificado" | "fallo detectado" | "no evaluado" }): HonestStatus {
+  if (c.status === "fallo detectado" || !c.passed) return "fallo detectado";
+  if (c.status === "no evaluado") return "no verificable";
   if (c.reason && /^no evaluado/i.test(c.reason.trim())) return "no verificable";
   return "verificado";
 }
