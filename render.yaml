@@ -25,6 +25,9 @@ services:
         value: "84532"
       - key: BASE_SEPOLIA_RPC
         value: https://sepolia.base.org
+      # RPC público para que el verificador del navegador lea el ancla (sin él, anchor_matches queda «no evaluado»).
+      - key: NEXT_PUBLIC_BASE_SEPOLIA_RPC
+        value: https://sepolia.base.org
       - key: NEXT_PUBLIC_REGISTRY_ADDRESS
         value: "0x64e7cbf3b1a334a6633f0025d289335aeda8be13"
       - key: NEXT_PUBLIC_ZERODEV_PROJECT_ID
