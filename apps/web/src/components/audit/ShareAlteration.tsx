@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Download, QrCode } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
 import { copyText, downloadBytes } from "@/lib/client/download";
 import type { AlterationId, AnchorMode } from "@/lib/client/lab/catalog";
@@ -57,9 +58,7 @@ export function ShareAlteration({
       <h3 id="share-h" className="text-heading font-bold">
         Compartir alteración
       </h3>
-      <p className="text-small text-muted-foreground">
-        El público abre ESTA copia alterada en su teléfono y la verifica allí mismo. El original no se modifica ni se vuelve a publicar.
-      </p>
+      <p className="text-small text-muted-foreground">El público verifica esta copia alterada en su teléfono. El original no cambia.</p>
       {!open ? (
         <Button onClick={() => setOpen(true)} className="w-full sm:w-fit" data-testid="share-open">
           <QrCode aria-hidden="true" /> Compartir alteración
@@ -73,7 +72,8 @@ export function ShareAlteration({
               </div>
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <p className="text-small">
-                  Enlace corto: el teléfono descarga el paquete original público, aplica la misma alteración y comprueba que su copia tiene la huella <span className="q-mono font-semibold">{digest.replace(/^sha256:/, "").slice(0, 16)}…</span> antes de verificarla.
+                  Enlace corto: el teléfono descarga el paquete original público, aplica la misma alteración y comprueba que su copia tiene la huella{" "}
+                  <span className="q-mono font-semibold">{digest.replace(/^sha256:/, "").slice(0, 16)}…</span> antes de verificarla.
                 </p>
                 <a href={recipe} className="q-mono break-all text-small underline underline-offset-4" data-testid="share-recipe-url">
                   {recipe}
@@ -93,20 +93,20 @@ export function ShareAlteration({
               La receta incluye el modo «ancla simulada» (<span className="font-semibold">simulación</span>): el teléfono simula el acta a partir del original que descarga.
             </p>
           ) : null}
-          <div className="flex flex-col gap-2">
+          <Disclosure title="Más opciones" className="text-body" bodyClassName="flex flex-col gap-2" testId="share-more">
             {embedded === null ? (
               <p className="text-small text-muted-foreground">Preparando enlace autónomo…</p>
             ) : embedded === "too-big" ? (
               <p className="text-small text-muted-foreground">El paquete es demasiado grande para ir dentro de un enlace; usa el enlace corto o la descarga.</p>
             ) : (
               <Button variant="ghost" onClick={() => copy(embedded, "autonomo")} className="w-full justify-start sm:w-fit" data-testid="share-embedded">
-                <Copy aria-hidden="true" /> {copied === "autonomo" ? "Enlace autónomo copiado" : "Copiar enlace autónomo (la copia va dentro del enlace)"}
+                <Copy aria-hidden="true" /> {copied === "autonomo" ? "Enlace autónomo copiado" : "Copiar enlace autónomo"}
               </Button>
             )}
             <Button variant="ghost" onClick={() => downloadBytes(`copia-alterada-${alteration}.json`, alteredBytes)} className="w-full justify-start sm:w-fit">
               <Download aria-hidden="true" /> Descargar la copia alterada (JSON)
             </Button>
-          </div>
+          </Disclosure>
         </div>
       )}
     </section>

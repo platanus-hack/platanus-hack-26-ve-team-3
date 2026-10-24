@@ -49,9 +49,9 @@ export const statusLabel: Record<string, string> = {
   draft: "Borrador",
   open: "Abierta",
   closed: "Cerrada",
-  tallying: "Escrutando",
-  auditable: "Auditable",
-  failed: "Fallida",
+  tallying: "Contando votos",
+  auditable: "Resultado publicado",
+  failed: "Falló la comprobación",
 };
 
 export const kindLabel: Record<string, string> = {

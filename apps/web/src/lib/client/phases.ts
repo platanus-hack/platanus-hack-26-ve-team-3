@@ -2,12 +2,12 @@
 import type { ElectionStatus as ElectionPhase } from "@quorum/contracts";
 
 export const PHASE_LINE: { id: Exclude<ElectionPhase, "draft" | "failed">; label: string; hint: string }[] = [
-  { id: "registration", label: "Inscripción", hint: "Rostro + teléfono vinculado" },
-  { id: "open", label: "Votación", hint: "Padrón congelado; voto en vivo" },
-  { id: "closed", label: "Cerrada", hint: "No se aceptan más boletas" },
-  { id: "tallying", label: "Escrutinio", hint: "Recuento y paquete de auditoría" },
-  { id: "auditable", label: "Auditable", hint: "Cualquiera verifica el paquete" },
-  { id: "drawn", label: "Sorteo", hint: "Ganadores recomputables" },
+  { id: "registration", label: "Inscripción", hint: "Rostro y teléfono" },
+  { id: "open", label: "Votación", hint: "Ya no entra nadie más" },
+  { id: "closed", label: "Cerrada", hint: "No se aceptan más votos" },
+  { id: "tallying", label: "Conteo", hint: "Se cuentan los votos" },
+  { id: "auditable", label: "Resultado", hint: "Cualquiera puede comprobarlo" },
+  { id: "drawn", label: "Sorteo", hint: "Cualquiera puede repetirlo" },
 ];
 
 export const phaseLabel: Record<ElectionPhase, string> = {
@@ -15,10 +15,10 @@ export const phaseLabel: Record<ElectionPhase, string> = {
   registration: "Inscripción abierta",
   open: "Votación abierta",
   closed: "Cerrada",
-  tallying: "Escrutando",
-  auditable: "Auditable",
+  tallying: "Contando votos",
+  auditable: "Resultado publicado",
   drawn: "Sorteo realizado",
-  failed: "Verificación fallida",
+  failed: "Falló la comprobación",
 };
 
 /** Índice en la línea de fases; `draft` = -1 (antes de la línea), `failed` = posición de `auditable` (allí se detectó). */
