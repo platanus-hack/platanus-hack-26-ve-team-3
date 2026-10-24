@@ -1,4 +1,4 @@
-import { Backdrop, Hero, Promise, TrustFlow } from "@/components/landing/organisms";
+import { Backdrop, Hero, TrustFlow } from "@/components/landing/organisms";
 
 export default function Home() {
   return (
@@ -7,7 +7,6 @@ export default function Home() {
       <div className="q-container flex flex-col gap-16 py-8 md:gap-24 md:py-14">
         <Hero />
         <TrustFlow />
-        <Promise />
       </div>
     </div>
   );

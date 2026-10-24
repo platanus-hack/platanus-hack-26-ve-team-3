@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Check, Lock } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
-import { CheckList } from "@/components/ui/check-list";
 import { Glass } from "@/components/ui/glass";
 import { cn } from "@/lib/client/cn";
 import { FloatingChip, ResultsPreview, StatItem } from "./molecules";
@@ -51,27 +50,5 @@ function HeroVisual() {
         Opción privada
       </FloatingChip>
     </div>
-  );
-}
-
-const promises = ["Una persona inscrita, un voto.", "Comprobante que no revela tu opción.", "Resultado que cualquiera puede recalcular.", "Alteraciones detectadas, con causa."];
-const limits = ["No es para elecciones públicas.", "La cámara no verifica identidad civil.", "El servidor ve el contenido de cada boleta."];
-
-export function Promise() {
-  return (
-    <section aria-labelledby="garantias" className="q-reveal">
-      <Glass className="grid grid-cols-1 gap-8 rounded-xl p-6 md:grid-cols-2 md:p-8">
-        <div>
-          <h2 id="garantias" className="text-heading font-semibold">
-            Garantizamos
-          </h2>
-          <CheckList items={promises} className="mt-4 text-body" />
-        </div>
-        <div>
-          <h2 className="text-heading font-semibold">Límites</h2>
-          <CheckList items={limits} tone="no" className="mt-4 text-body" />
-        </div>
-      </Glass>
-    </section>
   );
 }
