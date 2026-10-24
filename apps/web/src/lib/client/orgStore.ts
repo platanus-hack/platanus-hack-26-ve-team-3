@@ -51,3 +51,43 @@ export function recentElections(): { id: string; title: string }[] {
     return [];
   }
 }
+
+/* ---------- Token del organizador (C4 del threat model) ----------
+ * `POST /api/elections` lo devuelve UNA sola vez. Se guarda en sessionStorage (se borra al cerrar la pestaña) y se
+ * envía como `Authorization: Bearer` en las acciones del organizador. Nunca va a localStorage ni al servidor de otra forma.
+ */
+const tokenKey = (electionId: string) => `quorum.orgToken.${electionId}`;
+const tokenShownKey = (electionId: string) => `quorum.orgToken.shown.${electionId}`;
+
+export function saveOrgToken(electionId: string, token: string) {
+  try {
+    sessionStorage.setItem(tokenKey(electionId), token);
+    sessionStorage.removeItem(tokenShownKey(electionId));
+  } catch {
+    /* sin sessionStorage: el panel pedirá pegar el token */
+  }
+}
+
+export function loadOrgToken(electionId: string): string | null {
+  try {
+    return sessionStorage.getItem(tokenKey(electionId));
+  } catch {
+    return null;
+  }
+}
+
+/** true la primera vez (para mostrar el token con "guárdalo"); después false. */
+export function consumeTokenReveal(electionId: string): boolean {
+  try {
+    if (!sessionStorage.getItem(tokenKey(electionId)) || sessionStorage.getItem(tokenShownKey(electionId))) return false;
+    sessionStorage.setItem(tokenShownKey(electionId), "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function orgAuthHeaders(electionId: string): Record<string, string> {
+  const t = loadOrgToken(electionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}

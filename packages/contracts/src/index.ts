@@ -230,3 +230,78 @@ export const AuditResult = z.object({
 export type AuditResult = z.infer<typeof AuditResult>;
 
 export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity"]) });
+
+// ---------------------------------------------------------------------------
+// Respuestas HTTP del Contrato v1 tal como las implementa el backend (apps/web/src/lib/server/engine.ts).
+// Fuente única para la web: el cliente las valida con estos esquemas (sin duplicados en apps/web).
+// ---------------------------------------------------------------------------
+
+/** GET /api/invite/:token. Nunca el teléfono. */
+export const InviteResponse = z.object({
+  election: Election.pick({ id: true, title: true, kind: true, options: true, status: true, endsAt: true }),
+  voter: z.object({
+    id: z.string(),
+    displayName: z.string().nullable(),
+    walletAddress: z.string().nullable(),
+    livenessPassedAt: z.string().nullable(),
+    votedAt: z.string().nullable(),
+  }),
+});
+export type InviteResponse = z.infer<typeof InviteResponse>;
+
+/** Conteos públicos de inscritos (GET /voters sin token). */
+export const VoterCounts = z.object({ total: z.number().int(), invited: z.number().int(), registered: z.number().int(), withIdentity: z.number().int(), voted: z.number().int() });
+export type VoterCounts = z.infer<typeof VoterCounts>;
+/** GET /api/elections/:id/voters: público `{counts}`; organizador además `voters`. */
+export const VotersListResponse = z.object({ voters: z.array(VoterSummary).optional(), counts: VoterCounts });
+export type VotersListResponse = z.infer<typeof VotersListResponse>;
+
+/** POST /api/voters/:id/voted (autodeclaración, separada del voto). */
+export const MarkVotedResult = z.object({ ok: z.literal(true), votedAt: z.string() });
+
+/** GET /api/elections/:id/roll. `groupRoot`/`scope` son null hasta `POST /open`. */
+export const RollResponse = z.object({
+  electionId: z.string(),
+  status: ElectionStatus,
+  frozen: z.boolean(),
+  groupRoot: z.string().nullable(),
+  scope: z.string().nullable(),
+  merkleTreeDepth: z.number().int(),
+  commitments: z.array(z.string()),
+});
+export type RollResponse = z.infer<typeof RollResponse>;
+
+/** Entrada del ledger público (desde `closed`; durante `open` no se publican entradas, hallazgo C3). */
+export const LedgerEntry = z.object({ idx: z.number().int().min(0), prevHash: z.string(), hash: z.string(), proof: SemaphoreProofSchema });
+export type LedgerEntry = z.infer<typeof LedgerEntry>;
+/** GET /api/elections/:id/ledger. */
+export const LedgerResponse = z.object({
+  electionId: z.string(),
+  status: ElectionStatus,
+  groupRoot: z.string().nullable(),
+  scope: z.string().nullable(),
+  genesisHash: z.string().nullable(),
+  finalHash: z.string().nullable(),
+  count: z.number().int().min(0),
+  proofsPublished: z.boolean(),
+  entries: z.array(LedgerEntry),
+});
+export type LedgerResponse = z.infer<typeof LedgerResponse>;
+
+/** Estado del ancla on-chain al cierre: nunca "anclado" sin tx real. */
+export const AnchorStatus = z.object({ mode: z.enum(["disabled", "anchored", "error"]), reason: z.string() });
+/** GET /api/elections/:id/audit: resultado guardado de `verifyPackage` al cerrar/sortear. */
+export const AuditResponse = z.object({ auditResult: AuditResult, packageDigest: z.string().nullable(), anchorStatus: AnchorStatus.nullable() });
+export type AuditResponse = z.infer<typeof AuditResponse>;
+
+/** GET /api/elections/:id/draw. */
+export const DrawResponse = z.object({
+  seed: Draw.shape.seed,
+  n: Draw.shape.n,
+  winners: Draw.shape.winners,
+  method: DrawMethod,
+  finalHash: Draw.shape.finalHash,
+  candidates: z.array(Candidate),
+  tieBreak: z.string().nullable(),
+});
+export type DrawResponse = z.infer<typeof DrawResponse>;

@@ -61,7 +61,7 @@ function withBinding(
   };
 }
 
-/** EOA local de viem con clave efímera. Solo para demo: sin smart account, sin paymaster, sin `cast`. */
+/** EOA local de viem con clave guardada en este navegador (localStorage). Solo para demo: sin smart account, sin paymaster, sin `cast`. */
 export function createEoaDemoWallet(opts: { privateKey: Hex; created?: boolean; persisted?: boolean; chainId?: number }): QuorumWallet {
   const account = privateKeyToAccount(opts.privateKey);
   const chainId = opts.chainId ?? BASE_SEPOLIA_CHAIN_ID;
@@ -159,7 +159,11 @@ export type GetOrCreateWalletOptions = {
   projectId?: string | null;
   /** Storage persistente para el signer de Kernel (por defecto `localStorage`). */
   kernelStorage?: KeyStorage | null;
-  /** Storage del modo demo (por defecto `sessionStorage`: se borra al cerrar la pestaña). */
+  /**
+   * Storage del modo demo (por defecto `localStorage`, mismo trato que Kernel). La credencial Semaphore se cifra con
+   * una clave derivada de la firma FaceBinding: si la clave del signer se perdiera al cerrar la pestaña entre la
+   * inscripción y el voto, el votante no podría votar. Etiqueta "demo" visible igual que en Kernel.
+   */
   demoStorage?: KeyStorage | null;
   publicRpcUrl?: string;
   /** Si Kernel falla al inicializar (red, project id inválido), cae a `eoa-demo` en vez de lanzar. Default true. */
@@ -169,7 +173,7 @@ export type GetOrCreateWalletOptions = {
   onchainCast?: boolean;
 };
 
-function browserStorage(kind: "localStorage" | "sessionStorage"): KeyStorage | null {
+function browserStorage(kind: "localStorage"): KeyStorage | null {
   try {
     return typeof globalThis !== "undefined" && kind in globalThis ? (globalThis as unknown as Record<string, KeyStorage>)[kind] : null;
   } catch {
@@ -181,7 +185,7 @@ function browserStorage(kind: "localStorage" | "sessionStorage"): KeyStorage | n
 export async function getOrCreateWallet(opts: GetOrCreateWalletOptions = {}): Promise<QuorumWallet> {
   const mode = resolveWalletMode(opts.projectId);
   const demo = () => {
-    const storage = opts.demoStorage === undefined ? browserStorage("sessionStorage") : opts.demoStorage;
+    const storage = opts.demoStorage === undefined ? browserStorage("localStorage") : opts.demoStorage;
     const key = loadOrCreateSignerKey(storage, SIGNER_KEY_STORAGE["eoa-demo"]);
     return createEoaDemoWallet({ privateKey: key.privateKey, created: key.created, persisted: key.persisted });
   };

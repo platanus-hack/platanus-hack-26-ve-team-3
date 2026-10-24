@@ -11,7 +11,7 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   title: { default: "Quórum", template: "%s · Quórum" },
-  description: "Votaciones internas con voto privado y escrutinio verificable por un verificador independiente.",
+  description: "Votaciones internas con elegibilidad por prueba y escrutinio que cualquiera puede verificar.",
 };
 
 export const viewport: Viewport = {

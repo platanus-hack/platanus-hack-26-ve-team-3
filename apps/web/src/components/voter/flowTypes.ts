@@ -1,28 +1,26 @@
-import type { InviteResponse } from "@/lib/client/api";
-import type { VoteSigner } from "@/lib/client/vote";
-import type { Receipt } from "@/lib/client/types";
+import type { Hex } from "viem";
 
-export type VoterStepId = "invite" | "identity" | "liveness" | "wallet" | "ballot" | "receipt";
+/**
+ * Resultado del paso de rostro (contrato v1). `faceBindingHash` lo emite el servidor tras comprobar que el rostro no esté
+ * ya inscrito en esta votación (modo demo). No hay ruta "sin rostro" (threat model B3).
+ */
+export type LivenessOutcome = { mode: "enrolled"; faceBindingHash: Hex };
 
-export const VOTER_STEPS: { id: VoterStepId; label: string }[] = [
+export type RegistrationStepId = "invite" | "identity" | "liveness" | "wallet" | "credential" | "registered";
+export type VotingStepId = "invite" | "wallet" | "ballot" | "receipt";
+
+export const REGISTRATION_STEPS: { id: RegistrationStepId; label: string }[] = [
   { id: "invite", label: "Invitación" },
   { id: "identity", label: "Tus datos" },
-  { id: "liveness", label: "Prueba de vida" },
+  { id: "liveness", label: "Rostro" },
+  { id: "wallet", label: "Wallet" },
+  { id: "credential", label: "Credencial" },
+  { id: "registered", label: "Inscrito" },
+];
+
+export const VOTING_STEPS: { id: VotingStepId; label: string }[] = [
+  { id: "invite", label: "Invitación" },
   { id: "wallet", label: "Wallet" },
   { id: "ballot", label: "Boleta" },
   { id: "receipt", label: "Comprobante" },
 ];
-
-export type LivenessOutcome =
-  | { mode: "enrolled"; voteNonce: string }
-  | { mode: "skipped"; voteNonce: string; reason: string };
-
-export type VoterFlowState = {
-  token: string;
-  invite: InviteResponse;
-  displayName: string;
-  consent: boolean;
-  liveness: LivenessOutcome | null;
-  signer: VoteSigner | null;
-  receipt: Receipt | null;
-};

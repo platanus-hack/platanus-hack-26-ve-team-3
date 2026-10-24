@@ -6,6 +6,14 @@ import type { Aggregates, LiveLayout } from "@quorum/contracts";
 
 export const FIXTURE_TAG = "fixture";
 
+/**
+ * Paquete `quorum-audit/1` FIXTURE servido en `/fixtures/protocol/valid.json` (copia de packages/demo-fixtures/protocol;
+ * un test comprueba que sea idéntica). Tiene 3 boletas con pruebas Groth16 reales: el verificador corre de verdad sobre él.
+ */
+export const FIXTURE_PACKAGE_ID = "fixture-condominio-2026";
+export const FIXTURE_PACKAGE_URL = "/fixtures/protocol/valid.json";
+export const FIXTURE_TAMPERED_URL = "/fixtures/protocol/tampered_total.json";
+
 export const fixtureElection = {
   id: "fixture-samanes-2026",
   title: "Fecha de la asamblea anual — Condominio Los Samanes (fixture)",

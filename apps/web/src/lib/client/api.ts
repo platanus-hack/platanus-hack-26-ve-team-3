@@ -14,7 +14,9 @@ import {
   type CreateElectionInput,
 } from "@quorum/contracts";
 
-export type ApiErrorCode = z.infer<typeof ApiError>["code"] | "network" | "bad_response";
+/** Códigos de `ApiError` (v0) + los que agrega el contrato v1 (`duplicate_identity`, 409 en `/face/enroll`). */
+export type ApiErrorCode = z.infer<typeof ApiError>["code"] | "duplicate_identity" | "network" | "bad_response";
+const V1_EXTRA_CODES = new Set<ApiErrorCode>(["duplicate_identity"]);
 
 export class ApiClientError extends Error {
   code: ApiErrorCode;
@@ -46,6 +48,8 @@ export function describeError(err: unknown): string {
         return `El servicio no está disponible en este momento (${err.message}). Inténtalo más tarde.`;
       case "invalid_input":
         return `Datos inválidos: ${err.message}`;
+      case "duplicate_identity":
+        return "Este rostro ya está inscrito en esta votación. Una persona solo puede inscribirse una vez.";
       case "bad_response":
         return `El servidor respondió con un formato inesperado: ${err.message}`;
       default:
@@ -56,7 +60,7 @@ export function describeError(err: unknown): string {
   return "Ocurrió un error desconocido.";
 }
 
-async function request<T>(path: string, init: RequestInit | undefined, schema: z.ZodType<T> | null): Promise<T> {
+export async function request<T>(path: string, init: RequestInit | undefined, schema: z.ZodType<T> | null): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -81,6 +85,10 @@ async function request<T>(path: string, init: RequestInit | undefined, schema: z
   if (!res.ok) {
     const parsed = ApiError.safeParse(json);
     if (parsed.success) throw new ApiClientError(parsed.data.error, parsed.data.code, res.status);
+    const loose = json as { error?: unknown; code?: unknown } | null;
+    if (loose && typeof loose.code === "string" && V1_EXTRA_CODES.has(loose.code as ApiErrorCode)) {
+      throw new ApiClientError(typeof loose.error === "string" ? loose.error : loose.code, loose.code as ApiErrorCode, res.status);
+    }
     const fallback: ApiErrorCode = res.status === 404 ? "not_found" : res.status >= 500 ? "unavailable" : "invalid_input";
     throw new ApiClientError(`HTTP ${res.status}`, fallback, res.status);
   }

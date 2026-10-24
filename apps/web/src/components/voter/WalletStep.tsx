@@ -73,12 +73,20 @@ export function WalletStep({ electionId, voterId, faceBindingHash, onDone, onBac
           <CardTitle as="h1" className="text-title">
             Tu wallet
           </CardTitle>
-          {mode === "kernel" ? <Badge tone="warning">Smart wallet demo · sin gas · Base Sepolia (testnet)</Badge> : <Badge tone="warning">Wallet demo</Badge>}
+          {mode === "kernel" ? (
+            <Badge tone="warning" data-testid="wallet-kind">
+              Smart wallet demo · sin gas · Base Sepolia (testnet)
+            </Badge>
+          ) : (
+            <Badge tone="warning" data-testid="wallet-kind">
+              Wallet demo (eoa-demo)
+            </Badge>
+          )}
         </div>
         <CardDescription>
           {mode === "kernel"
             ? "Wallet de demostración: creamos una smart wallet Kernel (ZeroDev) controlada por una clave que se guarda solo en este navegador. No hay frase semilla ni forma de exportar la clave: si borras los datos del sitio o cambias de dispositivo, la pierdes. No pagas gas. Firmarás que tu verificación facial queda enlazada a esta wallet."
-            : "No hay proveedor de smart wallets configurado. Se usa una clave efímera de demostración en este navegador (se borra al cerrar la pestaña). No es una smart wallet y no envía nada on-chain."}
+            : "No hay proveedor de smart wallets configurado. Se usa una wallet de demostración cuya clave se guarda solo en este navegador (sobrevive al cerrar la pestaña, pero si borras los datos del sitio o cambias de dispositivo la pierdes y con ella tu credencial). No es una smart wallet y no envía nada on-chain."}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

@@ -140,6 +140,30 @@ describe("eoa-demo", () => {
     expect(demoStorage.getItem(SIGNER_KEY_STORAGE["eoa-demo"])).toMatch(/^0x/);
   });
 
+  it("por defecto guarda la clave en localStorage (no sessionStorage): sobrevive al cerrar la pestaña", async () => {
+    const local = memoryStorage();
+    const session = memoryStorage();
+    vi.stubGlobal("localStorage", local);
+    vi.stubGlobal("sessionStorage", session);
+    try {
+      const w1 = await getOrCreateWallet({ projectId: null });
+      expect(w1.mode).toBe("eoa-demo");
+      expect(w1.isDemo).toBe(true);
+      expect(w1.label.toLowerCase()).toContain("demo");
+      expect(w1.persisted).toBe(true);
+      expect(local.getItem(SIGNER_KEY_STORAGE["eoa-demo"])).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(session.getItem(SIGNER_KEY_STORAGE["eoa-demo"])).toBeNull();
+      // "Cerrar la pestaña": se pierde sessionStorage, no localStorage → misma wallet y misma firma FaceBinding.
+      vi.stubGlobal("sessionStorage", memoryStorage());
+      const w2 = await getOrCreateWallet({ projectId: null });
+      expect(w2.created).toBe(false);
+      expect(w2.address).toBe(w1.address);
+      expect((await w2.signFaceBinding(binding)).signature).toBe((await w1.signFaceBinding(binding)).signature);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("firma FaceBinding verificable offline; alterar cualquier campo invalida la firma", async () => {
     const w = await getOrCreateWallet({ projectId: null, demoStorage: memoryStorage() });
     const { message, signature } = await w.signFaceBinding(binding);

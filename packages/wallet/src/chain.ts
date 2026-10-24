@@ -31,5 +31,5 @@ export function resolveWalletMode(projectId: string | null | undefined): WalletM
 
 export const MODE_LABEL: Record<WalletMode, string> = {
   kernel: "Smart wallet Kernel (ZeroDev) · demo: clave guardada solo en este navegador · Base Sepolia · sin gas",
-  "eoa-demo": "Wallet demo (clave efímera en este navegador, sin smart wallet)",
+  "eoa-demo": "Wallet demo (clave guardada solo en este navegador, sin smart wallet)",
 };

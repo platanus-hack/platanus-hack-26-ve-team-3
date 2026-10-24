@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+/* Agregados con fase v1 (registration/drawn además de las de v0). */
 import type { Aggregates } from "@quorum/contracts";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,7 +161,7 @@ export function CountdownTile({ closesAt, status }: { closesAt: string; status: 
 
 const TEXTS: Record<"howToRead" | "privacyNote" | "rankingHint" | "budgetHint", { title: string; body: string }> = {
   howToRead: { title: "Cómo leer esto", body: "Estas cifras son agregados que el servidor publica cada pocos segundos. No muestran votos individuales ni quién votó. El resultado final sólo cuenta cuando el verificador independiente lo confirme." },
-  privacyNote: { title: "Privacidad", body: "Nunca se publica la correspondencia entre una persona y su opción. Con menos de 5 votos el desglose se oculta. Esto no elimina riesgos por metadatos." },
+  privacyNote: { title: "Privacidad", body: "La prueba no revela quién emitió cada boleta; el servidor ve el contenido de la boleta. Con menos de 5 votos el desglose se oculta. Esto no elimina riesgos por metadatos." },
   rankingHint: { title: "Orden de preferencia", body: "En esta modalidad las barras muestran menciones por opción, no un ganador. El orden final lo determina el escrutinio verificado." },
   budgetHint: { title: "Presupuesto participativo", body: "Cada barra es el apoyo acumulado por partida. El reparto final depende de las reglas publicadas en el manifiesto." },
 };

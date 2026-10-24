@@ -17,7 +17,23 @@ export function overallStatus(result: AuditResult): HonestStatus {
   return "no verificable";
 }
 
+/** Un check que pasó pero declara "no evaluado" (p. ej. ancla sin RPC) NO es una verificación: se pinta "no verificable". */
+export function checkStatus(c: { passed: boolean; reason?: string }): HonestStatus {
+  if (!c.passed) return "fallo detectado";
+  if (c.reason && /^no evaluado/i.test(c.reason.trim())) return "no verificable";
+  return "verificado";
+}
+
 const checkName: Record<string, string> = {
+  package_schema: "Formato del paquete",
+  manifest_hash: "Hash del manifiesto",
+  group_root: "Raíz del padrón",
+  chain_integrity: "Cadena del registro",
+  proofs_valid: "Pruebas de pertenencia",
+  nullifiers_unique: "Un voto por credencial",
+  tally_matches: "Recuento reproducido",
+  anchor_matches: "Ancla on-chain",
+  draw_matches: "Sorteo recomputado",
   "artifact-integrity": "Integridad de artefactos",
   "crypto-proof": "Prueba criptográfica",
   "result-consistency": "Coherencia del resultado",
@@ -26,17 +42,36 @@ const checkName: Record<string, string> = {
   "verifier-not-integrated": "Verificador no integrado",
 };
 
-export function AuditChecklist({ result, onDownload }: { result: AuditResult; onDownload?: () => void }) {
+/** Checks que el verificador declaró "no evaluado" (p. ej. ancla sin RPC). Con alguno, "verificado" nunca es pleno (M2). */
+export function notEvaluated(result: AuditResult): string[] {
+  return result.checks.filter((c) => checkStatus(c) === "no verificable").map((c) => c.name);
+}
+
+export function AuditChecklist({ result, onDownload, runtime, title = "Resultado del verificador" }: { result: AuditResult; onDownload?: () => void; runtime?: "navegador" | "servidor"; title?: string }) {
   const status = overallStatus(result);
+  const pending = notEvaluated(result);
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>Resultado del verificador</CardTitle>
-          <StatusPill status={status} size="lg" />
+          <CardTitle>{title}</CardTitle>
+          <div className="flex flex-wrap items-center gap-2" role="status" data-testid="audit-verdict">
+            <StatusPill status={status} size="lg" />
+            {status === "verificado" && pending.length > 0 ? <StatusPill status="no verificable" className="normal-case" /> : null}
+          </div>
         </div>
+        {status === "verificado" && pending.length > 0 ? (
+          <p className="text-small font-semibold text-warning-strong">
+            Verificación parcial: las comprobaciones evaluadas pasaron, pero {pending.map((n) => checkName[n] ?? n).join(", ")} quedó sin evaluar. Sin ancla evaluada no se garantiza que el registro esté completo.
+          </p>
+        ) : null}
         <CardDescription>
-          Método: <span className="q-mono">{result.protocol}</span> · Verificador <span className="q-mono">v{result.verifierVersion}</span> · {formatDateTime(result.checkedAt)}
+          Método: <span className="q-mono">{result.protocol}</span>
+          {runtime ? <> · ejecutado en {runtime === "navegador" ? "tu navegador" : "el servidor"}</> : null} · Versión{" "}
+          <span className="q-mono" data-testid="verifier-version">
+            {result.verifierVersion}
+          </span>{" "}
+          · {formatDateTime(result.checkedAt)}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -47,8 +82,8 @@ export function AuditChecklist({ result, onDownload }: { result: AuditResult; on
           </div>
           <div>
             <dt className="text-muted-foreground">Hash de entrada (paquete)</dt>
-            <dd className="q-mono font-semibold" title={result.inputArtifactDigest}>
-              {shortHash(result.inputArtifactDigest, 14, 8)}
+            <dd className="q-mono font-semibold" title={result.inputArtifactDigest} data-testid="input-artifact-digest">
+              {shortHash(result.inputArtifactDigest, 18, 10)}
             </dd>
           </div>
         </dl>
@@ -70,7 +105,7 @@ export function AuditChecklist({ result, onDownload }: { result: AuditResult; on
                     <p className="q-mono text-small text-subtle">{c.name}</p>
                     {c.reason ? <p className="mt-1 text-small text-muted-foreground">{c.reason}</p> : null}
                   </div>
-                  <StatusPill status={c.passed ? "verificado" : "fallo detectado"} className="shrink-0" />
+                  <StatusPill status={checkStatus(c)} className="shrink-0" />
                 </li>
               ))}
             </ul>
@@ -84,16 +119,21 @@ export function AuditChecklist({ result, onDownload }: { result: AuditResult; on
           {result.unsupportedGuarantees.length === 0 ? (
             <p className="text-small text-muted-foreground">El verificador no declaró propiedades sin evaluar. Esto no significa que todo esté garantizado: ver límites en el centro de transparencia.</p>
           ) : (
-            <ul className="flex flex-wrap gap-2">
+            <ul className="flex flex-col gap-2">
               {result.unsupportedGuarantees.map((g) => (
-                <li key={g}>
-                  <StatusPill status="no verificable" />
-                  <span className="q-mono ml-2 text-small">{g}</span>
+                <li key={g} className="flex flex-col gap-1 rounded-md border border-border p-2 sm:flex-row sm:items-start sm:gap-2">
+                  <StatusPill status="no verificable" className="w-fit shrink-0" />
+                  <span className="text-small text-muted-foreground">{g}</span>
                 </li>
               ))}
             </ul>
           )}
         </section>
+
+        <details className="rounded-md border border-border p-3 text-small">
+          <summary className="cursor-pointer font-semibold">Salida completa del verificador (JSON)</summary>
+          <pre className="q-mono mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(result, null, 2)}</pre>
+        </details>
 
         {onDownload ? (
           <Button variant="secondary" onClick={onDownload}>

@@ -20,4 +20,17 @@ test.describe("smoke", () => {
     const lang = await page.locator("html").getAttribute("lang");
     expect(lang, "<html lang> presente").toBeTruthy();
   });
+
+  test("fase 2: los artefactos Groth16 se sirven desde /zk", async ({ request }) => {
+    for (const f of ["semaphore-10.wasm", "semaphore-10.zkey"]) {
+      const res = await request.head(`/zk/${f}`);
+      expect(res.status(), f).toBe(200);
+    }
+  });
+
+  test("fase 2: el centro de transparencia del paquete fixture responde y ofrece Verificar ahora", async ({ page }) => {
+    await page.goto("/e/fixture-condominio-2026");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Verificar ahora" })).toBeVisible();
+  });
 });

@@ -2,26 +2,26 @@ import Link from "next/link";
 import { ArrowRight, FileCheck2, ShieldCheck, Vote } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { fixtureElection } from "@/lib/client/fixtures";
+import { FIXTURE_PACKAGE_ID } from "@/lib/client/fixtures";
 import { cn } from "@/lib/client/cn";
 
-const DEMO_ID = process.env.NEXT_PUBLIC_DEMO_ELECTION_ID ?? fixtureElection.id;
+const DEMO_ID = process.env.NEXT_PUBLIC_DEMO_ELECTION_ID ?? FIXTURE_PACKAGE_ID;
 
 const pillars = [
   {
     icon: <Vote aria-hidden="true" />,
     title: "Votar",
-    body: "Invitación por WhatsApp, prueba de vida en el navegador (modo demo) y una wallet embebida que firma tu boleta. Sin criptomonedas ni instalaciones.",
+    body: "Te inscribes con tu rostro (modo demo) y una wallet; tu navegador crea una credencial. Al votar genera una prueba de que estás en el padrón. La prueba no revela quién emitió cada boleta; el servidor ve el contenido de la boleta.",
   },
   {
     icon: <FileCheck2 aria-hidden="true" />,
     title: "Verificar",
-    body: "Recibes un ID de inclusión que prueba que tu boleta entró en la urna sin revelar tu opción. Resultados en vivo sólo con agregados.",
+    body: "Recibes un nullifier que no contiene tu opción y con el que compruebas que tu boleta sigue en el registro. En vivo sólo se publican agregados.",
   },
   {
     icon: <ShieldCheck aria-hidden="true" />,
     title: "Auditar",
-    body: "Un verificador independiente revisa el paquete publicado. Si alguien altera un total o un artefacto, falla con causa concreta.",
+    body: "Cualquiera corre el verificador en su navegador sobre el paquete publicado y recomputa el sorteo. Si alguien altera un total o una boleta, falla con causa concreta.",
   },
 ];
 
@@ -30,7 +30,7 @@ export default function Home() {
     <div className="q-container flex flex-col gap-12 py-10 md:gap-16 md:py-16">
       <section className="flex flex-col gap-6 md:max-w-3xl">
         <p className="text-small font-semibold uppercase tracking-wide text-success-strong">Votaciones internas · demostración</p>
-        <h1 className="text-display font-bold tracking-tight md:text-[2.75rem] md:leading-[1.1]">Tu decisión es privada. El resultado es verificable.</h1>
+        <h1 className="text-display font-bold tracking-tight md:text-[2.75rem] md:leading-[1.1]">Vota con una prueba. Verifica el resultado tú mismo.</h1>
         <p className="max-w-prose text-heading text-muted-foreground">Votaciones internas con evidencia pública del escrutinio. Nadie necesita confiar ciegamente en un dashboard.</p>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link href={`/e/${encodeURIComponent(DEMO_ID)}`} className={cn(buttonVariants({ size: "lg" }))}>
@@ -41,7 +41,7 @@ export default function Home() {
           </Link>
         </div>
         <p className="text-small text-muted-foreground">
-          La elección demo es ficticia (<span className="q-mono">fixture</span>): fecha de asamblea del «Condominio Los Samanes». Sin personas, partidos ni procesos reales.
+          La elección demo es ficticia (<span className="q-mono">fixture</span>): un condominio inventado con opciones neutrales. Sin personas, partidos ni procesos reales.
         </p>
       </section>
 
@@ -74,8 +74,8 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <ul className="list-disc space-y-1 pl-5 text-body text-muted-foreground">
-              <li>Elegibilidad por invitación y una boleta firmada por participante.</li>
-              <li>Comprobante de inclusión que no revela la opción.</li>
+              <li>Cada boleta prueba que su credencial está en el padrón; una credencial, una boleta.</li>
+              <li>Comprobante de inclusión (nullifier) que no revela la opción.</li>
               <li>Paquete de evidencias que un verificador separado puede revisar.</li>
               <li>Detección de totales alterados o artefactos ausentes, con causa.</li>
             </ul>
@@ -89,7 +89,8 @@ export default function Home() {
             <ul className="list-disc space-y-1 pl-5 text-body text-muted-foreground">
               <li>No es un sistema para elecciones públicas ni está certificado.</li>
               <li>La prueba de vida es un modo demo, no una verificación de identidad civil.</li>
-              <li>No garantiza resistencia a coerción ni anonimato absoluto frente a metadatos.</li>
+              <li>El servidor ve el contenido de cada boleta; no hay resistencia a coacción.</li>
+              <li>La comprobación de rostro es de demostración: no impide todos los duplicados.</li>
               <li>«Verificado» sólo aparece cuando el verificador independiente lo confirma.</li>
             </ul>
           </CardContent>

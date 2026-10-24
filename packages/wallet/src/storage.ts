@@ -1,7 +1,7 @@
 import { generatePrivateKey } from "viem/accounts";
 import type { Hex } from "viem";
 
-/** Subconjunto de `Storage` (localStorage/sessionStorage) para poder inyectar memoria en tests. */
+/** Subconjunto de `Storage` (localStorage) para poder inyectar memoria en tests. */
 export type KeyStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export const SIGNER_KEY_STORAGE = {

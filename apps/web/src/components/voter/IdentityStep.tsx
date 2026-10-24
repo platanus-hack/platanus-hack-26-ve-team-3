@@ -26,7 +26,7 @@ export function IdentityStep({ initialName, onBack, onNext }: { initialName: str
           <CardTitle as="h1" className="text-title">
             Tus datos
           </CardTitle>
-          <CardDescription>Tu nombre no se publica ni se asocia a tu opción. Sirve sólo para esta sesión de demostración.</CardDescription>
+          <CardDescription>Tu nombre no se publica ni se asocia a tu boleta. Sólo lo ve el organizador en su panel.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           <Field label="Nombre" htmlFor="displayName" hint="Puede ser un nombre de prueba." error={error && error.includes("nombre") ? error : null}>
@@ -35,11 +35,13 @@ export function IdentityStep({ initialName, onBack, onNext }: { initialName: str
           <div className="rounded-md border border-border bg-muted p-3">
             <p className="mb-2 text-small font-semibold">Prueba de vida — modo demo, no certificada</p>
             <ul className="mb-3 list-disc space-y-1 pl-5 text-small text-muted-foreground">
-              <li>Usaremos tu cámara en el navegador para comprobar que hay una persona presente.</li>
-              <li>No guardamos tu imagen. Sólo se envía un descriptor numérico que no permite reconstruir tu rostro.</li>
-              <li>No es una verificación de identidad civil ni un servicio certificado.</li>
+              <li>Tu cámara se procesa en tu navegador. No se envía ni se guarda tu foto ni tu video.</li>
+              <li>
+                Qué se guarda: un descriptor facial (vector numérico) cifrado en el servidor, sólo durante la inscripción, para comprobar que tu rostro no esté ya inscrito en esta votación. Se borra al abrir la votación.
+              </li>
+              <li>Es una comprobación de demostración: no verifica tu identidad civil ni está certificada, y no impide todos los duplicados.</li>
             </ul>
-            <Checkbox id="consent" checked={consent} onChange={(e) => setConsent(e.target.checked)} label={<span>Acepto la prueba de vida en modo demo. Entiendo que no se guarda mi imagen.</span>} />
+            <Checkbox id="consent" checked={consent} onChange={(e) => setConsent(e.target.checked)} label={<span>Acepto la prueba de vida en modo demo y que se guarde un descriptor facial cifrado sólo durante la inscripción; se borra al abrir la votación.</span>} />
             {error && error.includes("consentimiento") ? (
               <p role="alert" className="mt-2 text-small font-semibold text-danger-strong">
                 Error: {error}

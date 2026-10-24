@@ -3,15 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import type { CreateElectionInput } from "@quorum/contracts";
 import { Stepper } from "@/components/Stepper";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/input";
-import { api, describeError } from "@/lib/client/api";
-import { appendVoters, rememberElection } from "@/lib/client/orgStore";
+import { describeError } from "@/lib/client/api";
+import { apiV1, type CreateElectionV1 } from "@/lib/client/apiV1";
+import { appendVoters, rememberElection, saveOrgToken } from "@/lib/client/orgStore";
 import { kindLabel } from "@/lib/client/format";
+import type { Candidate } from "@quorum/contracts";
+import { CandidatesEditor, CandidatesList } from "./CandidatesEditor";
 
 const STEPS = [
   { id: "question", label: "Pregunta y opciones" },
@@ -42,10 +44,14 @@ export function ElectionWizard() {
   // Paso 1
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [kind, setKind] = useState<CreateElectionInput["kind"]>("multiple");
+  const [kind, setKind] = useState<CreateElectionV1["kind"]>("multiple");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [startsAt, setStartsAt] = useState(() => toLocalInput(new Date()));
   const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + 2 * 3600 * 1000)));
+  // Sorteo verificable (D-12): candidatos y regla de N ganadores. Se fijan en el manifiesto al crear.
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [winnersRule, setWinnersRule] = useState<"fixed" | "fromResult">("fromResult");
+  const [winnersCount, setWinnersCount] = useState("1");
 
   // Paso 2
   const [participants, setParticipants] = useState<Participant[]>([{ displayName: "", phoneE164: "" }]);
@@ -61,12 +67,23 @@ export function ElectionWizard() {
   const cleanOptions = useMemo(() => options.map((o) => o.trim()).filter(Boolean), [options]);
   const cleanParticipants = useMemo(() => participants.map((p) => ({ displayName: p.displayName.trim(), phoneE164: p.phoneE164.trim() })).filter((p) => p.displayName), [participants]);
 
+  /** Con "según la opción ganadora", cada opción debe ser un número entero (p. ej. 1..5 proyectos). */
+  const optionValues = useMemo(() => {
+    const vals = cleanOptions.map((o) => (/^\d+$/.test(o) ? Number(o) : NaN));
+    return vals.every((v) => Number.isInteger(v)) ? vals : null;
+  }, [cleanOptions]);
+
   function validateStep1(): string | null {
     if (title.trim().length < 3) return "El título necesita al menos 3 caracteres.";
     if (cleanOptions.length < 2) return "Necesitas al menos 2 opciones.";
     if (cleanOptions.length > 10) return "Máximo 10 opciones.";
     if (new Set(cleanOptions.map((o) => o.toLowerCase())).size !== cleanOptions.length) return "Hay opciones repetidas.";
     if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) return "El cierre debe ser posterior a la apertura.";
+    if (candidates.length > 0 && winnersRule === "fromResult" && !optionValues) return "Para que la opción ganadora fije cuántos proyectos se financian, cada opción debe ser un número (p. ej. 1, 2, 3, 4, 5).";
+    if (candidates.length > 0 && winnersRule === "fixed") {
+      const n = Number(winnersCount);
+      if (!Number.isInteger(n) || n < 1 || n > candidates.length) return `El número de ganadores debe estar entre 1 y ${candidates.length}.`;
+    }
     return null;
   }
   function validateStep2(): string | null {
@@ -104,26 +121,33 @@ export function ElectionWizard() {
     setPublishing(true);
     try {
       setProgress("Creando la elección…");
-      const input: CreateElectionInput = {
+      const input: CreateElectionV1 = {
         title: title.trim(),
         description: description.trim(),
         kind,
         options: cleanOptions.map((label, i) => ({ id: slug(label, i), label })),
         startsAt: new Date(startsAt).toISOString(),
         endsAt: new Date(endsAt).toISOString(),
+        ...(candidates.length > 0
+          ? winnersRule === "fromResult" && optionValues
+            ? { candidates, winnersCountFromResult: true, optionValues }
+            : { candidates, winnersCountFromResult: false, winnersCount: Number(winnersCount) }
+          : {}),
       };
-      const election = await api.createElection(input);
+      const election = await apiV1.createElection(input);
       rememberElection(election.id, election.title);
+      // Token del organizador (se devuelve una sola vez): sessionStorage; el panel lo muestra una vez con "guárdalo".
+      if (election.organizerToken) saveOrgToken(election.id, election.organizerToken);
 
       setProgress(`Registrando ${cleanParticipants.length} participantes…`);
-      const res = await api.addVoters(
+      const res = await apiV1.addVoters(
         election.id,
         cleanParticipants.map((p) => (p.phoneE164 ? { displayName: p.displayName, phoneE164: p.phoneE164 } : { displayName: p.displayName })),
       );
       appendVoters(election.id, res.voters);
 
-      setProgress("Publicando (manifiesto + layout)…");
-      await api.publishElection(election.id);
+      setProgress("Abriendo la inscripción (manifiesto + layout)…");
+      await apiV1.publish(election.id);
       router.push(`/org/${encodeURIComponent(election.id)}`);
     } catch (e) {
       setError(describeError(e));
@@ -154,7 +178,7 @@ export function ElectionWizard() {
               <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
             </Field>
             <Field label="Tipo" htmlFor="kind">
-              <Select id="kind" value={kind} onChange={(e) => setKind(e.target.value as CreateElectionInput["kind"])}>
+              <Select id="kind" value={kind} onChange={(e) => setKind(e.target.value as CreateElectionV1["kind"])}>
                 {(["yes-no", "multiple", "ranking", "budget"] as const).map((k) => (
                   <option key={k} value={k}>
                     {kindLabel[k]}
@@ -187,6 +211,30 @@ export function ElectionWizard() {
                 <Input id="endsAt" type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
               </Field>
             </div>
+            <fieldset className="flex flex-col gap-3 rounded-md border border-border p-3">
+              <legend className="px-1 text-small font-semibold">Sorteo verificable de proyectos (opcional)</legend>
+              <p className="text-small text-muted-foreground">
+                Si postulas proyectos, al cerrar se sortean los ganadores con una semilla que sale del hash final del registro: nadie la conoce antes y cualquiera puede recomputarla. Se fijan al publicar.
+              </p>
+              <CandidatesEditor candidates={candidates} onChange={setCandidates} />
+              {candidates.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  <label className="flex min-h-tap items-center gap-2 text-body">
+                    <input type="radio" name="winnersRule" checked={winnersRule === "fromResult"} onChange={() => setWinnersRule("fromResult")} className="size-5 accent-[var(--color-primary)]" />
+                    La opción ganadora fija cuántos se financian (opciones numéricas)
+                  </label>
+                  <label className="flex min-h-tap items-center gap-2 text-body">
+                    <input type="radio" name="winnersRule" checked={winnersRule === "fixed"} onChange={() => setWinnersRule("fixed")} className="size-5 accent-[var(--color-primary)]" />
+                    Número fijo de ganadores
+                  </label>
+                  {winnersRule === "fixed" ? (
+                    <Field label="Ganadores" htmlFor="winnersCount">
+                      <Input id="winnersCount" inputMode="numeric" value={winnersCount} onChange={(e) => setWinnersCount(e.target.value)} className="w-28" />
+                    </Field>
+                  ) : null}
+                </div>
+              ) : null}
+            </fieldset>
             {stepError ? (
               <Alert tone="danger" title="Revisa el formulario">
                 {stepError}
@@ -260,7 +308,7 @@ export function ElectionWizard() {
         <Card>
           <CardHeader>
             <CardTitle>Revisar y publicar</CardTitle>
-            <CardDescription>Al publicar se calcula el manifiesto (hash de título, opciones y fechas) y se abre la votación.</CardDescription>
+            <CardDescription>Al publicar se fija el manifiesto (hash de título, opciones y fechas) y se abre la inscripción. La votación se abre después, desde el panel, al congelar el padrón.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <dl className="grid grid-cols-1 gap-3 text-small sm:grid-cols-2">
@@ -284,6 +332,15 @@ export function ElectionWizard() {
                       <li key={o}>{o}</li>
                     ))}
                   </ol>
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-muted-foreground">Proyectos al sorteo</dt>
+                <dd className="mt-1">
+                  <CandidatesList candidates={candidates} />
+                  {candidates.length > 0 ? (
+                    <p className="mt-1 text-muted-foreground">{winnersRule === "fromResult" ? "Ganadores: el número de la opción ganadora." : `Ganadores: ${winnersCount}.`}</p>
+                  ) : null}
                 </dd>
               </div>
               <div>
