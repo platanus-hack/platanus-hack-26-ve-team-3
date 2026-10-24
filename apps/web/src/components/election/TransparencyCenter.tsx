@@ -21,6 +21,7 @@ import { VerifyNowPanel, type PackageSource, type VerifiedPackage } from "./Veri
 import { ActionBar, PageHeader } from "@/components/ui/page-header";
 import { ProgressRow } from "@/components/ui/progress-row";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { CheckList } from "@/components/ui/check-list";
 
 
 type Fixture = { election: ElectionV1; tally: AggregatesV1 };
@@ -252,25 +253,28 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 text-small md:grid-cols-2">
             <div>
-              <p className="mb-1 font-semibold">Se puede comprobar</p>
-              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>Cada boleta prueba que viene de alguien del padrón, sin decir de quién.</li>
-                <li>Un inscrito, un voto.</li>
-                <li>Cualquiera reproduce el recuento.</li>
-                <li>Tu comprobante confirma que tu boleta está en el registro.</li>
-              </ul>
+              <p className="mb-3 font-semibold">Se puede comprobar</p>
+              <CheckList
+                items={[
+                  "Cada boleta prueba que viene de alguien del padrón, sin decir de quién.",
+                  "Un inscrito, un voto.",
+                  "Cualquiera reproduce el recuento.",
+                  "Tu comprobante confirma que tu boleta está en el registro.",
+                ]}
+              />
             </div>
             <div>
-              <p className="mb-1 font-semibold">No se garantiza</p>
-              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>Que el servidor no vea la opción de cada boleta.</li>
-                <li>Que el padrón sea correcto: lo define el organizador. La cámara no impide todos los duplicados.</li>
-                <li>Que no falten boletas, si no hay ancla on-chain.</li>
-                <li data-testid="link-mode-limit">
-                  La clave del votante vive solo en su navegador (wallet en Base Sepolia testnet); si se borra, no puede votar.
-                </li>
-                <li>«Verificado» sólo lo muestra el verificador, nunca el servidor.</li>
-              </ul>
+              <p className="mb-3 font-semibold">No se garantiza</p>
+              <CheckList
+                tone="no"
+                items={[
+                  "Que el servidor no vea la opción de cada boleta.",
+                  "Que el padrón sea correcto: lo define el organizador. La cámara no impide todos los duplicados.",
+                  "Que no falten boletas, si no hay ancla on-chain.",
+                  "La clave del votante vive solo en su navegador (wallet en Base Sepolia testnet); si se borra, no puede votar.",
+                  "«Verificado» sólo lo muestra el verificador, nunca el servidor.",
+                ]}
+              />
             </div>
           </CardContent>
         </Card>

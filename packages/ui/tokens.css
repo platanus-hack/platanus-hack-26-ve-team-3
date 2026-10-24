@@ -1,56 +1,57 @@
 /*
   Quórum — design tokens (fuente de verdad: docs/DESIGN_SYSTEM.md)
-  Paleta: #111844 (noche), #4B5694 (índigo), #7288AE (acero), #EAE0CF (crema).
+  Paleta: Corbeau #111122, Blue Graphite #3A383F, Often Orange #FF714E,
+  Lush Aqua #004466, Dark Ages #9698A3, Perfect White #F0EEEE.
   Los tokens --q-* son primitivos; los semánticos (--color-*) se consumen desde Tailwind.
   Contraste objetivo WCAG AA (texto ≥ 4.5:1, UI ≥ 3:1), medido par por par.
 */
 :root {
   /* Primitivos */
-  --q-cream: #eae0cf;
-  --q-cream-bg: #f6f2ea;
-  --q-cream-2: #f0e9dc;
-  --q-line: #e2d8c6;
-  --q-line-2: #d3c7b1;
-  --q-night: #111844;
-  --q-indigo: #4b5694;
-  --q-indigo-2: #3f4880;
-  --q-indigo-soft: #e3e5f1;
-  --q-indigo-soft-ink: #3a4380;
-  --q-steel: #7288ae;
-  --q-steel-soft: #c5cde0;
-  --q-ink-2: #4f5578;
-  --q-ink-3: #63698a;
+  --q-white-perfect: #f0eeee;
+  --q-white-2: #e8e5e5;
+  --q-line: #e0dddd;
+  --q-line-2: #cdcacb;
+  --q-corbeau: #111122;
+  --q-graphite: #3a383f;
+  --q-orange: #ff714e;
+  --q-orange-2: #ff845f;
+  --q-orange-soft: #ffe3da;
+  --q-aqua: #004466;
+  --q-aqua-soft: #e0ebf0;
+  --q-dark-ages: #9698a3;
+  --q-ink-2: #55535c;
+  --q-ink-3: #66646e;
   --q-green: #247a57;
   --q-green-2: #1f5c43;
   --q-green-soft: #e3efe6;
   --q-amber: #9a6410;
   --q-amber-2: #8a5a10;
   --q-amber-soft: #fbf0db;
-  --q-red: #a3243b;
-  --q-red-2: #841b2d;
-  --q-red-soft: #f6e3e5;
+  --q-red: #b4233c;
+  --q-red-2: #8e1a2e;
+  --q-red-soft: #f8e3e6;
   --q-white: #ffffff;
 
   /* Semánticos — tema claro */
-  --color-background: var(--q-cream-bg);
-  --color-foreground: var(--q-night);
-  --color-muted: var(--q-cream-2);
+  --color-background: var(--q-white-perfect);
+  --color-foreground: var(--q-corbeau);
+  --color-muted: var(--q-white-2);
   --color-muted-foreground: var(--q-ink-2);
   --color-subtle: var(--q-ink-3);
   --color-card: var(--q-white);
-  --color-card-foreground: var(--q-night);
+  --color-card-foreground: var(--q-corbeau);
   --color-border: var(--q-line);
   --color-input: var(--q-line-2);
-  --color-ring: var(--q-indigo);
-  --color-primary: var(--q-indigo);
-  --color-primary-hover: var(--q-indigo-2);
-  --color-primary-foreground: var(--q-white);
-  --color-primary-ink: var(--q-indigo);
-  --color-primary-soft: var(--q-indigo-soft);
-  --color-primary-soft-foreground: var(--q-indigo-soft-ink);
-  --color-primary-muted: var(--q-steel-soft);
-  --color-accent: var(--q-indigo);
-  --color-navy: var(--q-night);
+  --color-ring: var(--q-aqua);
+  --color-primary: var(--q-orange);
+  --color-primary-hover: var(--q-orange-2);
+  --color-primary-foreground: var(--q-corbeau);
+  --color-primary-ink: var(--q-aqua);
+  --color-primary-soft: var(--q-aqua-soft);
+  --color-primary-soft-foreground: var(--q-aqua);
+  --color-primary-muted: var(--q-dark-ages);
+  --color-accent: var(--q-orange);
+  --color-navy: var(--q-corbeau);
   --color-success: var(--q-green);
   --color-success-strong: var(--q-green-2);
   --color-success-soft: var(--q-green-soft);
@@ -60,20 +61,20 @@
   --color-danger: var(--q-red);
   --color-danger-strong: var(--q-red-2);
   --color-danger-soft: var(--q-red-soft);
-  --color-neutral-soft: var(--q-cream-2);
+  --color-neutral-soft: var(--q-white-2);
 
   /* Series de gráficos: orden fijo, la 1 es la marca */
-  --color-chart-1: #4b5694;
-  --color-chart-2: #111844;
-  --color-chart-3: #7288ae;
-  --color-chart-4: #c9a86a;
-  --color-chart-5: #8e6c9e;
+  --color-chart-1: #ff714e;
+  --color-chart-2: #004466;
+  --color-chart-3: #9698a3;
+  --color-chart-4: #3a383f;
+  --color-chart-5: #f2a541;
   --color-chart-6: #247a57;
-  --color-chart-7: #a3243b;
-  --color-chart-8: #a9b6ce;
-  --color-chart-9: #5e6687;
-  --color-chart-10: #d6c3a0;
-  --color-grid: #e7dece;
+  --color-chart-7: #6fa8c2;
+  --color-chart-8: #c24a2e;
+  --color-chart-9: #bebfc7;
+  --color-chart-10: #111122;
+  --color-grid: #e4e1e1;
 
   --color-glass: rgb(255 255 255 / 0.6);
   --color-glass-strong: rgb(255 255 255 / 0.82);
@@ -103,9 +104,9 @@
   --radius-md: 0.75rem;  /* 12px */
   --radius-lg: 1.25rem;  /* 20px */
   --radius-xl: 1.75rem;  /* 28px */
-  --shadow-card: 0 1px 2px rgb(17 24 68 / 0.05), 0 10px 28px -14px rgb(17 24 68 / 0.16);
-  --shadow-elevated: 0 2px 6px rgb(17 24 68 / 0.05), 0 26px 52px -24px rgb(17 24 68 / 0.3);
-  --shadow-primary: 0 10px 22px -12px rgb(75 86 148 / 0.6);
+  --shadow-card: 0 1px 2px rgb(17 17 34 / 0.05), 0 10px 28px -14px rgb(17 17 34 / 0.16);
+  --shadow-elevated: 0 2px 6px rgb(17 17 34 / 0.05), 0 26px 52px -24px rgb(17 17 34 / 0.3);
+  --shadow-primary: 0 10px 22px -12px rgb(255 113 78 / 0.6);
 
   /* Objetivo táctil mínimo */
   --tap: 2.75rem; /* 44px */
@@ -116,25 +117,25 @@
 /* Tema oscuro: por preferencia del sistema (si no se forzó claro) y por data-theme */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-background: #111844;
-    --color-foreground: #f3eee5;
-    --color-muted: #1e2660;
-    --color-muted-foreground: #b7c2d9;
-    --color-subtle: #8f9cc0;
-    --color-card: #1a2257;
-    --color-card-foreground: #f3eee5;
-    --color-border: #2b3570;
-    --color-input: #3a4583;
-    --color-ring: #a9b6e0;
-    --color-primary: #56619f;
-    --color-primary-hover: #6470b0;
-    --color-primary-foreground: #ffffff;
-    --color-primary-ink: #a9b6e0;
-    --color-primary-soft: #262f6b;
-    --color-primary-soft-foreground: #c9d1f0;
-    --color-primary-muted: #3b4785;
-    --color-accent: #7288ae;
-    --color-navy: #0b1033;
+    --color-background: #111122;
+    --color-foreground: #f0eeee;
+    --color-muted: #232336;
+    --color-muted-foreground: #b5b6c0;
+    --color-subtle: #9698a3;
+    --color-card: #1b1b2e;
+    --color-card-foreground: #f0eeee;
+    --color-border: #2e2e44;
+    --color-input: #3e3e55;
+    --color-ring: #ff8e72;
+    --color-primary: #ff714e;
+    --color-primary-hover: #ff845f;
+    --color-primary-foreground: #111122;
+    --color-primary-ink: #ff8e72;
+    --color-primary-soft: #2f1f24;
+    --color-primary-soft-foreground: #ffb3a0;
+    --color-primary-muted: #3a383f;
+    --color-accent: #ff714e;
+    --color-navy: #0a0a16;
     --color-success: #247a57;
     --color-success-strong: #8fdcb5;
     --color-success-soft: #163c33;
@@ -144,43 +145,42 @@
     --color-danger: #c2384e;
     --color-danger-strong: #f5a3b0;
     --color-danger-soft: #3e1c27;
-    --color-neutral-soft: #1e2660;
-    --color-chart-1: #8f9ce0;
-    --color-chart-2: #eae0cf;
-    --color-chart-3: #7288ae;
+    --color-neutral-soft: #232336;
+    --color-chart-2: #6fa8c2;
+    --color-chart-4: #b5b6c0;
     --color-chart-6: #4fb58a;
-    --color-chart-7: #e07a8b;
-    --color-chart-9: #a9b0cf;
-    --color-grid: #2b3570;
-    --color-glass: rgb(26 34 87 / 0.55);
-    --color-glass-strong: rgb(26 34 87 / 0.82);
-    --color-glass-border: rgb(255 255 255 / 0.09);
+    --color-chart-7: #3b7d9c;
+    --color-chart-10: #f0eeee;
+    --color-grid: #2e2e44;
+    --color-glass: rgb(27 27 46 / 0.55);
+    --color-glass-strong: rgb(27 27 46 / 0.82);
+    --color-glass-border: rgb(255 255 255 / 0.08);
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 32px -16px rgb(0 0 0 / 0.55);
     --shadow-elevated: 0 2px 6px rgb(0 0 0 / 0.35), 0 28px 56px -24px rgb(0 0 0 / 0.7);
-    --shadow-primary: 0 10px 22px -12px rgb(114 136 174 / 0.6);
+    --shadow-primary: 0 10px 22px -12px rgb(255 113 78 / 0.55);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --color-background: #111844;
-  --color-foreground: #f3eee5;
-  --color-muted: #1e2660;
-  --color-muted-foreground: #b7c2d9;
-  --color-subtle: #8f9cc0;
-  --color-card: #1a2257;
-  --color-card-foreground: #f3eee5;
-  --color-border: #2b3570;
-  --color-input: #3a4583;
-  --color-ring: #a9b6e0;
-  --color-primary: #56619f;
-  --color-primary-hover: #6470b0;
-  --color-primary-foreground: #ffffff;
-  --color-primary-ink: #a9b6e0;
-  --color-primary-soft: #262f6b;
-  --color-primary-soft-foreground: #c9d1f0;
-  --color-primary-muted: #3b4785;
-  --color-accent: #7288ae;
-  --color-navy: #0b1033;
+  --color-background: #111122;
+  --color-foreground: #f0eeee;
+  --color-muted: #232336;
+  --color-muted-foreground: #b5b6c0;
+  --color-subtle: #9698a3;
+  --color-card: #1b1b2e;
+  --color-card-foreground: #f0eeee;
+  --color-border: #2e2e44;
+  --color-input: #3e3e55;
+  --color-ring: #ff8e72;
+  --color-primary: #ff714e;
+  --color-primary-hover: #ff845f;
+  --color-primary-foreground: #111122;
+  --color-primary-ink: #ff8e72;
+  --color-primary-soft: #2f1f24;
+  --color-primary-soft-foreground: #ffb3a0;
+  --color-primary-muted: #3a383f;
+  --color-accent: #ff714e;
+  --color-navy: #0a0a16;
   --color-success: #247a57;
   --color-success-strong: #8fdcb5;
   --color-success-soft: #163c33;
@@ -190,19 +190,18 @@
   --color-danger: #c2384e;
   --color-danger-strong: #f5a3b0;
   --color-danger-soft: #3e1c27;
-  --color-neutral-soft: #1e2660;
-  --color-chart-1: #8f9ce0;
-  --color-chart-2: #eae0cf;
-  --color-chart-3: #7288ae;
+  --color-neutral-soft: #232336;
+  --color-chart-2: #6fa8c2;
+  --color-chart-4: #b5b6c0;
   --color-chart-6: #4fb58a;
-  --color-chart-7: #e07a8b;
-  --color-chart-9: #a9b0cf;
-  --color-grid: #2b3570;
-  --color-glass: rgb(26 34 87 / 0.55);
-  --color-glass-strong: rgb(26 34 87 / 0.82);
-  --color-glass-border: rgb(255 255 255 / 0.09);
+  --color-chart-7: #3b7d9c;
+  --color-chart-10: #f0eeee;
+  --color-grid: #2e2e44;
+  --color-glass: rgb(27 27 46 / 0.55);
+  --color-glass-strong: rgb(27 27 46 / 0.82);
+  --color-glass-border: rgb(255 255 255 / 0.08);
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 32px -16px rgb(0 0 0 / 0.55);
   --shadow-elevated: 0 2px 6px rgb(0 0 0 / 0.35), 0 28px 56px -24px rgb(0 0 0 / 0.7);
-  --shadow-primary: 0 10px 22px -12px rgb(114 136 174 / 0.6);
+  --shadow-primary: 0 10px 22px -12px rgb(255 113 78 / 0.55);
   color-scheme: dark;
 }

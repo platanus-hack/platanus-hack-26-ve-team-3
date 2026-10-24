@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Check, Lock, Minus, QrCode, ReceiptText, ScanFace } from "lucide-react";
+import { ArrowRight, Check, Lock, QrCode, ReceiptText, ScanFace } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { CheckList } from "@/components/ui/check-list";
 import { Glass } from "@/components/ui/glass";
 import { cn } from "@/lib/client/cn";
 import { FloatingChip, ResultsPreview, StatItem, StepCard } from "./molecules";
@@ -81,25 +82,11 @@ export function Promise() {
           <h2 id="garantias" className="text-heading font-semibold">
             Garantizamos
           </h2>
-          <ul className="mt-4 space-y-3 text-body">
-            {promises.map((p) => (
-              <li key={p} className="flex gap-3">
-                <Check aria-hidden="true" className="mt-0.5 size-5 shrink-0 rounded-full bg-success-soft p-0.5 text-success-strong" />
-                {p}
-              </li>
-            ))}
-          </ul>
+          <CheckList items={promises} className="mt-4 text-body" />
         </div>
         <div>
           <h2 className="text-heading font-semibold">Límites</h2>
-          <ul className="mt-4 space-y-3 text-body text-muted-foreground">
-            {limits.map((l) => (
-              <li key={l} className="flex gap-3">
-                <Minus aria-hidden="true" className="mt-0.5 size-5 shrink-0 rounded-full bg-muted p-0.5" />
-                {l}
-              </li>
-            ))}
-          </ul>
+          <CheckList items={limits} tone="no" className="mt-4 text-body" />
         </div>
       </Glass>
     </section>
@@ -108,7 +95,7 @@ export function Promise() {
 
 export function FinalCta() {
   return (
-    <section className="q-reveal flex flex-col items-start gap-6 rounded-xl border border-white/10 bg-[#111844] px-6 py-10 text-white md:flex-row md:items-center md:justify-between md:px-10 md:py-12">
+    <section className="q-reveal flex flex-col items-start gap-6 rounded-xl border border-white/10 bg-[#111122] px-6 py-10 text-white md:flex-row md:items-center md:justify-between md:px-10 md:py-12">
       <div>
         <h2 className="font-display text-[1.75rem] font-bold leading-tight tracking-tight md:text-[2.25rem]">Tu próxima votación, verificable.</h2>
         <p className="mt-2 text-body text-white/65">Lista en minutos. Sin instalar nada.</p>

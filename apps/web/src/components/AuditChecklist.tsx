@@ -1,9 +1,10 @@
 import type { AuditResult } from "@quorum/contracts";
-import { ChevronDown, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { StatusPill, type HonestStatus } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime, shortHash } from "@/lib/client/format";
+import { Disclosure } from "@/components/ui/disclosure";
 
 /**
  * Resultado del verificador independiente. El estado global sale SOLO de `result.valid` del verificador real.
@@ -103,16 +104,15 @@ export function AuditChecklist({ result, onDownload, runtime, title = "Resultado
           )}
         </section>
 
-        <details className="group rounded-md border border-border">
-          <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-2 px-3 [&::-webkit-details-marker]:hidden">
+        <Disclosure
+          title={
             <h3 id="unsupported-h" className="text-body font-bold">
               Propiedades no evaluadas ({result.unsupportedGuarantees.length})
             </h3>
-            <ChevronDown className="size-5 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
-          </summary>
-          <div className="border-t border-border p-3">
+          }
+        >
           {result.unsupportedGuarantees.length === 0 ? (
-            <p className="text-small text-muted-foreground">El verificador no declaró propiedades sin evaluar. Esto no significa que todo esté garantizado: ver límites en el centro de transparencia.</p>
+            <p className="text-small text-muted-foreground">Sin propiedades pendientes.</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {result.unsupportedGuarantees.map((g) => (
@@ -123,40 +123,33 @@ export function AuditChecklist({ result, onDownload, runtime, title = "Resultado
               ))}
             </ul>
           )}
-          </div>
-        </details>
+        </Disclosure>
 
-        <details className="group rounded-md border border-border text-small">
-          <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-2 px-3 font-semibold [&::-webkit-details-marker]:hidden">
-            Detalles técnicos
-            <ChevronDown className="size-5 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
-          </summary>
-          <div className="flex flex-col gap-3 border-t border-border p-3">
-            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <dt className="text-muted-foreground">Versión</dt>
-                <dd className="q-mono font-semibold" data-testid="verifier-version">
-                  {result.verifierVersion}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Fecha</dt>
-                <dd className="font-semibold">{formatDateTime(result.checkedAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Elección</dt>
-                <dd className="q-mono font-semibold">{result.electionId}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Hash de entrada (paquete)</dt>
-                <dd className="q-mono font-semibold" title={result.inputArtifactDigest} data-testid="input-artifact-digest">
-                  {shortHash(result.inputArtifactDigest, 18, 10)}
-                </dd>
-              </div>
-            </dl>
-            <pre className="q-mono max-h-80 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(result, null, 2)}</pre>
-          </div>
-        </details>
+        <Disclosure title="Detalles técnicos" bodyClassName="flex flex-col gap-3">
+          <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Versión</dt>
+              <dd className="q-mono font-semibold" data-testid="verifier-version">
+                {result.verifierVersion}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Fecha</dt>
+              <dd className="font-semibold">{formatDateTime(result.checkedAt)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Elección</dt>
+              <dd className="q-mono font-semibold">{result.electionId}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Hash de entrada (paquete)</dt>
+              <dd className="q-mono font-semibold" title={result.inputArtifactDigest} data-testid="input-artifact-digest">
+                {shortHash(result.inputArtifactDigest, 18, 10)}
+              </dd>
+            </div>
+          </dl>
+          <pre className="q-mono max-h-80 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(result, null, 2)}</pre>
+        </Disclosure>
 
         {onDownload ? (
           <Button variant="secondary" onClick={onDownload}>

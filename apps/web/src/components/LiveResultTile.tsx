@@ -31,7 +31,7 @@ function TileShell({ title, children, note }: { title: string; children: React.R
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-center">
+      <CardContent className="flex flex-1 flex-col justify-start">
         {children}
         {note ? <p className="mt-2 text-small text-muted-foreground">{note}</p> : null}
       </CardContent>

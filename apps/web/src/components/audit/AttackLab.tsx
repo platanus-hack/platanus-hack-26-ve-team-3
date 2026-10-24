@@ -222,7 +222,7 @@ export function AttackLab() {
         <Card>
           <CardHeader>
             <CardTitle>3. Elige una alteración</CardTitle>
-            <CardDescription>Un toque: se altera la copia y se verifica. Cada tarjeta dice qué check debería fallar.</CardDescription>
+            <CardDescription>Un toque altera la copia y la verifica.</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Alteraciones disponibles">
@@ -240,7 +240,7 @@ export function AttackLab() {
                       aria-describedby={`alt-${a.id}-desc`}
                       onClick={() => tamper(a.id)}
                       className={cn(
-                        "flex h-full min-h-tap w-full cursor-pointer flex-col items-start gap-1 rounded-md border-2 p-3 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60",
+                        "flex h-full min-h-tap w-full cursor-pointer flex-col items-start gap-1 rounded-md border p-3 text-left transition-[background-color,border-color] duration-150 hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60",
                         active ? "border-danger bg-danger-soft" : "border-border bg-card",
                       )}
                     >
@@ -248,11 +248,11 @@ export function AttackLab() {
                         {a.title}
                         {busy === a.id ? <span className="q-spinner" aria-label="verificando" /> : null}
                       </span>
-                      <span id={`alt-${a.id}-desc`} className="text-small text-muted-foreground">
+                      <span id={`alt-${a.id}-desc`} className="line-clamp-2 text-small text-muted-foreground">
                         {why ?? a.body}
                       </span>
-                      <span className="text-small">
-                        Debería fallar:{" "}
+                      <span className="text-[0.75rem] text-subtle">
+                        Falla:{" "}
                         {exp.length ? exp.map((n) => <code key={n} className="q-mono mr-1 rounded bg-muted px-1">{n}</code>) : <strong className="text-warning-strong">nada (no detectable sin ancla)</strong>}
                       </span>
                     </button>

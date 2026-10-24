@@ -39,7 +39,7 @@ export function SiteFooter() {
           <Link href="/audit" className="inline-flex min-h-tap items-center underline underline-offset-4">
             Verificador independiente
           </Link>
-          <Link href="/audit/lab" className="inline-flex min-h-tap items-center underline underline-offset-4">
+          <Link href="/audit/lab" className="hidden min-h-tap items-center underline underline-offset-4 sm:inline-flex">
             Laboratorio del jurado
           </Link>
         </p>

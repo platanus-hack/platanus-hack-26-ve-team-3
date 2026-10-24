@@ -259,7 +259,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
   const downloading = (phase === "loading" || phase === "slow") && download && !download.done && download.loaded < download.total;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#0b1033] text-white" data-testid="face-capture" role="dialog" aria-modal="true" aria-label="Comprobación con la cámara">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#111122] text-white" data-testid="face-capture" role="dialog" aria-modal="true" aria-label="Comprobación con la cámara">
       <div className="flex items-center justify-between gap-2 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
         <p className="rounded-full bg-white/10 px-3 py-1 text-small font-semibold text-white/80">Paso 2 de 2</p>
         {phase !== "checking" ? (
@@ -283,7 +283,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
             <video ref={videoRef} playsInline muted autoPlay className="size-full object-cover [transform:scaleX(-1)]" aria-label="Vista de la cámara (no se graba)" />
             {done ? (
               <div className="absolute inset-0 grid place-items-center bg-black/45" aria-hidden="true">
-                <span className="q-pop grid size-20 place-items-center rounded-full bg-[#4fb58a] text-[#0b1033]">
+                <span className="q-pop grid size-20 place-items-center rounded-full bg-[#4fb58a] text-[#111122]">
                   <Check className="size-11" strokeWidth={3} />
                 </span>
               </div>
@@ -340,7 +340,7 @@ function FaceRing({ progress, done }: { progress: number; done: boolean }) {
             y2={50 + (on ? 49 : 47.5) * Math.sin(a)}
             strokeWidth={1.4}
             strokeLinecap="round"
-            className={cn("transition-colors duration-200", on ? (done ? "stroke-[#4fb58a]" : "stroke-[#a9b6e0]") : "stroke-white/20")}
+            className={cn("transition-colors duration-200", on ? (done ? "stroke-[#4fb58a]" : "stroke-[#ff714e]") : "stroke-white/20")}
           />
         );
       })}

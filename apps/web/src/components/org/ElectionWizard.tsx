@@ -219,11 +219,12 @@ export function ElectionWizard() {
                 <Input id="endsAt" type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
               </Field>
             </div>
-            <fieldset className="flex flex-col gap-3 rounded-md border border-border p-3">
-              <legend className="px-1 text-small font-semibold">Sorteo verificable de proyectos (opcional)</legend>
-              <p className="text-small text-muted-foreground">
-                Si postulas proyectos, al cerrar se sortean los ganadores con una semilla que sale del hash final del registro: nadie la conoce antes y cualquiera puede recomputarla. Se fijan al publicar.
-              </p>
+            <fieldset className="flex flex-col gap-3 rounded-md bg-muted p-4">
+              <legend className="sr-only">Sorteo de proyectos (opcional)</legend>
+              <div>
+                <p className="text-body font-semibold">Sorteo de proyectos (opcional)</p>
+                <p className="mt-1 text-small text-muted-foreground">Al cerrar se sortean los ganadores. Nadie conoce la semilla antes.</p>
+              </div>
               <CandidatesEditor candidates={candidates} onChange={setCandidates} />
               {candidates.length > 0 ? (
                 <div className="flex flex-col gap-2">

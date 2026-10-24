@@ -276,7 +276,7 @@ export function VoterFlow({ token }: { token: string }) {
           <SuccessMark />
           <h1 className="text-display font-bold tracking-tight">¡Listo! Ya estás inscrito.</h1>
           <WaitingCountdown startsAt={startsAt} left={left} />
-          <p className="text-heading">Deja esta página abierta: la boleta aparecerá aquí sola cuando empiece la votación.</p>
+          <p className="text-body text-muted-foreground">Deja esta página abierta: la boleta aparecerá aquí sola.</p>
         </VoterShell>
       );
 
@@ -346,7 +346,7 @@ export function VoterFlow({ token }: { token: string }) {
         <VoterShell>
           <h1 className="text-title font-bold leading-tight">{title}</h1>
           <Alert tone="info" title="La inscripción aún no abre">
-            Deja esta página abierta: se actualizará sola cuando el organizador abra la inscripción.
+            Deja esta página abierta: se actualiza sola.
           </Alert>
         </VoterShell>
       );
