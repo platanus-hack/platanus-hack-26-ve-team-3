@@ -9,6 +9,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildDemoElection, createVoterIdentity, hashCanonical, rechain, tally as recount, tallyHash, type AuditPackage, type SemaphoreProof } from "../src/index";
+import type { BallotEntry } from "../src/index";
+import { ballotEntries } from "../src/index";
 
 const outDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../demo-fixtures/protocol");
 mkdirSync(outDir, { recursive: true });
@@ -44,7 +46,7 @@ const fixtures: Record<string, AuditPackage> = { valid };
 // A2: se altera el contenido de una boleta (message 0 → 1) y se rehace cadena + tally. La prueba Groth16 ya no verifica.
 {
   const p = clone(valid);
-  const proof = p.ledger[1].proof as SemaphoreProof;
+  const proof = (p.ledger[1] as BallotEntry).proof as SemaphoreProof;
   (proof as { message: string }).message = (BigInt(proof.message) + 1n).toString();
   fixtures.tampered_proof = reconcile(p);
 }

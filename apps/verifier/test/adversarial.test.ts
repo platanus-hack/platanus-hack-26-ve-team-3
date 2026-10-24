@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { verifyPackage } from "../src/index";
 import { buildAuditPackage, buildDemoElection, encodeAnchorCalldata, groupRoot, genesisHash, hashCanonical, rechain, runDraw, tally as recount, tallyHash, type AuditPackage, type DrawRule } from "@quorum/protocol-adapter";
+import type { BallotEntry } from "@quorum/protocol-adapter";
 import { recomputeDraw, type AnchorReader } from "../src/index";
 
 const failing = (r: Awaited<ReturnType<typeof verifyPackage>>) => r.checks.filter((c) => !c.passed).map((c) => c.name);
@@ -20,8 +21,8 @@ function reseal(t: AuditPackage): AuditPackage {
 describe("verificador: hallazgos C1 y M3", () => {
   it("AT-03b / C1: doble voto con nullifier '0'+n (cadena rehecha) → valid:false (package_schema: decimal canónico)", async () => {
     const t = structuredClone(pkg);
-    const p = t.ledger[0].proof;
-    t.ledger.push({ ...t.ledger[0], proof: { ...p, nullifier: `0${p.nullifier}` } });
+    const p = (t.ledger[0] as BallotEntry).proof;
+    t.ledger.push({ ...(t.ledger[0] as BallotEntry), proof: { ...p, nullifier: `0${p.nullifier}` } });
     const r = await verifyPackage(reseal(t));
     expect(r.valid).toBe(false);
     expect(r.checks[0]).toMatchObject({ name: "package_schema", passed: false });
@@ -104,8 +105,8 @@ describe("AT-03 nullifier repetido (verificador)", () => {
   it("AT-03b: variantes '00'+n y '0x'+hex con cadena, tally y checksums rehechos → valid:false (nunca un total inflado válido)", async () => {
     for (const enc of [(n: string) => `00${n}`, (n: string) => `0x${BigInt(n).toString(16)}`]) {
       const t = structuredClone(pkg);
-      const p = t.ledger[0].proof;
-      t.ledger.push({ ...t.ledger[0], proof: { ...p, nullifier: enc(p.nullifier) } });
+      const p = (t.ledger[0] as BallotEntry).proof;
+      t.ledger.push({ ...(t.ledger[0] as BallotEntry), proof: { ...p, nullifier: enc(p.nullifier) } });
       reseal(t);
       t.tally = { ...t.tally, counts: t.tally.counts.map((c, i) => (i === Number(p.message) ? c + 1 : c)), total: t.tally.total + 1 };
       t.tallyHash = tallyHash(t.tally);
@@ -120,7 +121,7 @@ describe("AT-03 nullifier repetido (verificador)", () => {
   it("AT-03c: con la entrada canónica la elección honesta sigue valid:true; un message '0x1' colado en el paquete hace fallar package_schema", async () => {
     expect((await verifyPackage(pkg)).valid).toBe(true);
     const t = structuredClone(pkg);
-    t.ledger[0] = { ...t.ledger[0], proof: { ...t.ledger[0].proof, message: "0x1" } };
+    t.ledger[0] = { ...(t.ledger[0] as BallotEntry), proof: { ...(t.ledger[0] as BallotEntry).proof, message: "0x1" } };
     const r = await verifyPackage(reseal(t));
     expect(r.valid).toBe(false);
     expect(r.checks[0].reason).toMatch(/ledger\.0\.proof\.message/);

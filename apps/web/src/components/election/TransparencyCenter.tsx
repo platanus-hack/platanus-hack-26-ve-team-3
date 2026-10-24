@@ -14,7 +14,9 @@ import { cn } from "@/lib/client/cn";
 import { FIXTURE_PACKAGE_ID, FIXTURE_PACKAGE_URL } from "@/lib/client/fixtures";
 import { formatDateTime, kindLabel } from "@/lib/client/format";
 import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
+import { basescanTxUrl } from "@/lib/client/room";
 import type { Aggregates as AggregatesV1, AuditResponse as StoredAudit, Election as ElectionV1 } from "@quorum/contracts";
+import { AnonymityCard } from "./AnonymityCard";
 import { MyVoteCheck } from "./MyVoteCheck";
 import { PhaseTimeline } from "./PhaseTimeline";
 import { VerifyNowPanel, type PackageSource, type VerifiedPackage } from "./VerifyNowPanel";
@@ -125,7 +127,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
     <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
       <PageHeader title={election.title} description={election.description || undefined}>
         {isFixture ? <Badge tone="warning" className="self-start">Datos de ejemplo: el servidor no respondió</Badge> : null}
-        <PhaseTimeline phase={election.status} />
+        <PhaseTimeline phase={election.status} continuous={election.votingMode === "continuous"} />
         <ActionBar>
           <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "soft" }))}>
             En vivo
@@ -162,6 +164,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
       {!isFixture ? <MyVoteCheck electionId={electionId} verified={verified} /> : null}
 
       {tally ? <ResultsCard options={tally.options} totalVotes={tally.totalVotes} eligible={tally.eligible} turnout={tally.turnout} live={tally.status === "open"} statusLabel={phaseLabel[tally.status]} /> : null}
+      {election.votingMode === "continuous" && election.status !== "draft" ? <AnonymityCard electionId={electionId} k={election.minAnonymitySet ?? 5} closed={auditable} /> : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
@@ -200,7 +203,29 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
               </div>
               <div>
                 <p className="text-muted-foreground">Huella del padrón</p>
-                <p className="q-mono break-all font-semibold">{election.groupRoot ?? "Se fija al abrir la votación"}</p>
+                <p className="q-mono break-all font-semibold">{election.groupRoot ?? (election.votingMode === "continuous" ? "Crece con cada inscripción; la final se publica al cerrar" : "Se fija al abrir la votación")}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Ancla en blockchain</p>
+                <p className="q-mono break-all" data-testid="anchor-tx">
+                  {election.anchor?.txHash ? (
+                    (() => {
+                      const url = basescanTxUrl(election.anchor.chainId, election.anchor.txHash);
+                      return url ? (
+                        <>
+                          Base Sepolia ·{" "}
+                          <a href={url} target="_blank" rel="noreferrer" className="underline underline-offset-4" data-testid="anchor-explorer-link">
+                            {election.anchor.txHash}
+                          </a>
+                        </>
+                      ) : (
+                        `Base Sepolia · ${election.anchor.txHash}`
+                      );
+                    })()
+                  ) : (
+                    "Sin ancla publicada"
+                  )}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

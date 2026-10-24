@@ -23,6 +23,10 @@ const STATUS_BY_CODE: Record<ApiCode, number> = {
   badge_unknown: 404,
   /** D-19: esa credencial ya se usó en esta votación. */
   badge_used: 409,
+  /** D-22: la raíz de la prueba ya salió de la ventana (entró mucha gente mientras se generaba): reintentar. */
+  stale_root: 409,
+  /** D-22: el grupo aún no llega a K inscritos; el voto se habilita solo. */
+  anonymity_pending: 409,
 };
 
 /** Error tipado que las rutas convierten en una respuesta `ApiError`. */

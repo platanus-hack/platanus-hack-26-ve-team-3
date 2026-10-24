@@ -66,6 +66,8 @@ export const apiV1 = {
 
   /* Voto */
   getRoll: (id: string) => request(`/api/elections/${e(id)}/roll`, undefined, RollResponse),
+  /** D-22: grupo vigente (raíz, tamaño, K). Mismo cuerpo que /roll. */
+  getGroup: (id: string) => request(`/api/elections/${e(id)}/group`, undefined, RollResponse),
   vote: (id: string, body: { proof: SemaphoreProofInput }) => request(`/api/elections/${e(id)}/vote`, post(body), Receipt),
   /** Autodeclaración "ya voté". Petición SEPARADA del voto: no lleva la prueba ni la opción. */
   markVoted: (voterId: string, inviteToken: string) => request(`/api/voters/${e(voterId)}/voted`, post({ inviteToken }), MarkVotedResult),
@@ -73,7 +75,8 @@ export const apiV1 = {
   getInclusion: (id: string, nullifier: string) => request(`/api/elections/${e(id)}/receipt/${e(nullifier)}`, undefined, Receipt),
   getLedger: async (id: string): Promise<PublicLedger> => {
     const l = await request(`/api/elections/${e(id)}/ledger`, undefined, LedgerResponse);
-    return { ...l, entries: l.entries.map((x) => ({ idx: x.idx, hash: x.hash, nullifier: x.proof.nullifier })) };
+    // D-22: en modo continuo el ledger también trae inscripciones (member_added); aquí solo interesan las boletas.
+    return { ...l, entries: l.entries.flatMap((x) => ("proof" in x ? [{ idx: x.idx, hash: x.hash, nullifier: x.proof.nullifier }] : [])) };
   },
 
   /* Auditoría */

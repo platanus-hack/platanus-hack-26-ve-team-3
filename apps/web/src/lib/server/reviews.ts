@@ -13,7 +13,7 @@
  * Privacidad: nada de esto guarda ni devuelve con quién coincidió ni la similitud (hallazgo A3).
  */
 import { FaceReviewStatus, ReviewsListResponse, ReviewSummary, type ReviewDecisionInput } from "@quorum/contracts";
-import { requireElection, requireVoter } from "./elections";
+import { enrollmentOpen, isContinuous, requireElection, requireVoter } from "./elections";
 import { HttpError } from "./errors";
 import { faceBindingHashOf, issueVoteNonce, maxPendingReviews } from "./face";
 import { withLock } from "./lock";
@@ -61,7 +61,7 @@ export async function decideReview(electionId: string, reviewId: string, input: 
       const e = await requireElection(electionId);
       const review = await store.getReview(reviewId);
       if (!review || review.electionId !== electionId) throw new HttpError("not_found", "Revisión no encontrada");
-      if (e.status !== "registration") throw new HttpError("closed", "Las revisiones solo se deciden durante la inscripción", 409);
+      if (!enrollmentOpen(e)) throw new HttpError("closed", "Las revisiones solo se deciden durante la inscripción", 409);
       if (review.status !== "pending") throw new HttpError("closed", "Esta revisión ya se decidió", 409);
       const voter = await requireVoter(review.voterId);
       const now = new Date().toISOString();
@@ -108,10 +108,10 @@ export async function freezeReviews(electionId: string, method: string | undefin
 }
 
 /** Estado de la revisión de un votante (para la invitación y el polling). Pendiente fuera de inscripción = rechazada. */
-export async function reviewStateOf(voterId: string, electionStatus: string): Promise<"pending" | "rejected" | null> {
+export async function reviewStateOf(voterId: string, electionStatus: string, continuous = false): Promise<"pending" | "rejected" | null> {
   const r = await (await getStore()).getReviewByVoter(voterId);
   if (!r || r.status === "approved") return null;
-  if (r.status === "pending" && electionStatus !== "registration") return "rejected";
+  if (r.status === "pending" && electionStatus !== "registration" && !(continuous && electionStatus === "open")) return "rejected";
   return r.status;
 }
 
@@ -126,5 +126,5 @@ export async function reviewStatusForVoter(input: { voterId: string; inviteToken
     return FaceReviewStatus.parse({ status: "approved", ...(voter.faceBindingHash ? { faceBindingHash: voter.faceBindingHash } : {}) });
   }
   const e = await requireElection(voter.electionId);
-  return { status: (await reviewStateOf(voter.id, e.status)) === "pending" ? "pending_review" : "rejected" };
+  return { status: (await reviewStateOf(voter.id, e.status, isContinuous(e))) === "pending" ? "pending_review" : "rejected" };
 }

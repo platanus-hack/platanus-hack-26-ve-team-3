@@ -7,17 +7,19 @@ import type { ElectionStatus as ElectionPhase } from "@quorum/contracts";
  * Línea de fases `registration → open → closed → tallying → auditable → drawn`.
  * Texto siempre visible (no sólo color); `aria-current="step"` en la fase actual; `failed` se marca en rojo con texto.
  */
-export function PhaseTimeline({ phase, className }: { phase: ElectionPhase; className?: string }) {
-  const current = phaseIndex(phase);
+export function PhaseTimeline({ phase, className, continuous = false }: { phase: ElectionPhase; className?: string; continuous?: boolean }) {
+  // D-22, modo continuo: no hay fase de inscripción aparte; se inscriben y votan a la vez.
+  const line = continuous ? PHASE_LINE.filter((p) => p.id !== "registration").map((p) => (p.id === "open" ? { ...p, label: "Inscripción y votación", hint: "Se inscriben y votan en el momento" } : p)) : PHASE_LINE;
+  const current = continuous ? (phase === "draft" ? -1 : phaseIndex(phase) - 1) : phaseIndex(phase);
   const failed = phase === "failed";
   return (
     <nav aria-label="Fases de la votación" className={cn("w-full", className)} data-testid="phase-timeline">
       <p className="mb-2 text-small text-muted-foreground">
         Fase actual: <span className="font-semibold text-foreground">{phaseLabel[phase]}</span>
-        {current >= 0 ? <span className="md:hidden"> · {current + 1} de {PHASE_LINE.length}</span> : null}
+        {current >= 0 ? <span className="md:hidden"> · {current + 1} de {line.length}</span> : null}
       </p>
-      <ol className="flex gap-1.5 md:grid md:grid-cols-6 md:gap-2">
-        {PHASE_LINE.map((p, i) => {
+      <ol className={cn("flex gap-1.5 md:grid md:gap-2", continuous ? "md:grid-cols-5" : "md:grid-cols-6")}>
+        {line.map((p, i) => {
           const state = failed && i === current ? "failed" : i < current ? "done" : i === current ? "current" : "todo";
           return (
             <li
@@ -41,7 +43,7 @@ export function PhaseTimeline({ phase, className }: { phase: ElectionPhase; clas
           );
         })}
       </ol>
-      {phase === "draft" ? <p className="mt-2 text-small text-muted-foreground">Borrador: la inscripción aún no ha empezado.</p> : null}
+      {phase === "draft" ? <p className="mt-2 text-small text-muted-foreground">{continuous ? "Borrador: aún no se abre la votación." : "Borrador: la inscripción aún no ha empezado."}</p> : null}
     </nav>
   );
 }

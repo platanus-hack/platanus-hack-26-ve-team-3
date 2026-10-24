@@ -12,8 +12,41 @@ export { canonicalJson, hashCanonical, sha256Utf8, keccakToField } from "./hash"
 export { createVoterIdentity, importIdentity, buildGroup, groupRoot, electionScope, MERKLE_TREE_DEPTH, SEMAPHORE_VERSION, type VoterIdentity } from "./identity";
 export { defaultArtifacts, browserArtifacts, ARTIFACT_FILES, ARTIFACT_SHA256, type SnarkArtifactPaths } from "./artifacts";
 export { castBallot, verifyProof, type SemaphoreProof } from "./ballot";
-export { buildDemoElection, demoManifest, type DemoElection } from "./demo";
-export { createLedger, appendBallot, isCanonicalField, SNARK_SCALAR_FIELD, finalHash, tally, genesisHash, entryHash, rechain, LedgerRejection, type Ledger, type LedgerEntry, type LedgerRejectionCode, type Tally, type Hex32 } from "./ledger";
+export { buildDemoElection, buildContinuousDemoElection, demoManifest, type DemoElection, type ContinuousDemoElection, type ContinuousStep } from "./demo";
+export {
+  createLedger,
+  createContinuousLedger,
+  appendBallot,
+  appendMember,
+  checkContinuousRoot,
+  ballotEntries,
+  memberCommitments,
+  rootHistory,
+  isBallotEntry,
+  isMemberEntry,
+  isCanonicalField,
+  SNARK_SCALAR_FIELD,
+  DEFAULT_MIN_ANONYMITY_SET,
+  DEFAULT_ROOT_WINDOW,
+  EMPTY_GROUP_ROOT,
+  MAX_GROUP_SIZE,
+  finalHash,
+  tally,
+  genesisHash,
+  continuousGenesisHash,
+  entryHash,
+  hashOfEntry,
+  rechain,
+  LedgerRejection,
+  type Ledger,
+  type LedgerEntry,
+  type BallotEntry,
+  type MemberAddedEntry,
+  type EnrollmentPolicy,
+  type LedgerRejectionCode,
+  type Tally,
+  type Hex32,
+} from "./ledger";
 export { drawWinners, drawSeed, runDraw, sortCandidates, winningOptionIndex, winnersCountFor, DRAW_METHOD, type DrawCandidate, type DrawRule, type DrawResult } from "./draw";
 export { buildAuditPackage, manifestHash, tallyHash, AUDIT_PACKAGE_VERSION, ADAPTER_VERSION, type AuditPackage, type ElectionManifest, type AnchorRef, type AnchorPolicy } from "./audit-package";
 export {

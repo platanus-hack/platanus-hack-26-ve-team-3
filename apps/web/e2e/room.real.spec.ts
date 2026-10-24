@@ -22,6 +22,7 @@ test("sala real: 2 entran por /j y llegan a /v/<token>; la sala llena ofrece mod
         { id: "si", label: "Sí" },
         { id: "no", label: "No" },
       ],
+      votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
       startsAt: new Date(now - 60_000).toISOString(),
       endsAt: new Date(now + 3_600_000).toISOString(),
     },

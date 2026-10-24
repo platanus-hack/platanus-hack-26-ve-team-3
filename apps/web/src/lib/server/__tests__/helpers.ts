@@ -40,6 +40,7 @@ export function sampleElection(overrides: Record<string, unknown> = {}) {
       { id: "dom", label: "Domingo 10:00" },
       { id: "mie", label: "Miércoles 19:00" },
     ],
+    votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
     startsAt: new Date(now - 60_000).toISOString(),
     endsAt: new Date(now + 3_600_000).toISOString(),
     ...overrides,

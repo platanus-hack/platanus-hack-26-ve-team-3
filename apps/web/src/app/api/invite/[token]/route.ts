@@ -16,8 +16,8 @@ export const GET = route<{ token: string }>(async (_req, { token }) => {
   const election = await store.getElection(voter.electionId);
   if (!election) throw new HttpError("not_found", "Elección no encontrada");
   return json({
-    election: { id: election.id, title: election.title, kind: election.kind, options: election.options, status: election.status, endsAt: election.endsAt, votingStartsAt: election.votingStartsAt ?? null },
-    voter: { id: voter.id, displayName: voter.displayName, walletAddress: voter.walletAddress, livenessPassedAt: voter.livenessPassedAt, votedAt: voter.votedAt, review: await reviewStateOf(voter.id, election.status) },
+    election: { id: election.id, title: election.title, kind: election.kind, options: election.options, status: election.status, endsAt: election.endsAt, votingStartsAt: election.votingStartsAt ?? null, ...(election.votingMode ? { votingMode: election.votingMode } : {}), ...(election.minAnonymitySet ? { minAnonymitySet: election.minAnonymitySet } : {}) },
+    voter: { id: voter.id, displayName: voter.displayName, walletAddress: voter.walletAddress, livenessPassedAt: voter.livenessPassedAt, votedAt: voter.votedAt, review: await reviewStateOf(voter.id, election.status, election.votingMode === "continuous") },
     serverNow: new Date().toISOString(),
   });
 });

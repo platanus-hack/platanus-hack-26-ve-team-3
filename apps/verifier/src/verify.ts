@@ -31,7 +31,20 @@ const ProofSchema = z.object({
   scope: Decimal,
   points: z.tuple([Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal]),
 }).strict();
-const EntrySchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, proof: ProofSchema }).strict();
+/** Boleta del modo con fases (sin `kind`). */
+const PhasedEntrySchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, proof: ProofSchema }).strict();
+/** D-22 modo continuo: boleta con el tamaño del grupo en la raíz de su prueba (conjunto de anonimato). */
+const ContinuousBallotSchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, kind: z.literal("ballot"), proof: ProofSchema, groupSize: z.number().int().min(1) }).strict();
+/** D-22 modo continuo: inscripción completada (sin voterId). */
+const MemberAddedSchema = z.object({
+  idx: z.number().int().min(0),
+  prevHash: Hex32,
+  hash: Hex32,
+  kind: z.literal("member_added"),
+  member: z.object({ index: z.number().int().min(0), commitment: Decimal, rootAfter: Decimal }).strict(),
+}).strict();
+const ContinuousEntrySchema = z.discriminatedUnion("kind", [ContinuousBallotSchema, MemberAddedSchema]);
+const EnrollmentSchema = z.object({ mode: z.literal("continuous"), minAnonymitySet: z.number().int().min(1), rootWindow: z.number().int().min(1).max(1024) }).strict();
 const Hex32Lower = z.string().regex(/^0x[0-9a-f]{64}$/, "hex de 32 bytes");
 const DrawCandidateSchema = z.object({ id: z.string().min(1), label: z.string(), amount: z.number().optional() }).strict();
 const DrawRuleSchema = z.object({
@@ -69,6 +82,7 @@ const ManifestSchema = z.object({
     })
     .strict()
     .optional(),
+  enrollment: EnrollmentSchema.optional(),
 }).strict();
 /**
  * Política del censo declarada por el organizador (opcional): `open-room` o `event-badge` (D-19): sala abierta en la que el público
@@ -114,8 +128,8 @@ export const AuditPackageSchema = z.object({
   scope: Decimal,
   merkleTreeDepth: z.number().int(),
   groupRoot: Decimal,
-  commitments: z.array(Decimal).min(1),
-  ledger: z.array(EntrySchema),
+  commitments: z.array(Decimal),
+  ledger: z.array(PhasedEntrySchema),
   genesisHash: Hex32,
   tally: TallySchema,
   tallyHash: Hex32,
@@ -137,7 +151,30 @@ export const AuditPackageSchema = z.object({
   rollPolicy: RollPolicySchema.optional(),
   manualApprovals: ManualApprovalsSchema.optional(),
 }).strict();
-export type AuditPackage = z.infer<typeof AuditPackageSchema>;
+/** D-22: el modo continuo (manifest.enrollment) usa el mismo esquema estricto con entradas member_added / ballot. */
+export const ContinuousAuditPackageSchema = AuditPackageSchema.extend({ ledger: z.array(ContinuousEntrySchema) });
+export type AuditPackage = z.infer<typeof AuditPackageSchema> | z.infer<typeof ContinuousAuditPackageSchema>;
+/** Elige el esquema por el modo que declara el manifiesto (sin `enrollment` = con fases, formato original). */
+function schemaFor(input: unknown) {
+  const m = (input as { manifest?: { enrollment?: unknown } } | null)?.manifest;
+  return m && typeof m === "object" && m.enrollment !== undefined ? ContinuousAuditPackageSchema : AuditPackageSchema;
+}
+type Entry = AuditPackage["ledger"][number];
+type BallotLike = Extract<Entry, { proof: unknown }>;
+type MemberLike = Extract<Entry, { kind: "member_added" }>;
+const isMember = (e: Entry): e is MemberLike => (e as { kind?: string }).kind === "member_added";
+/** Hash de una entrada según su forma (reimplementado: misma definición que el adaptador). */
+function entryHashOf(e: Entry): Hex {
+  if (isMember(e)) return hashCanonical({ idx: e.idx, prevHash: e.prevHash, kind: "member_added", member: e.member });
+  if ("kind" in e && e.kind === "ballot") return hashCanonical({ idx: e.idx, prevHash: e.prevHash, kind: "ballot", proof: e.proof, groupSize: e.groupSize });
+  return hashCanonical({ idx: e.idx, prevHash: e.prevHash, proof: e.proof });
+}
+/** Mediana (entera hacia abajo) de una lista no vacía. */
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : Math.floor((s[m - 1] + s[m]) / 2);
+}
 
 /** ¿Declara ser un paquete quorum-audit/1 de semaphore-ledger? (objeto JSON con version y protocol). */
 function looksLikePackage(input: unknown): boolean {
@@ -265,7 +302,7 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
   const checks: Check[] = [];
   const unsupported = [...BASE_UNSUPPORTED];
 
-  const parsed = AuditPackageSchema.safeParse(input);
+  const parsed = (schemaFor(input) as typeof AuditPackageSchema).safeParse(input) as { success: true; data: AuditPackage } | { success: false; error: z.ZodError };
   const maybeId = (input as { electionId?: unknown } | null)?.electionId;
   const electionId = typeof maybeId === "string" ? maybeId : "unknown";
   if (!parsed.success) {
@@ -285,7 +322,20 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     return finish({ electionId, protocol: "semaphore-ledger" });
   }
   const pkg = parsed.data;
-  checks.push({ name: "package_schema", passed: true, reason: `quorum-audit/1, ${pkg.ledger.length} boletas, ${pkg.commitments.length} commitments` });
+  const continuous = pkg.manifest.enrollment ?? null;
+  const ballots = pkg.ledger.filter((e): e is BallotLike => !isMember(e));
+  const members = pkg.ledger.filter(isMember);
+  if (!continuous && pkg.commitments.length === 0) {
+    checks.push({ name: "package_schema", passed: false, status: "fallo detectado", reason: "paquete no válido (commitments: padrón vacío)" });
+    return finish({ electionId: pkg.electionId, protocol: "semaphore-ledger" });
+  }
+  checks.push({
+    name: "package_schema",
+    passed: true,
+    reason: continuous
+      ? `quorum-audit/1 (modo continuo: K=${continuous.minAnonymitySet}, ventana ${continuous.rootWindow} raíces), ${members.length} inscripciones y ${ballots.length} boletas en el ledger, ${pkg.commitments.length} commitments`
+      : `quorum-audit/1, ${pkg.ledger.length} boletas, ${pkg.commitments.length} commitments`,
+  });
 
   // 1. manifest_hash
   {
@@ -299,20 +349,52 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     checks.push({ name: "manifest_hash", passed: problems.length === 0, reason: problems.length ? `manifiesto alterado: ${problems.join("; ")}` : `manifestHash coincide (${h.slice(0, 18)}…)` });
   }
 
-  // 2. group_root
+  // 2. group_root. Continuo: se rehace la secuencia de raíces desde los eventos member_added con el Group de Semaphore.
   let rootOk = false;
+  /** Continuo: raíces RECOMPUTADAS (no las publicadas) disponibles antes de cada posición del ledger. */
+  const rootsBefore: { root: string; size: number }[][] = [];
   {
     let root = "";
     const problems: string[] = [];
-    try {
-      root = new Group(pkg.commitments.map((c) => BigInt(c))).root.toString();
-    } catch (e) {
-      problems.push(`no se pudo reconstruir el padrón: ${(e as Error).message}`);
+    if (continuous) {
+      try {
+        const g = new Group();
+        const history: { root: string; size: number }[] = [];
+        pkg.ledger.forEach((e, pos) => {
+          rootsBefore[pos] = history.slice();
+          if (!isMember(e)) return;
+          if (problems.length) return;
+          if (e.member.index !== g.size) problems.push(`ledger[${pos}]: member_added con index ${e.member.index}, se esperaba ${g.size}`);
+          g.addMember(BigInt(e.member.commitment));
+          const r = g.root.toString();
+          if (e.member.rootAfter !== r) problems.push(`ledger[${pos}]: rootAfter publicado ${e.member.rootAfter.slice(0, 12)}… ≠ raíz recomputada ${r.slice(0, 12)}… tras agregar el miembro #${e.member.index}`);
+          history.push({ root: r, size: g.size });
+        });
+        root = g.root.toString();
+      } catch (err) {
+        problems.push(`no se pudo reconstruir el grupo: ${(err as Error).message}`);
+      }
+      const seq = members.map((m) => m.member.commitment);
+      if (seq.length !== pkg.commitments.length || seq.some((c, i) => c !== pkg.commitments[i])) problems.push(`commitments publicados (${pkg.commitments.length}) ≠ secuencia de member_added del ledger (${seq.length})`);
+    } else {
+      try {
+        root = new Group(pkg.commitments.map((c) => BigInt(c))).root.toString();
+      } catch (e) {
+        problems.push(`no se pudo reconstruir el padrón: ${(e as Error).message}`);
+      }
     }
     if (root && root !== pkg.groupRoot) problems.push(`raíz recomputada desde ${pkg.commitments.length} commitments ${root.slice(0, 12)}… ≠ groupRoot publicada ${pkg.groupRoot.slice(0, 12)}…`);
     if (pkg.checksums.commitments !== hashCanonical(pkg.commitments)) problems.push("checksums.commitments ≠ sha256(commitments)");
     rootOk = problems.length === 0;
-    checks.push({ name: "group_root", passed: rootOk, reason: rootOk ? `raíz del padrón recomputada y coincide (${pkg.commitments.length} commitments)` : `padrón alterado: ${problems.join("; ")}` });
+    checks.push({
+      name: "group_root",
+      passed: rootOk,
+      reason: rootOk
+        ? continuous
+          ? `secuencia de ${members.length} raíces recomputada desde los eventos member_added; la raíz final coincide`
+          : `raíz del padrón recomputada y coincide (${pkg.commitments.length} commitments)`
+        : `padrón alterado: ${problems.join("; ")}`,
+    });
   }
 
   // 2b. commitments_unique (M3): un commitment repetido daría dos hojas a la misma credencial en el padrón.
@@ -332,15 +414,17 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
   const scope = expectedScope(pkg.electionId);
   {
     const problems: string[] = [];
-    const genesis = hashCanonical({ kind: "quorum-ledger-genesis", electionId: pkg.electionId, scope: pkg.scope, groupRoot: pkg.groupRoot });
+    const genesis = continuous
+      ? hashCanonical({ kind: "quorum-ledger-genesis", electionId: pkg.electionId, scope: pkg.scope, groupRoot: "0", enrollment: continuous })
+      : hashCanonical({ kind: "quorum-ledger-genesis", electionId: pkg.electionId, scope: pkg.scope, groupRoot: pkg.groupRoot });
     if (genesis !== pkg.genesisHash) problems.push(`genesisHash ${pkg.genesisHash.slice(0, 18)}… ≠ recomputado ${genesis.slice(0, 18)}…`);
     let prev: string = genesis;
     for (let i = 0; i < pkg.ledger.length && problems.length === 0; i++) {
       const e = pkg.ledger[i];
-      if (e.idx !== i) problems.push(`cadena rota en #${i}: la entrada en esa posición tiene idx=${e.idx} (falta o sobra al menos una boleta)`);
+      if (e.idx !== i) problems.push(`cadena rota en #${i}: la entrada en esa posición tiene idx=${e.idx} (falta o sobra al menos una entrada)`);
       else if (e.prevHash !== prev) problems.push(`cadena rota en #${i}: prevHash ${e.prevHash.slice(0, 18)}… ≠ hash anterior ${prev.slice(0, 18)}…`);
       else {
-        const h = hashCanonical({ idx: e.idx, prevHash: e.prevHash, proof: e.proof });
+        const h = entryHashOf(e);
         if (h !== e.hash) problems.push(`cadena rota en #${i}: hash ${e.hash.slice(0, 18)}… ≠ recomputado ${h.slice(0, 18)}…`);
       }
       prev = e.hash;
@@ -350,16 +434,64 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
       if (last !== pkg.finalHash) problems.push(`finalHash publicado ${pkg.finalHash.slice(0, 18)}… ≠ último hash ${last.slice(0, 18)}…`);
       if (pkg.checksums.ledger !== hashCanonical(pkg.ledger)) problems.push("checksums.ledger ≠ sha256(ledger)");
     }
-    checks.push({ name: "chain_integrity", passed: problems.length === 0, reason: problems.length ? problems.join("; ") : `cadena SHA-256 íntegra: génesis → ${pkg.ledger.length} boletas → finalHash ${pkg.finalHash.slice(0, 18)}…` });
+    const what = continuous ? `${members.length} inscripciones + ${ballots.length} boletas` : `${pkg.ledger.length} boletas`;
+    checks.push({ name: "chain_integrity", passed: problems.length === 0, reason: problems.length ? problems.join("; ") : `cadena SHA-256 íntegra: génesis → ${what} → finalHash ${pkg.finalHash.slice(0, 18)}…` });
+  }
+
+  // 3b. Continuo: cada boleta usa una raíz histórica válida (anterior en el ledger) dentro de la ventana, y el grupo en esa
+  // raíz tenía al menos K miembros. Se compara contra las raíces RECOMPUTADAS en group_root, no contra las publicadas.
+  if (continuous) {
+    const problems: string[] = [];
+    const small: string[] = [];
+    const sizes: number[] = [];
+    let j = 0;
+    pkg.ledger.forEach((e, pos) => {
+      if (isMember(e)) return;
+      const b = j++;
+      const history = rootsBefore[pos] ?? [];
+      let at = -1;
+      for (let k = history.length - 1; k >= 0; k--) if (history[k].root === e.proof.merkleTreeRoot) { at = k; break; }
+      if (at < 0) {
+        problems.push(`boleta #${b} (ledger[${pos}]): su raíz ${e.proof.merkleTreeRoot.slice(0, 12)}… no es ninguna raíz histórica del grupo antes de esa posición (raíz inventada o de otro padrón)`);
+        return;
+      }
+      const age = history.length - 1 - at;
+      if (age >= continuous.rootWindow) problems.push(`boleta #${b} (ledger[${pos}]): su raíz tiene ${age} raíces encima, fuera de la ventana de ${continuous.rootWindow}`);
+      const size = history[at].size;
+      if ("groupSize" in e && e.groupSize !== size) problems.push(`boleta #${b} (ledger[${pos}]): groupSize publicado ${e.groupSize} ≠ tamaño recomputado del grupo en su raíz ${size}`);
+      sizes.push(size);
+      if (size < continuous.minAnonymitySet) small.push(`boleta #${b} (ledger[${pos}]) con ${size} miembros`);
+    });
+    checks.push({
+      name: "root_history",
+      passed: problems.length === 0,
+      reason: problems.length ? problems.join("; ") : `${ballots.length}/${ballots.length} boletas usan una raíz histórica válida dentro de la ventana de ${continuous.rootWindow} raíces`,
+    });
+    const stats = sizes.length ? `mínimo ${Math.min(...sizes)}, mediana ${median(sizes)}` : "sin boletas";
+    checks.push({
+      name: "anonymity_set_min",
+      passed: small.length === 0,
+      reason: small.length
+        ? `K no alcanzado (K=${continuous.minAnonymitySet}): ${small.join("; ")}`
+        : `conjunto de anonimato por boleta (tamaño del grupo en la raíz de su prueba): ${stats}; todas ≥ K=${continuous.minAnonymitySet}`,
+    });
+    unsupported.push(
+      `anonimato-variable-en-modo-continuo: en modo continuo el conjunto de anonimato de cada boleta es el tamaño del grupo en la raíz de su prueba ` +
+        `(${stats}; K=${continuous.minAnonymitySet}); quien vota temprano se esconde entre menos personas que quien vota al final`,
+    );
+    unsupported.push(
+      "correlacion-temporal-en-modo-continuo: el servidor ve cuándo se completa cada inscripción y cuándo llega cada boleta, y el ledger publica su orden; " +
+        "puede correlacionar por tiempo (p. ej. alguien que se inscribe y vota enseguida cuando entra poca gente). El verificador no puede descartarlo",
+    );
   }
 
   // 4. proofs_valid
   {
     const problems: string[] = [];
     if (pkg.scope !== scope) problems.push(`scope publicado ${pkg.scope.slice(0, 12)}… ≠ keccak("quorum:${pkg.electionId}")>>8`);
-    for (let i = 0; i < pkg.ledger.length && problems.length === 0; i++) {
-      const p = pkg.ledger[i].proof;
-      if (p.merkleTreeRoot !== pkg.groupRoot) problems.push(`boleta #${i}: raíz de la prueba ≠ groupRoot (prueba contra otro padrón)`);
+    for (let i = 0; i < ballots.length && problems.length === 0; i++) {
+      const p = ballots[i].proof;
+      if (!continuous && p.merkleTreeRoot !== pkg.groupRoot) problems.push(`boleta #${i}: raíz de la prueba ≠ groupRoot (prueba contra otro padrón)`);
       else if (p.scope !== scope) problems.push(`boleta #${i}: scope ≠ scope de la elección (prueba de otra elección)`);
       else if (p.merkleTreeDepth !== pkg.merkleTreeDepth) problems.push(`boleta #${i}: profundidad ${p.merkleTreeDepth} ≠ ${pkg.merkleTreeDepth}`);
       else {
@@ -373,7 +505,8 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
         if (!ok) problems.push(`boleta #${i}: la prueba Groth16 de Semaphore no verifica (contenido o prueba alterados)`);
       }
     }
-    checks.push({ name: "proofs_valid", passed: problems.length === 0, reason: problems.length ? problems.join("; ") : `${pkg.ledger.length}/${pkg.ledger.length} pruebas Semaphore verifican contra groupRoot y scope de la elección` });
+    const against = continuous ? "su raíz histórica y el scope" : "groupRoot y scope";
+    checks.push({ name: "proofs_valid", passed: problems.length === 0, reason: problems.length ? problems.join("; ") : `${ballots.length}/${ballots.length} pruebas Semaphore verifican contra ${against} de la elección` });
   }
 
   // 5. nullifiers_unique
@@ -381,7 +514,7 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     // Se compara el VALOR (BigInt), no el texto: "0"+n y n son el mismo nullifier.
     const seen = new Map<bigint, number>();
     const dups: string[] = [];
-    pkg.ledger.forEach((e, i) => {
+    ballots.forEach((e, i) => {
       const key = BigInt(e.proof.nullifier);
       const first = seen.get(key);
       if (first !== undefined) dups.push(`#${i} repite el nullifier de #${first}`);
@@ -395,7 +528,7 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     const n = pkg.manifest.options.length;
     const counts = new Array<number>(n).fill(0);
     let invalid = 0;
-    for (const e of pkg.ledger) {
+    for (const e of ballots) {
       const m = Number(e.proof.message);
       if (Number.isInteger(m) && m >= 0 && m < n) counts[m] += 1;
       else invalid += 1;
@@ -404,11 +537,11 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     if (pkg.tally.counts.length !== n) problems.push(`tally tiene ${pkg.tally.counts.length} opciones, el manifiesto ${n}`);
     else counts.forEach((c, i) => { if (pkg.tally.counts[i] !== c) problems.push(`opción ${i} (${pkg.manifest.options[i].id}): publicado ${pkg.tally.counts[i]}, recomputado ${c}`); });
     if (pkg.tally.invalid !== invalid) problems.push(`inválidas: publicado ${pkg.tally.invalid}, recomputado ${invalid}`);
-    if (pkg.tally.total !== pkg.ledger.length) problems.push(`total: publicado ${pkg.tally.total}, boletas en el ledger ${pkg.ledger.length}`);
+    if (pkg.tally.total !== ballots.length) problems.push(`total: publicado ${pkg.tally.total}, boletas en el ledger ${ballots.length}`);
     const th = hashCanonical(pkg.tally);
     if (th !== pkg.tallyHash) problems.push("tallyHash ≠ sha256(tally)");
     if (pkg.checksums.tally !== th) problems.push("checksums.tally ≠ sha256(tally)");
-    checks.push({ name: "tally_matches", passed: problems.length === 0, reason: problems.length ? `total publicado ≠ recomputado: ${problems.join("; ")}` : `recuento reproducido: ${JSON.stringify(counts)} (${pkg.ledger.length} boletas, ${invalid} inválidas)` });
+    checks.push({ name: "tally_matches", passed: problems.length === 0, reason: problems.length ? `total publicado ≠ recomputado: ${problems.join("; ")}` : `recuento reproducido: ${JSON.stringify(counts)} (${ballots.length} boletas, ${invalid} inválidas)` });
   }
 
   // 7. anchor_matches — tres estados: verificado / no evaluado / fallo detectado.
@@ -521,7 +654,7 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
       // N recomputado desde NUESTRO recuento, no desde el tally publicado.
       const n = pkg.manifest.options.length;
       const counts = new Array<number>(n).fill(0);
-      for (const e of pkg.ledger) {
+      for (const e of ballots) {
         const m = Number(e.proof.message);
         if (Number.isInteger(m) && m >= 0 && m < n) counts[m] += 1;
       }

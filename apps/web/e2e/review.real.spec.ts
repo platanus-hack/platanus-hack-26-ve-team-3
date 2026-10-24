@@ -32,6 +32,7 @@ test("gemelos con credenciales distintas: el segundo queda en revisión → el o
         { id: "a", label: "Demo A" },
         { id: "b", label: "Demo B" },
       ],
+      votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
       startsAt: new Date(now - 60_000).toISOString(),
       endsAt: new Date(now + 3_600_000).toISOString(),
       eligibility: { method: "event-badge", badgeCheck: "list", badgeAllowlist: [...USERS] },
@@ -83,7 +84,7 @@ test("gemelos con credenciales distintas: el segundo queda en revisión → el o
   // 5) Abrir desde el panel (sin avisos: todos listos y sin casos) y votar desde los dos teléfonos.
   await org.getByTestId("phase-action").click();
   await expect(org.getByTestId("open-warning")).toHaveCount(0);
-  await org.getByRole("button", { name: /^Sí, congelar padrón/ }).click();
+  await org.getByRole("button", { name: /^Sí, (congelar padrón|abrir votación)/ }).click();
   await expect(org.getByText("Votación abierta").first()).toBeVisible({ timeout: 15_000 });
   for (const v of voters) {
     await v.p.goto(v.link);

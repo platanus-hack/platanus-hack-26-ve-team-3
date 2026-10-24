@@ -97,3 +97,30 @@ $ pnpm --filter @quorum/verifier verify packages/demo-fixtures/protocol/tampered
 - `anchor_matches` no evaluado ⇒ `passed:true` + `reason:"no evaluado…"` + entrada en `unsupportedGuarantees`, porque `AuditCheck` no tiene estado tripartito. La UI debe leer `reason`/`unsupportedGuarantees`, no solo `passed`.
 - `message` = índice de opción (número). Para `ranking`/`budget` harían falta codificaciones adicionales (no hechas).
 - Fixture extra `removed_record_rechained.json`: documenta el límite real (sin ancla no se detecta). Está en el README de fixtures y en el test.
+
+---
+
+## Actualización 2026-10-24 (D-22, rama `feat/modo-continuo`): modo continuo — inscribirse y votar en el mismo momento
+
+**Contexto.** Pedido de Jesús para el evento en vivo: con fases separadas (`registration` → `POST /open` congela el padrón → `open`) la gente no entiende por qué tiene que esperar. El modo continuo pasa a ser el **predeterminado** para votaciones nuevas; el modo con fases sigue disponible como «Con hora de inicio» (condominios, asambleas). Paquetes con fases ya publicados se verifican igual que antes.
+
+**Qué cambia en el protocolo (sin cripto nueva).** El grupo Semaphore crece mientras se vota. Seguimos usando solo `@semaphore-protocol/core@4.14.5` (`Group`/LeanIMT, `generateProof`, `verifyProof`); lo nuevo es formato de ledger y reglas de validez, que el verificador recomputa.
+
+| Pieza | Con fases (sin cambios) | Continuo (nuevo) |
+|---|---|---|
+| Manifiesto | sin `enrollment` | `enrollment: { mode: "continuous", minAnonymitySet: K, rootWindow: N }` dentro de `manifestHash` (K=5, N=32 por defecto) |
+| Génesis | `H({kind:"quorum-ledger-genesis", electionId, scope, groupRoot})` | `H({kind:"quorum-ledger-genesis", electionId, scope, groupRoot:"0", enrollment})` (grupo vacío; liga K y N) |
+| Inscripción | `roll` privado, se congela en `/open` | cada `POST /voters/:id/identity` agrega al ledger `member_added { index, commitment, rootAfter }` (sin voterId), hash `H({idx, prevHash, kind:"member_added", member})`; `rootAfter` = raíz del `Group` de Semaphore con los commitments en orden |
+| Boleta | `{idx, prevHash, hash, proof}` | `{idx, prevHash, hash, kind:"ballot", proof, groupSize}`, hash `H({idx, prevHash, kind:"ballot", proof, groupSize})`; la raíz contra la que se generó es `proof.merkleTreeRoot`; `groupSize` = miembros del grupo en esa raíz |
+| Regla de la raíz | `proof.merkleTreeRoot == groupRoot` | la raíz debe ser una raíz histórica del grupo de un estado **anterior o igual** del ledger (posición previa a la boleta), estar entre las **últimas N** raíces (como el historial de raíces de los contratos de Semaphore v4) y el grupo en esa raíz debe tener **≥ K** miembros |
+| Nullifier | único, scope = `electionScope(electionId)` | igual |
+| Recuento | cuenta `message` de las boletas | igual, ignorando `member_added` |
+| Paquete | `commitments` = padrón congelado | `commitments` = secuencia de `member_added`; `groupRoot` = raíz final |
+
+Rechazos nuevos del adaptador (`LedgerRejection`): `STALE_ROOT` (raíz histórica fuera de la ventana; el cliente rehace la prueba sola con el grupo vigente), `ANONYMITY_SET_TOO_SMALL` (K no alcanzado en la raíz de la prueba), `WRONG_ROOT` (raíz que nunca existió en el ledger), `DUPLICATE_MEMBER`, `GROUP_FULL` (1024, profundidad 10).
+
+**Verificador (`apps/verifier`).** Esquema estricto elegido por el modo que declara el manifiesto (sin `enrollment` = esquema y checks de siempre). En continuo: `group_root` rehace la secuencia de raíces desde los `member_added` con el `Group` de Semaphore (índices consecutivos, `rootAfter` recomputado, `commitments` = secuencia, raíz final); checks nuevos `root_history` (cada boleta usa una raíz recomputada anterior a su posición, dentro de la ventana, y su `groupSize` coincide) y `anonymity_set_min` (todas ≥ K; informa mínimo y mediana); `proofs_valid` verifica Groth16 contra la raíz histórica; `nullifiers_unique`, `tally_matches`, ancla y sorteo como siempre. `unsupportedGuarantees` añade `anonimato-variable-en-modo-continuo` (con mínimo y mediana) y `correlacion-temporal-en-modo-continuo`.
+
+**Lo que NO garantiza el modo continuo (declarado).** Quien vota temprano tiene un conjunto de anonimato menor (el tamaño del grupo en la raíz de su prueba, publicado por boleta y recomputado por el verificador). El servidor ve cuándo se completa cada inscripción y cuándo llega cada boleta, y el ledger publica su orden: puede correlacionar por tiempo (p. ej. alguien que se inscribe y vota enseguida cuando entra poca gente). K=5 acota el peor caso, no lo elimina. Ver `docs/KNOWN_LIMITATIONS.md` § 2 bis y `docs/THREAT_MODEL.md`.
+
+**Pruebas (salida real en `docs/TEST_RESULTS.md`).** Adaptador: raíces históricas, ventana, K, `WRONG_ROOT`, cadena con `member_added` (pruebas Groth16 reales). Verificador: paquete continuo honesto válido; raíz fuera de ventana, raíz inventada, K no alcanzado, `groupSize` falso, `rootAfter` alterado, doble voto, campo no declarado → fallo detectado con causa; fixtures con fases siguen válidos/fallando igual.

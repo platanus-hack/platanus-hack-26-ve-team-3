@@ -14,6 +14,8 @@ const WEB = path.resolve(__dirname, "../../../../..");
 const original = JSON.parse(readFileSync(path.join(WEB, "public/fixtures/protocol/lab-drawn.json"), "utf8")) as LabPackage;
 const ROOM_NOTE = "sala abierta (fixture)";
 /** El mismo fixture con censo abierto en sala declarado, como lo publica el motor (`withRollPolicy`). */
+/** D-22: paquete de una votación al instante (modo continuo) con pruebas reales: 7 inscripciones y 4 boletas. */
+const continuous = JSON.parse(readFileSync(path.resolve(WEB, "../../packages/demo-fixtures/protocol/continuous_valid.json"), "utf8")) as LabPackage;
 const withRoom: LabPackage = { ...deepClone(original), rollPolicy: { kind: "open-room", maxSeats: 60, joined: 4, enrolled: 4, eligibility: "face-dedupe-demo", note: ROOM_NOTE } };
 
 async function run(alt: (typeof ALTERATIONS)[number]["id"] | null, mode: AnchorMode, base: LabPackage = original) {
@@ -33,6 +35,11 @@ describe("laboratorio · alteraciones con el verificador REAL (fixture lab-drawn
     for (const mode of ["none", "sim"] as const) {
       it(`${spec.id} (${mode === "none" ? "sin ancla" : "ancla simulada"})`, async () => {
         let base = original;
+        if (spec.needs === "continuous") {
+          // Solo para votaciones al instante: con el paquete con fases se ofrece deshabilitada, con motivo.
+          expect(unavailableReason(original, spec.id)).toMatch(/Solo aplica a votaciones al instante/);
+          base = continuous;
+        }
         if (spec.needs === "room") {
           // El fixture no declara sala abierta: la alteración se ofrece deshabilitada, con motivo; con sala, aplica.
           expect(unavailableReason(original, spec.id)).toMatch(/censo abierto/);
@@ -53,6 +60,28 @@ describe("laboratorio · alteraciones con el verificador REAL (fixture lab-drawn
       }, 60_000);
     }
   }
+
+  for (const id of ["tally-inflate", "ballot-root", "group-size"] as const) {
+    for (const mode of ["none", "sim"] as const) {
+      it(`modo continuo: ${id} (${mode === "none" ? "sin ancla" : "ancla simulada"}) ⇒ detectado`, async () => {
+        expect(unavailableReason(continuous, id)).toBeNull();
+        const spec = ALTERATIONS.find((a) => a.id === id)!;
+        const baseline = await run(null, mode, continuous);
+        expect(baseline.valid).toBe(true);
+        const result = await run(id, mode, continuous);
+        const ev = evaluate(expectedFor(spec, mode), result, baseline);
+        expect(ev.verdict, JSON.stringify(result.checks.filter((c) => !c.passed))).toBe("detectado");
+        expect(result.valid).toBe(false);
+      }, 60_000);
+    }
+  }
+
+  it("modo continuo: las recetas del formato con fases se ofrecen deshabilitadas, con motivo", () => {
+    for (const spec of ALTERATIONS.filter((a) => !["tally-inflate", "ballot-root", "group-size"].includes(a.id))) {
+      expect(unavailableReason(continuous, spec.id)).toMatch(/votación al instante el laboratorio ofrece/);
+      expect(() => applyAlteration(continuous, spec.id)).toThrow(AlterationUnavailable);
+    }
+  });
 
   it("la alteración no toca el original y es determinista", () => {
     const before = JSON.stringify(original);

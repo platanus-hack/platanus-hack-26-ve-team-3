@@ -5,7 +5,7 @@
 import { InviteRequest, type Voter } from "@quorum/contracts";
 import { createProvider, type InviteChannel, type NotifyProvider } from "@quorum/notify";
 import { z } from "zod";
-import { inviteUrlFor, requireElection } from "./elections";
+import { acceptsVoters, inviteUrlFor, requireElection } from "./elections";
 import { env } from "./env";
 import { HttpError } from "./errors";
 import { getStore } from "./store";
@@ -25,7 +25,7 @@ export async function sendInvites(electionId: string, input: z.infer<typeof Invi
   if (input.electionId !== electionId) throw new HttpError("invalid_input", "electionId del body no coincide con la ruta");
   const store = await getStore();
   const election = await requireElection(electionId);
-  if (election.status !== "registration" && election.status !== "draft") throw new HttpError("closed", "La elección ya cerró");
+  if (!acceptsVoters(election)) throw new HttpError("closed", "La elección ya cerró");
 
   const { provider, channel, note } = selectProvider(input.channel);
   const results: InviteResult[] = [];

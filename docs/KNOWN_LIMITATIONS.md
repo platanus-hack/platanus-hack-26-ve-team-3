@@ -30,6 +30,19 @@ Todo lo demás está abajo.
 | **Sin resistencia a coacción ni a compra de votos** | El votante conserva su clave Semaphore y su recibo (nullifier); con eso puede **demostrar a un tercero** cómo votó, porque el `message` de su boleta es público. Alguien que presione o pague puede exigir esa prueba. Tampoco protegemos a quien vota con otra persona mirando. |
 | **Doble voto = rechazo, no reemplazo** | No se puede cambiar el voto, lo que también impide el "voto de arrepentimiento" usado contra la coacción en otros sistemas. |
 
+## 2 bis. Modo continuo «Al instante» (D-22, predeterminado)
+
+Se inscriben y votan en el mismo momento: el grupo Semaphore crece mientras se vota. Lo que eso cuesta, dicho sin rodeos (también va en `unsupportedGuarantees` del verificador):
+
+| Limitación | Detalle |
+|---|---|
+| **Quien vota temprano se esconde entre menos personas** | Cada boleta prueba pertenencia al grupo **tal como era** en la raíz de su prueba. Su conjunto de anonimato es ese tamaño (`groupSize`, publicado por boleta y recomputado por el verificador), no el total final. Con K=5, la primera boleta posible se esconde entre 5 personas aunque al final haya 200. El centro de transparencia muestra el mínimo y la mediana. |
+| **K solo acota el peor caso** | No se aceptan votos mientras el grupo tenga menos de K miembros (`minAnonymitySet`, 5 por defecto, fijado en `manifestHash`; el votante ve «Tu voto se habilita cuando haya 5 personas inscritas (ahora 3)»). K no impide que un grupo pequeño revele información si casi todos votan igual. |
+| **Correlación por tiempo** | El servidor del organizador ve cuándo se completa cada inscripción y cuándo llega cada boleta, y el ledger publica el orden de ambas. Si alguien se inscribe y vota segundos después cuando entra poca gente, el servidor puede intuir qué boleta es suya. No hay mezcla ni retardo criptográfico. |
+| **Ventana de 32 raíces** | Una prueba vale contra cualquiera de las últimas 32 raíces del grupo. Si entran más de 32 personas mientras un teléfono genera su prueba, el servidor responde `stale_root` y el teléfono la rehace sola (hasta 2 reintentos). |
+| **El padrón no se congela** | En continuo la sala sigue abierta hasta cerrar. El dedupe facial 1:N funciona durante toda la votación (las plantillas cifradas se borran al cerrar, no al abrir), así que viven más tiempo en el servidor que en el modo con fases. |
+| **Laboratorio de ataques** | Con un paquete continuo el laboratorio ofrece 3 alteraciones (boleta con raíz inventada, mentir el tamaño del grupo, inflar el resultado); las demás recetas están escritas para el formato con fases y se muestran deshabilitadas con motivo (el verificador sí verifica el paquete continuo completo). Con el ancla real del QuorumRegistry (solo `finalHash`), «inflar el resultado» no cambia `anchor_matches`: lo detecta `tally_matches`. |
+
 ## 3. Confianza en el organizador
 
 | Limitación | Detalle |

@@ -18,7 +18,7 @@
  */
 import { DEFAULT_BADGE_URL_PREFIX, parseBadgeUrl, type Election, type EligibilityInput } from "@quorum/contracts";
 import { hmacSha256Hex } from "./crypto";
-import { requireElection } from "./elections";
+import { acceptsVoters, requireElection } from "./elections";
 import { env } from "./env";
 import { HttpError } from "./errors";
 import { joinRoom, roomPublicInfo } from "./rooms";
@@ -138,7 +138,7 @@ export async function applyEligibility(electionId: string, input: EligibilityInp
 export async function updateEligibility(electionId: string, input: EligibilityInput): Promise<Election> {
   const store = await getStore();
   const e = await requireElection(electionId);
-  if (e.status !== "draft" && e.status !== "registration") throw new HttpError("closed", "El padrón ya está congelado", 409);
+  if (!acceptsVoters(e)) throw new HttpError("closed", "El padrón ya está congelado", 409);
   const joined = (await store.listVoters(electionId)).some((v) => v.source === "room" || v.source === "badge");
   if (joined) throw new HttpError("closed", "Ya entró gente por la sala: el método de elegibilidad no se puede cambiar", 409);
   const eligibility = await applyEligibility(electionId, input);

@@ -11,6 +11,7 @@
  * (`data.message.text.body`, `data.text.body`, Meta `entry[].changes[].value.messages[]`).
  */
 import { hmacSha256Hex, safeEqualHex } from "./crypto";
+import { acceptsVoters } from "./elections";
 import { inviteVoter, selectProvider } from "./invites";
 import { getStore } from "./store";
 
@@ -100,7 +101,7 @@ export async function handleOptIn(msg: Incoming): Promise<"sent" | "ignored" | "
   if (!phone) return "ignored";
   const store = await getStore();
   const election = await store.getElection(electionId);
-  if (!election || (election.status !== "registration" && election.status !== "draft")) return "ignored";
+  if (!election || !acceptsVoters(election)) return "ignored";
 
   // A6: el opt-in NO crea votantes (un número cualquiera no puede auto-inscribirse). Solo reenvía el enlace a quien
   // el organizador ya cargó en el censo con ese teléfono. La única vía abierta es la sala (rooms.ts): explícita,

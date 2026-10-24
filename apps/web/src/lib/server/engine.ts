@@ -15,6 +15,8 @@ import {
   anchorOnBaseSepolia,
   anchorOnRegistry,
   appendBallot,
+  appendMember,
+  ballotEntries,
   buildAuditPackage,
   canonicalJson,
   createLedger,
@@ -33,7 +35,7 @@ import {
 import { verifyPackage, type AnchorReader } from "@quorum/verifier";
 import type { Address } from "viem";
 import { z } from "zod";
-import { requireElection, requireEngine, requireVoter } from "./elections";
+import { enrollmentClosedMessage, enrollmentOpen, isContinuous, publishElection, requireElection, requireEngine, requireVoter } from "./elections";
 import { env } from "./env";
 import { HttpError, type ApiCode } from "./errors";
 import { withLock } from "./lock";
@@ -64,14 +66,37 @@ export async function registerIdentity(voterId: string, input: { inviteToken: st
   const voter = await requireVoter(voterId);
   if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
   const election = await requireElection(voter.electionId);
-  if (election.status !== "registration") throw new HttpError("closed", "El padrón ya está congelado o la elección no está en inscripción");
+  if (!enrollmentOpen(election)) throw new HttpError("closed", enrollmentClosedMessage(election));
   if (!voter.registeredAt || !voter.walletAddress) throw new HttpError("not_eligible", "Primero hay que enlazar la wallet (firma FaceBinding)");
   return withLock(`engine:${election.id}`, async () => {
     const store = await getStore();
+    const e = await requireElection(election.id);
+    if (!enrollmentOpen(e)) throw new HttpError("closed", enrollmentClosedMessage(e));
     const engine = await requireEngine(election.id);
     const fresh = await requireVoter(voterId);
-    if (fresh.credentialIssuedAt || engine.roll.some((r) => r.voterId === voterId)) throw new HttpError("already_voted", "Este votante ya registró su identidad", 409);
-    if (engine.roll.some((r) => r.commitment === input.commitment)) throw new HttpError("invalid_input", "Ese commitment ya está en el padrón", 409);
+    if (fresh.credentialIssuedAt || engine.roll.some((r) => r.voterId === voterId)) {
+      // Reintento del MISMO teléfono (p. ej. el wifi perdió la respuesta del primer intento): ese commitment ya está
+      // inscrito para este votante → éxito idempotente, sin tocar el grupo. Con otro commitment sigue siendo 409.
+      const continuousMember = isContinuous(e) && Boolean(fresh.credentialIssuedAt) && engine.commitments.includes(input.commitment);
+      const sameRoll = engine.roll.some((r) => r.voterId === voterId && r.commitment === input.commitment);
+      if (continuousMember || sameRoll) return { ok: true as const, registeredCount: isContinuous(e) ? engine.commitments.length : engine.roll.length };
+      throw new HttpError("already_voted", "Este votante ya registró su identidad", 409);
+    }
+    if (engine.roll.some((r) => r.commitment === input.commitment) || engine.commitments.includes(input.commitment)) throw new HttpError("invalid_input", "Ese commitment ya está en el padrón", 409);
+    if (isContinuous(e) && engine.ledger?.enrollment) {
+      // D-22: el commitment entra YA al grupo (member_added encadenado, nueva raíz), bajo el mismo lock que los votos.
+      // Sin voterId en el ledger ni en `roll`: solo el commitment.
+      try {
+        appendMember(engine.ledger, input.commitment);
+      } catch (err) {
+        if (err instanceof LedgerRejection) throw new HttpError(err.code === "GROUP_FULL" ? "room_full" : "invalid_input", err.code === "GROUP_FULL" ? "El grupo está lleno" : "Ese commitment no es válido o ya está en el grupo", 409);
+        throw err;
+      }
+      engine.commitments.push(input.commitment);
+      await store.putEngine(engine);
+      await store.putVoter({ ...fresh, credentialIssuedAt: now().toISOString() });
+      return { ok: true as const, registeredCount: engine.commitments.length };
+    }
     engine.roll.push({ voterId, commitment: input.commitment });
     await store.putEngine(engine);
     await store.putVoter({ ...fresh, credentialIssuedAt: now().toISOString() });
@@ -88,14 +113,20 @@ export async function registerIdentity(voterId: string, input: { inviteToken: st
  * nada y devuelve la elección tal cual (idempotente).
  */
 export async function openElection(id: string, opts: { auto?: boolean } = {}): Promise<Election> {
+  // D-22: en modo continuo no hay padrón que congelar: "Abrir" en borrador publica y abre inscripción + votación a la vez.
+  const pre = await requireElection(id);
+  if (isContinuous(pre)) {
+    if (pre.status === "draft") return publishElection(id, { now });
+    throw new HttpError("closed", pre.status === "open" ? "La votación ya está abierta: la gente se inscribe y vota en el momento." : "La votación ya terminó.", 409);
+  }
   // engine → room → enroll (las entradas a la sala toman solo `room:`, el rostro solo `enroll:`): nadie entra ni se
   // inscribe mientras se congela el padrón, y ninguna revisión manual (D-21) queda a medio crear.
   return withLock(`engine:${id}`, () => withLock(`room:${id}`, () => withLock(`enroll:${id}`, async () => {
     const e = await requireElection(id);
     if (opts.auto && !scheduleDue(e, now().getTime())) return e;
-    if (e.status !== "registration") throw new HttpError("closed", `Solo se abre desde inscripción (estado ${e.status})`, 409);
+    if (e.status !== "registration") throw new HttpError("closed", e.status === "draft" ? "Primero abre la inscripción." : "La votación ya se abrió o ya terminó.", 409);
     const engine = await requireEngine(id);
-    if (engine.roll.length === 0) throw new HttpError("closed", "No hay identidades inscritas: no se puede congelar un padrón vacío", 409);
+    if (engine.roll.length === 0) throw new HttpError("closed", "Todavía nadie terminó de inscribirse. Abre la sala (Proyectar), deja que la gente escanee el QR y se inscriba, y luego abre la votación.", 409);
     const commitments = engine.roll.map((r) => r.commitment);
     const root = computeGroupRoot(commitments);
     // Sala abierta: se cierra sola al abrir la votación y su política queda fijada para el paquete de auditoría.
@@ -140,6 +171,22 @@ export async function syncSchedule(id: string): Promise<void> {
 export async function getRoll(id: string) {
   const e = await requireElection(id);
   const engine = await requireEngine(id);
+  if (engine.ledger?.enrollment) {
+    // D-22: grupo vivo. La raíz es la vigente; una prueba contra ella sigue valiendo aunque entren otros (ventana).
+    return {
+      electionId: id,
+      status: e.status,
+      frozen: false,
+      groupRoot: engine.ledger.groupRoot,
+      scope: engine.ledger.scope,
+      merkleTreeDepth: MERKLE_TREE_DEPTH,
+      commitments: engine.commitments,
+      votingMode: "continuous" as const,
+      size: engine.commitments.length,
+      minAnonymitySet: engine.ledger.enrollment.minAnonymitySet,
+      rootWindow: engine.ledger.enrollment.rootWindow,
+    };
+  }
   const frozen = engine.ledger !== null;
   return {
     electionId: id,
@@ -149,6 +196,8 @@ export async function getRoll(id: string) {
     scope: engine.ledger?.scope ?? null,
     merkleTreeDepth: MERKLE_TREE_DEPTH,
     commitments: frozen ? engine.commitments : engine.roll.map((r) => r.commitment),
+    votingMode: "phased" as const,
+    size: frozen ? engine.commitments.length : engine.roll.length,
   };
 }
 
@@ -158,6 +207,8 @@ export async function getRoll(id: string) {
 const REJECTION_CODE: Record<string, ApiCode> = {
   DOUBLE_VOTE: "already_voted",
   WRONG_ROOT: "not_eligible",
+  STALE_ROOT: "stale_root",
+  ANONYMITY_SET_TOO_SMALL: "anonymity_pending",
   WRONG_SCOPE: "not_eligible",
   WRONG_DEPTH: "not_eligible",
   INVALID_PROOF: "not_eligible",
@@ -165,7 +216,8 @@ const REJECTION_CODE: Record<string, ApiCode> = {
 };
 const REJECTION_MESSAGE: Record<string, string> = {
   DOUBLE_VOTE: "Esta credencial ya votó en esta elección (nullifier repetido)",
-  WRONG_ROOT: "La prueba no es contra el padrón congelado de esta elección",
+  WRONG_ROOT: "La prueba no es contra el padrón de esta elección",
+  STALE_ROOT: "Entró mucha gente mientras preparabas tu voto: vuelve a intentarlo",
   WRONG_SCOPE: "La prueba es de otra elección (scope distinto)",
   WRONG_DEPTH: "Profundidad del árbol distinta a la del padrón",
   INVALID_PROOF: "La prueba Semaphore no verifica",
@@ -185,11 +237,15 @@ export async function castVote(id: string, input: CastVoteInput): Promise<Receip
     const e = await requireElection(id);
     if (e.status !== "open") throw new HttpError("closed", "La elección no está abierta para votar");
     const engine = await requireEngine(id);
-    if (!engine.ledger || !e.groupRoot) throw new HttpError("closed", "Padrón no congelado");
+    if (!engine.ledger || (!e.groupRoot && !engine.ledger.enrollment)) throw new HttpError("closed", "Padrón no congelado");
     let entry;
     try {
-      entry = await appendBallot(engine.ledger, proof, e.groupRoot, { optionCount: e.options.length });
+      entry = await appendBallot(engine.ledger, proof, e.groupRoot ?? engine.ledger.groupRoot, { optionCount: e.options.length });
     } catch (err) {
+      if (err instanceof LedgerRejection && err.code === "ANONYMITY_SET_TOO_SMALL") {
+        const k = engine.ledger.enrollment?.minAnonymitySet ?? 0;
+        throw new HttpError("anonymity_pending", `Tu voto se habilita cuando haya ${k} personas inscritas (ahora ${engine.commitments.length})`);
+      }
       if (err instanceof LedgerRejection) throw new HttpError(REJECTION_CODE[err.code] ?? "not_eligible", REJECTION_MESSAGE[err.code] ?? err.code);
       throw err;
     }
@@ -234,7 +290,7 @@ export async function markVoted(voterId: string, inviteToken: string) {
 export async function getReceipt(id: string, inclusionId: string): Promise<ReceiptT> {
   await requireElection(id);
   const engine = await requireEngine(id);
-  const entry = engine.ledger?.entries.find((x) => x.proof.nullifier === inclusionId);
+  const entry = engine.ledger ? ballotEntries(engine.ledger).find((x) => x.proof.nullifier === inclusionId) : undefined;
   if (!entry) throw new HttpError("not_found", "Recibo no encontrado");
   const r = engine.receipts[inclusionId];
   return Receipt.parse({
@@ -268,7 +324,7 @@ export async function getLedger(id: string) {
     scope: ledger?.scope ?? null,
     genesisHash: ledger?.genesisHash ?? null,
     finalHash: ledger ? finalHash(ledger) : null,
-    count: ledger?.entries.length ?? 0,
+    count: ledger ? ballotEntries(ledger).length : 0,
     proofsPublished,
     entries: proofsPublished ? (ledger?.entries ?? []) : [],
   };
@@ -312,10 +368,24 @@ async function verifyStored(json: string, digest: string): Promise<AuditResult> 
 }
 
 export async function closeElection(id: string): Promise<Election> {
-  return withLock(`engine:${id}`, async () => {
+  // engine → room → enroll (mismo orden que `openElection`): en modo continuo cerrar también cierra la inscripción.
+  return withLock(`engine:${id}`, () => withLock(`room:${id}`, () => withLock(`enroll:${id}`, () => closeLocked(id))));
+}
+
+async function closeLocked(id: string): Promise<Election> {
+  {
     const e = await requireElection(id);
     if (e.status !== "open") throw new HttpError("closed", `La elección no está abierta (estado ${e.status})`, 409);
-    const engine = await requireEngine(id);
+    let engine = await requireEngine(id);
+    if (!engine.ledger) throw new HttpError("closed", "Padrón no congelado", 409);
+    if (engine.ledger.enrollment) {
+      // D-22: cerrar = cerrar sala + votación. La política del censo y las aprobaciones manuales se fijan aquí; las
+      // revisiones pendientes se rechazan y las plantillas faciales se borran (en continuo vivían hasta el cierre).
+      const rollPolicy = await freezeRoomPolicy(id, "election-closed");
+      const { manualApprovals } = await freezeReviews(id, e.eligibility?.method);
+      engine = { ...engine, rollPolicy, manualApprovals };
+      await (await getStore()).deleteFaceTemplates(id);
+    }
     if (!engine.ledger) throw new HttpError("closed", "Padrón no congelado", 409);
     await saveElection({ ...e, status: "closed" });
     await saveElection({ ...e, status: "tallying" });
@@ -366,10 +436,10 @@ export async function closeElection(id: string): Promise<Election> {
     const auditResult = await verifyStored(json, digest);
 
     await (await getStore()).putEngine({ ...engine, tally: t, packageJson: json, packageDigest: digest, auditResult, anchorStatus });
-    const final: Election = { ...e, status: auditResult.valid ? "auditable" : "failed", anchor, packageDigest: digest };
+    const final: Election = { ...e, status: auditResult.valid ? "auditable" : "failed", anchor, packageDigest: digest, ...(engine.ledger.enrollment ? { groupRoot: engine.ledger.groupRoot } : {}) };
     await saveElection(final);
     return final;
-  });
+  }
 }
 
 export async function getArtifacts(id: string): Promise<{ json: string; digest: string }> {

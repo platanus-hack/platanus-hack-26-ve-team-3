@@ -114,7 +114,7 @@ export interface Room {
   openedAt: string;
   expiresAt: string;
   closedAt: string | null;
-  closedReason: "manual" | "election-opened" | null;
+  closedReason: "manual" | "election-opened" | "election-closed" | null;
 }
 
 export interface VoteNonce {

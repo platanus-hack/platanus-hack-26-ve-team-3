@@ -24,6 +24,7 @@ const closedLabel: Record<NonNullable<RoomStatus["closedReason"]>, string> = {
   manual: "Cerrada por el organizador",
   expired: "Expirada",
   "election-opened": "Cerrada: la votación comenzó",
+  "election-closed": "Cerrada: la votación terminó",
 };
 
 /** Abre el proyector en otra pestaña. El token va en el fragmento (#t=…): nunca llega al servidor y el proyector lo borra de la URL. */

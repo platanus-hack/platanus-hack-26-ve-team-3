@@ -9,6 +9,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { verifyPackage } from "../src/index";
 // Solo en tests: el adaptador fabrica un paquete real del motor (pruebas Groth16 de verdad).
+import type { BallotEntry } from "@quorum/protocol-adapter";
 import { buildAuditPackage, buildDemoElection, hashCanonical, runDraw, type AuditPackage, type DrawRule, type ElectionManifest } from "@quorum/protocol-adapter";
 
 type Result = Awaited<ReturnType<typeof verifyPackage>>;
@@ -75,7 +76,7 @@ describe("(b) campos no declarados → package_schema: fallo detectado", () => {
     ["raíz del paquete", (p) => { p.extraRoot = 1; }, /raíz.*extraRoot/],
     ["manifiesto", (p) => { (p.manifest as unknown as Record<string, unknown>).hidden = true; }, /manifest.*hidden/],
     ["entrada del ledger", (p) => { (p.ledger[0] as unknown as Record<string, unknown>).voterId = "v_1"; }, /ledger\.0.*voterId/],
-    ["prueba de una boleta", (p) => { (p.ledger[0].proof as unknown as Record<string, unknown>).choiceLabel = "Sí"; }, /ledger\.0\.proof.*choiceLabel/],
+    ["prueba de una boleta", (p) => { ((p.ledger[0] as BallotEntry).proof as unknown as Record<string, unknown>).choiceLabel = "Sí"; }, /ledger\.0\.proof.*choiceLabel/],
     ["candidato del sorteo", (p) => { (p.manifest.drawRule!.candidates[0] as unknown as Record<string, unknown>).owner = "x"; }, /candidates\.0.*owner/],
     ["tally", (p) => { (p.tally as unknown as Record<string, unknown>).bonus = 1; }, /tally.*bonus/],
     ["sorteo", (p) => { (p.draw as unknown as Record<string, unknown>).override = ["p-huerto"]; }, /draw.*override/],

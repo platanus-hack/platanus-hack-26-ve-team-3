@@ -46,11 +46,24 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
     try {
       setDetail("Preparando…");
       const id = await openIdentity(electionId, { legacyUnlock: (info) => legacyUnlock(info, electionId) });
-      const roll = await apiV1.getRoll(electionId);
-      setDetail("Preparando tu voto en este teléfono (unos segundos)…");
-      const { proof, nullifier } = await proveBallot({ privateKey: id.privateKey, commitments: roll.commitments, electionId, optionIndex: choice });
-      setDetail("Enviando…");
-      const receipt = await apiV1.vote(electionId, { proof });
+      // D-22: la prueba se genera contra el grupo VIGENTE. Si entra mucha gente mientras tanto (raíz fuera de la
+      // ventana), el servidor responde `stale_root` y se reintenta solo con el grupo nuevo.
+      let receipt: ReceiptV1 | null = null;
+      let nullifier = "";
+      for (let attempt = 0; receipt === null; attempt++) {
+        const roll = await apiV1.getRoll(electionId);
+        setDetail("Preparando tu voto en este teléfono (unos segundos)…");
+        const proved = await proveBallot({ privateKey: id.privateKey, commitments: roll.commitments, electionId, optionIndex: choice });
+        nullifier = proved.nullifier;
+        setDetail("Enviando…");
+        try {
+          receipt = await apiV1.vote(electionId, { proof: proved.proof });
+        } catch (err) {
+          // Teléfonos lentos con mucha gente entrando: la lista cambia mientras se genera la prueba; se rehace sola (docs/LOAD_TEST.md).
+          if (attempt < 5 && err instanceof ApiClientError && err.code === "stale_root") continue;
+          throw err;
+        }
+      }
       if (receipt.nullifier !== nullifier) throw new Error("El servidor devolvió un comprobante que no coincide con tu voto.");
       saveReceipt(electionId, { inclusionId: receipt.inclusionId, nullifier, index: receipt.index, hash: receipt.hash, state: receipt.state === "incluido" ? "incluido" : "recibido" });
       // "Ya voté": petición separada y sin datos de la boleta; si falla, el voto ya está incluido igual.

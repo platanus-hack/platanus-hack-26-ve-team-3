@@ -51,6 +51,7 @@ export function losSamanes(now = Date.now()): CreateElectionInput {
       { id: "p-06", label: "Pintura de la fachada norte", amount: 2200 },
       { id: "p-07", label: "Parque infantil", amount: 1500 },
     ],
+    votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
     startsAt: new Date(now - 5 * 60_000).toISOString(),
     endsAt: new Date(now + 24 * 3_600_000).toISOString(),
   };

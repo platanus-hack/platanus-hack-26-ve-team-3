@@ -10,7 +10,7 @@ import { FaceBindingDomain, FaceBindingTypes, LinkWalletInput, Voter } from "@qu
 import { createPublicClient, http, isAddressEqual, verifyTypedData, type Address, type Hex } from "viem";
 import { baseSepolia } from "viem/chains";
 import { z } from "zod";
-import { publicVoter, requireElection, requireVoter } from "./elections";
+import { enrollmentClosedMessage, enrollmentOpen, publicVoter, requireElection, requireVoter } from "./elections";
 import { env } from "./env";
 import { HttpError } from "./errors";
 import { withLock } from "./lock";
@@ -54,7 +54,7 @@ export async function linkWallet(voterId: string, input: z.infer<typeof LinkWall
   const voter = await requireVoter(voterId);
   if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
   const election = await requireElection(voter.electionId);
-  if (election.status !== "registration") throw new HttpError("closed", "La elección no está en fase de inscripción");
+  if (!enrollmentOpen(election)) throw new HttpError("closed", enrollmentClosedMessage(election));
   if (!voter.faceBindingHash) throw new HttpError("not_eligible", "Primero hay que completar la prueba de vida (faceBindingHash)");
   const wallet = input.walletAddress as Address;
   if (voter.walletAddress) {

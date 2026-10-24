@@ -14,7 +14,7 @@ export const STEPS = [
     icon: ScanFace,
     title: "Rostro",
     body: "Tu cara se vuelve 256 números. La foto no sale del teléfono.",
-    how: ["Prueba de vida: giras la cabeza.", "Se compara con los ya inscritos: si se parece a uno, se rechaza.", "Se guarda cifrado (AES-256-GCM) y se borra al abrir la votación."],
+    how: ["Prueba de vida: giras la cabeza.", "Se compara con los ya inscritos: si se parece a uno, se rechaza.", "Se guarda cifrado (AES-256-GCM) y se borra al cerrar la inscripción."],
   },
   {
     id: "cuenta",
@@ -27,8 +27,8 @@ export const STEPS = [
     id: "padron",
     icon: ListChecks,
     title: "Padrón",
-    body: "Tu credencial queda en tu teléfono. Al abrir, el padrón se sella.",
-    how: ["Credencial Semaphore cifrada con una llave que no sale del teléfono.", "Al padrón solo va su compromiso público.", "Al abrir: árbol Merkle sellado y rostros borrados."],
+    body: "Tu credencial queda en tu teléfono. Se vota desde 5 inscritos.",
+    how: ["Credencial Semaphore cifrada con una llave que no sale del teléfono.", "Al padrón solo va su compromiso público.", "Mínimo 5 inscritos para votar: así nadie sabe qué votaste.", "Al cerrar: padrón final sellado y rostros borrados."],
   },
   {
     id: "voto",
@@ -42,14 +42,14 @@ export const STEPS = [
     icon: Blocks,
     title: "Cadena",
     body: "Cada voto se encadena al anterior. Al cerrar, la huella final se ancla en blockchain.",
-    how: ["Cada entrada lleva el sha256 de la anterior.", "Borrar o mover un voto rompe la cadena.", "Ancla: la huella final queda en Base."],
+    how: ["Cada inscripción y cada voto lleva el sha256 del anterior.", "Borrar o mover un voto rompe la cadena.", "Ancla: la huella final queda en Base."],
   },
   {
     id: "verifica",
     icon: ShieldCheck,
     title: "Verifica",
     body: "Cualquier teléfono recalcula todo. Si algo cambió, falla y dice dónde.",
-    how: ["Revisa pruebas, nullifiers, cadena, padrón, recuento y ancla.", "El veredicto sale del verificador, no de nuestro servidor."],
+    how: ["Revisa pruebas, nullifiers, cadena, padrón, mínimo de inscritos, recuento y ancla.", "El veredicto sale del verificador, no de nuestro servidor."],
   },
 ] as const;
 
@@ -272,7 +272,7 @@ function RollStage() {
   return (
     <>
       <In>
-        <Label>Padrón sellado</Label>
+        <Label>Padrón</Label>
       </In>
       <In i={6} className="flex justify-center">
         <span className="q-mono rounded-full bg-primary px-3 py-1 text-small font-semibold text-primary-foreground">raíz 0xe27c…5b13</span>
@@ -302,8 +302,8 @@ function RollStage() {
         </svg>
       </In>
       <In i={7} className="mt-auto flex flex-wrap gap-2">
-        <Chip tone="ok">Padrón cerrado</Chip>
-        <Chip tone="danger">Rostros borrados</Chip>
+        <Chip tone="ok">Mínimo 5 para votar</Chip>
+        <Chip tone="danger">Rostros borrados al cerrar</Chip>
       </In>
     </>
   );

@@ -52,6 +52,7 @@ test("peso por teléfono: inscripción (Human real) + voto (Groth16) en un Pixel
         { id: "si", label: "Sí" },
         { id: "no", label: "No" },
       ],
+      votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
       startsAt: new Date(now - 60_000).toISOString(),
       endsAt: new Date(now + 3_600_000).toISOString(),
     },

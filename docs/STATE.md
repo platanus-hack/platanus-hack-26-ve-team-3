@@ -46,3 +46,8 @@
 ## 2026-10-24 — revisión manual de duplicados (`feat/aprobacion-manual`, D-21)
 - Gemelos con credenciales distintas: 202 `pending_review` → el organizador aprueba/rechaza en el panel → el teléfono sigue solo. Pendientes se rechazan solas al abrir; panel con "X de Y listos" y avisos antes de abrir. `manualApprovals` en el paquete y en el verificador. Diagnóstico `link:*` en client-log.
 - Verde: typecheck, lint, 508 tests, build, 78 Playwright con mocks, 6 E2E reales. Evidencia en `docs/TEST_RESULTS.md`. Sin PR ni merge (pendiente de aprobación).
+
+## 2026-10-24 — modo continuo «Al instante» (`feat/modo-continuo`, D-22, ≈18:40 VET)
+- Predeterminado en votaciones nuevas: se inscriben y votan en el mismo momento. Publicar = abrir; la sala sigue abierta mientras se vota; `member_added` encadenado en el ledger; boleta válida con raíz histórica de las últimas 32 y ≥ K=5 miembros; cerrar = sala + votación. «Con hora de inicio» (fases) sigue disponible y sus paquetes verifican igual.
+- Verde: typecheck, lint, 483 tests, build, 86 Playwright con mocks, 7 E2E reales (incluye `continuo.real`). Evidencia en `docs/TEST_RESULTS.md`. Sin merge ni deploy (pendiente de aprobación).
+- Pendiente: probar con teléfonos reales en el evento; decidir si K=5 es el valor para mañana.

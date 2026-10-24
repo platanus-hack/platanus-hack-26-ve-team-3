@@ -6,12 +6,12 @@
  * Para rehacer hashes usamos las mismas herramientas que tendría el organizador/atacante
  * (`@quorum/protocol-adapter`); no se implementa criptografía aquí.
  */
-import { encodeAnchorCalldata, groupRoot as computeGroupRoot, hashCanonical, rechain, runDraw, tally as recount, type DrawRule, type LedgerEntry } from "@quorum/protocol-adapter";
-import { alterationById, type AlterationId } from "./catalog";
+import { encodeAnchorCalldata, groupRoot as computeGroupRoot, hashCanonical, rechain, runDraw, tally as recount, type BallotEntry, type DrawRule, type LedgerEntry } from "@quorum/protocol-adapter";
+import { alterationById, CONTINUOUS_ALTERATIONS, type AlterationId } from "./catalog";
 
 type Hex = `0x${string}`;
-type Proof = LedgerEntry["proof"];
-type Entry = { idx: number; prevHash: Hex; hash: Hex; proof: Proof };
+type Proof = BallotEntry["proof"];
+type Entry = { idx: number; prevHash: Hex; hash: Hex; proof: Proof; kind?: "ballot" | "member_added"; groupSize?: number };
 type Tally = { counts: number[]; invalid: number; total: number };
 type Draw = { seed: Hex; n: number; winners: string[]; method: string; finalHash: Hex };
 
@@ -57,6 +57,15 @@ export function isLabPackage(v: unknown): v is LabPackage {
 export function unavailableReason(pkg: unknown, id: AlterationId): string | null {
   if (!isLabPackage(pkg)) return "El paquete no tiene el formato semaphore-ledger v1.";
   const spec = alterationById(id);
+  // D-22: los paquetes en modo continuo intercalan inscripciones (member_added) y boletas. Para ellos el laboratorio
+  // ofrece solo las recetas escritas para ese formato (CONTINUOUS_ALTERATIONS); las demás asumen el formato con fases.
+  const continuous = Boolean((pkg.manifest as { enrollment?: unknown }).enrollment);
+  if (continuous) {
+    if (!CONTINUOUS_ALTERATIONS.includes(id)) return "En una votación al instante el laboratorio ofrece: boleta con raíz inventada, mentir el tamaño del grupo e inflar el resultado.";
+    if (id !== "tally-inflate" && firstBallot(pkg) < 0) return "El registro no tiene boletas.";
+    return null;
+  }
+  if (spec?.needs === "continuous") return "Solo aplica a votaciones al instante (se inscriben y votan a la vez).";
   if (spec?.needs === "draw" && !pkg.draw) return "Este paquete no trae sorteo (la elección aún no está en fase «sorteo realizado»).";
   if (spec?.needs === "draw" && id === "draw-winner") {
     const cands = pkg.manifest.drawRule?.candidates ?? [];
@@ -68,6 +77,11 @@ export function unavailableReason(pkg: unknown, id: AlterationId): string | null
   return null;
 }
 
+/** Posición en `ledger` de la primera boleta (en continuo el ledger también trae inscripciones). */
+function firstBallot(p: LabPackage): number {
+  return p.ledger.findIndex((e) => e.kind !== "member_added");
+}
+
 const short = (v: unknown): string => {
   const s = typeof v === "string" ? v : JSON.stringify(v);
   if (s === undefined) return "—";
@@ -76,8 +90,9 @@ const short = (v: unknown): string => {
 
 /** Rehace cadena, recuento, finalHash y checksums como lo haría un organizador que quiere disimular. */
 function recomputeAll(p: LabPackage, before: LabPackage, changes: Change[]) {
-  p.ledger = rechain(p.ledger, p.genesisHash) as Entry[];
-  const t = recount({ entries: p.ledger }, p.manifest.options.length);
+  // En continuo el ledger trae también `member_added`: `rechain`/`tally` del adaptador ya saben tratarlos.
+  p.ledger = rechain(p.ledger as unknown as Parameters<typeof rechain>[0], p.genesisHash) as unknown as Entry[];
+  const t = recount({ entries: p.ledger as unknown as LedgerEntry[] }, p.manifest.options.length);
   p.tally = t;
   p.tallyHash = hashCanonical(t);
   p.finalHash = p.ledger.length ? p.ledger[p.ledger.length - 1].hash : p.genesisHash;
@@ -206,6 +221,22 @@ export function applyAlteration(original: unknown, id: AlterationId): Alteration
     case "room-hide": {
       tamper("rollPolicy", p.rollPolicy, "(eliminado)");
       delete p.rollPolicy;
+      break;
+    }
+    case "ballot-root": {
+      const at = firstBallot(p);
+      const fake = computeGroupRoot([...p.commitments, fakeCommitment()]);
+      tamper(`ledger[${at}].proof.merkleTreeRoot`, p.ledger[at].proof.merkleTreeRoot, fake);
+      p.ledger[at].proof = { ...p.ledger[at].proof, merkleTreeRoot: fake };
+      recomputeAll(p, before, changes);
+      break;
+    }
+    case "group-size": {
+      const at = firstBallot(p);
+      const next = (p.ledger[at].groupSize ?? 0) + 10;
+      tamper(`ledger[${at}].groupSize`, p.ledger[at].groupSize, next);
+      p.ledger[at] = { ...p.ledger[at], groupSize: next };
+      recomputeAll(p, before, changes);
       break;
     }
     case "drop-rechain": {

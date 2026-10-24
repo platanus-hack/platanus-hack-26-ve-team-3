@@ -44,7 +44,7 @@ export function classifyJoinError(err: unknown): JoinFailure {
 }
 
 /** Estado efectivo de la sala para quien llega por el QR. `full` también si está abierta pero sin lugares. */
-export type RoomGate = "open" | "full" | "manual" | "expired" | "election-opened";
+export type RoomGate = "open" | "full" | "manual" | "expired" | "election-opened" | "election-closed";
 export function roomGate(info: { open: boolean; seatsTaken: number; maxSeats: number | null; closedReason: RoomStatus["closedReason"]; expiresAt: string | null }, nowMs = Date.now()): RoomGate {
   if (info.closedReason) return info.closedReason;
   if (!info.open) return "manual";
@@ -58,6 +58,7 @@ export const gateCopy: Record<Exclude<RoomGate, "open">, { title: string; body: 
   manual: { title: "La sala está cerrada", body: "El organizador cerró la entrada." },
   expired: { title: "La sala expiró", body: "Se acabó el tiempo de entrada." },
   "election-opened": { title: "La votación ya comenzó", body: "Ya no se puede entrar." },
+  "election-closed": { title: "La votación terminó", body: "Ya no se puede entrar." },
 };
 
 /* ---------- Memoria del teléfono: si recarga o vuelve a escanear, retoma su flujo ---------- */

@@ -20,8 +20,17 @@
  * con 429 se reintentan con una `x-forwarded-for` distinta por teléfono (simula IPs distintas). El resto de fases usa una
  * `x-forwarded-for` por teléfono (salvo `--no-xff`), con reintento tras 429 si aun así el servidor limita.
  * Nunca guarda claves fuera del proceso; todo el contenido es ficticio.
+ *
+ * `--mode continuous` (D-22, «Al instante»): ver `mainContinuous` más abajo. Votación continua (publicar = abrir), N
+ * votantes entran por la sala escalonados (`--rate` por segundo, 3 por defecto) SIN `x-forwarded-for` propia (todos
+ * por la IP de este equipo, como el wifi del evento) y cada uno vota apenas termina de inscribirse, como el cliente real:
+ * GET /group hasta K (aviso de K, cada 3 s) → GET /roll → prueba Semaphore en un worker (fuera del hilo que mide) →
+ * espera `--proof-delay-ms` (lo que tarda un teléfono, 3000 por defecto) → POST /vote; `stale_root` → nueva prueba
+ * con el grupo nuevo (máx. 2 reintentos, como BallotScreen); `anonymity_pending` → espera 3 s y reintenta; 429 → 5 s.
+ * Mientras, `--pollers` proyectores consultan /room + /tally cada 2 s y la elección cada 4 s (como Projector.tsx).
+ * Luego cierre (ancla real si el servidor tiene clave), verificador CLI con `--anchor-rpc` y sorteo.
  */
-import { execFile } from "node:child_process";
+import { execFile, fork } from "node:child_process";
 import { randomInt } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -46,6 +55,10 @@ const USE_XFF = !flag("no-xff");
 const OUT = opt("out", "");
 const PKG_OUT = opt("package-out", "");
 const cwd = process.env.INIT_CWD ?? process.cwd();
+const MODE = opt("mode", "phased");
+const RATE = Number(opt("rate", "3"));
+const PROOF_DELAY_MS = Number(opt("proof-delay-ms", "3000"));
+const ANCHOR_RPC = opt("anchor-rpc", "");
 
 const STATICS = [
   "/models/blazeface.json", "/models/blazeface.bin", "/models/facemesh.json", "/models/facemesh.bin",
@@ -176,6 +189,7 @@ async function main() {
       optionValues: [1, 2, 3],
       winnersCountFromResult: true,
       candidates: Array.from({ length: 6 }, (_, i) => ({ id: `p-0${i + 1}`, label: `Proyecto simulado ${i + 1}`, amount: 1000 + i * 100 })),
+      votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
       startsAt: new Date(now - 5 * 60_000).toISOString(),
       endsAt: new Date(now + 3 * 3_600_000).toISOString(),
     }),
@@ -344,13 +358,257 @@ async function main() {
   if (OUT) writeFileSync(resolve(cwd, OUT), JSON.stringify({ ...result, samples }, null, 2));
 }
 
+// ============================================================================================== modo continuo (D-22)
+function statsTable() {
+  const labels = [...new Set(samples.map((s) => s.label))];
+  return labels.map((label) => {
+    const xs = samples.filter((s) => s.label === label);
+    const first = Math.min(...xs.map((s) => s.t)), last = Math.max(...xs.map((s) => s.t + s.ms));
+    return {
+      label, n: xs.length, status: countBy(xs.map((s) => (s.err ? s.err : String(s.status)))),
+      p50: pct(xs.map((s) => s.ms), 50), p95: pct(xs.map((s) => s.ms), 95), p99: pct(xs.map((s) => s.ms), 99), max: Math.max(...xs.map((s) => s.ms)),
+      rps: xs.length / Math.max(0.001, (last - first) / 1000),
+      n5xx: xs.filter((s) => s.status >= 500).length, timeouts: xs.filter((s) => s.err === "timeout").length,
+    };
+  });
+}
+
+/** Pool de procesos hijos para las pruebas Groth16 (el hilo principal solo hace HTTP y mide). */
+function proverPool(size: number) {
+  const workers = Array.from({ length: size }, () => fork(resolve(import.meta.dirname, "load-test-prover.ts"), [], { execArgv: ["--import", "tsx"], stdio: ["ignore", "inherit", "inherit", "ipc"] }));
+  const pending = new Map<number, (r: { proof?: unknown; error?: string; ms: number }) => void>();
+  for (const w of workers) w.on("message", (m: { id: number; proof?: unknown; error?: string; ms: number }) => { pending.get(m.id)?.(m); pending.delete(m.id); });
+  let seq = 0;
+  const queue: (() => void)[] = [];
+  const idle = [...workers];
+  const run = (msg: Record<string, unknown>) => new Promise<{ proof?: unknown; error?: string; ms: number }>((res) => {
+    const go = () => {
+      const w = idle.pop()!;
+      const id = ++seq;
+      pending.set(id, (r) => { idle.push(w); queue.shift()?.(); res(r); });
+      w.send({ ...msg, id });
+    };
+    if (idle.length) go(); else queue.push(go);
+  });
+  return { run, close: async () => { for (const w of workers) w.kill(); } };
+}
+
+async function mainContinuous() {
+  const startedAt = new Date();
+  log(`MODO CONTINUO · base=${BASE} voters=${N} rate=${RATE}/s pollers=${POLLERS} proofDelay=${PROOF_DELAY_MS} ms · sin x-forwarded-for propia (IP compartida)`);
+  const health = await call("GET / (HTML)", "/");
+  if (health.status !== 200) throw new Error(`El despliegue no responde 200 en / (HTTP ${health.status})`);
+  const prover = proverPool(Number(opt("provers", "4")));
+  // Calentar los workers (carga de artefactos) fuera de la medición.
+  { const w = createVoterIdentity(); await Promise.all(Array.from({ length: 4 }, () => prover.run({ privateKey: w.privateKey, commitments: [w.commitment], electionId: "warmup", option: 0 }))); }
+
+  // 1. Organizador: crear (sin votingMode = continuo), publicar = abrir, abrir sala como el panel ("Abrir").
+  const now = Date.now();
+  const created = must(await call("POST /api/elections", "/api/elections", {
+    method: "POST",
+    body: JSON.stringify({
+      title: "Prueba de carga modo continuo (simulación)",
+      description: "Simulación de carga de Quórum en modo continuo: votantes sintéticos, sin personas reales. Se puede ignorar.",
+      kind: "multiple",
+      options: [1, 2, 3].map((n) => ({ id: `n${n}`, label: `${n} proyecto${n > 1 ? "s" : ""} (simulación)` })),
+      optionValues: [1, 2, 3],
+      winnersCountFromResult: true,
+      candidates: Array.from({ length: 6 }, (_, i) => ({ id: `p-0${i + 1}`, label: `Proyecto simulado ${i + 1}`, amount: 1000 + i * 100 })),
+      startsAt: new Date(now - 5 * 60_000).toISOString(),
+      endsAt: new Date(now + 3 * 3_600_000).toISOString(),
+    }),
+  }), [201], "crear elección");
+  const electionId = created.id as string;
+  const token = created.organizerToken as string;
+  if (created.votingMode !== "continuous") throw new Error(`se esperaba votingMode continuous, llegó ${created.votingMode}`);
+  const pub = must(await call("POST /api/elections/:id/publish", `/api/elections/${electionId}/publish`, { method: "POST", token }), [200, 201], "publicar");
+  const K = Number(pub.minAnonymitySet ?? 5);
+  const room = must(await call("POST /api/elections/:id/room", `/api/elections/${electionId}/room`, { method: "POST", token, body: JSON.stringify({ maxSeats: 80, expiresInMin: 30 }) }), [200, 201], "abrir sala");
+  const roomCode = room.roomCode as string;
+  log(`elección ${electionId} · estado ${pub.status} · K=${K} · sala ${roomCode}`);
+
+  // 2. Proyectores: /room + /tally cada 2 s, la elección cada 4 s (Projector.tsx).
+  const liveSeries: { t: number; enrolled: number; voted: number }[] = [];
+  const projectors = Array.from({ length: POLLERS }, async (_, i) => {
+    await sleep(randomInt(0, 2000));
+    let tick = 0;
+    while (polling) {
+      const t = performance.now();
+      const reqs = [call("poll GET /api/elections/:id/room", `/api/elections/${electionId}/room`), call("poll GET /api/elections/:id/tally", `/api/elections/${electionId}/tally`)];
+      if (tick++ % 2 === 0) reqs.push(call("poll GET /api/elections/:id", `/api/elections/${electionId}`));
+      const [, tl] = await Promise.all(reqs);
+      if (i === 0 && tl.status === 200) { const b = tl.body as { eligible: number; totalVotes: number }; liveSeries.push({ t: (performance.now() - T0) / 1000, enrolled: b.eligible, voted: b.totalVotes }); }
+      await sleep(Math.max(0, 2000 - (performance.now() - t)));
+    }
+  });
+
+  // 3. Votantes escalonados: entran, se inscriben y votan apenas pueden.
+  const sentProofs: unknown[] = [];
+  type Person = { i: number; tJoin: number; tEnrolled?: number; tVoted?: number; proofMs: number[]; stale: number; kWaits: number; gatePolls: number; r429: number; voteStatus?: number; error?: string };
+  const people: Person[] = [];
+  const pattern = [1, 2, 1, 0, 2, 1];
+  const tStart = performance.now();
+  const retry429 = async (label: string, path: string, init: Parameters<typeof call>[2], p: Person) => {
+    for (let k = 0; ; k++) {
+      const r = await call(label, path, init);
+      if (r.status !== 429 || k >= 14) return r;
+      p.r429 += 1;
+      await sleep(5_000);
+    }
+  };
+  const voter = async (i: number) => {
+    const p: Person = { i, tJoin: performance.now(), proofMs: [], stale: 0, kWaits: 0, gatePolls: 0, r429: 0 };
+    people.push(p);
+    try {
+      const jb = must(await retry429("POST /api/rooms/:code/join", `/api/rooms/${roomCode}/join`, { method: "POST", body: JSON.stringify({ displayName: `Simulado ${i + 1}` }) }, p), [201], `join #${i}`);
+      const voterId = jb.voterId as string, inviteToken = jb.inviteToken as string;
+      await call("GET /v/:token (HTML)", `/v/${inviteToken}`);
+      must(await call("GET /api/invite/:token", `/api/invite/${inviteToken}`), [200], `invite #${i}`);
+      const enr = must(await retry429("POST /api/face/enroll", "/api/face/enroll", { method: "POST", body: JSON.stringify({ voterId, inviteToken, descriptor: syntheticDescriptor(), consent: true }) }, p), [200, 201], `enroll #${i}`);
+      const account = privateKeyToAccount(generatePrivateKey());
+      const bindingSignature = await account.signTypedData({ domain: { ...FaceBindingDomain, chainId: CHAIN_ID }, types: FaceBindingTypes, primaryType: "FaceBinding", message: { electionId, voterId, faceBindingHash: enr.faceBindingHash as `0x${string}`, wallet: account.address } });
+      must(await retry429("POST /api/voters/:id/wallet", `/api/voters/${voterId}/wallet`, { method: "POST", body: JSON.stringify({ inviteToken, walletAddress: account.address, kind: "eoa-demo", bindingSignature }) }, p), [200], `wallet #${i}`);
+      const id = createVoterIdentity();
+      must(await retry429("POST /api/voters/:id/identity", `/api/voters/${voterId}/identity`, { method: "POST", body: JSON.stringify({ inviteToken, commitment: id.commitment }) }, p), [201], `identity #${i}`);
+      p.tEnrolled = performance.now();
+      // Aviso de K (AnonymityGate): GET /group cada 3 s hasta tener K inscritos.
+      for (;;) {
+        const g = must(await call("GET /api/elections/:id/group (aviso K)", `/api/elections/${electionId}/group`), [200], `group #${i}`);
+        p.gatePolls += 1;
+        if (Number(g.size) >= K) break;
+        await sleep(3_000);
+      }
+      // BallotScreen: GET /roll → prueba → enviar; stale_root → otra vuelta (máx. 2 reintentos).
+      for (let attempt = 0; ; attempt++) {
+        const roll = must(await call("GET /api/elections/:id/roll", `/api/elections/${electionId}/roll`), [200], `roll #${i}`);
+        const pr = await prover.run({ privateKey: id.privateKey, commitments: roll.commitments, electionId, option: pattern[i % pattern.length] });
+        if (pr.error) throw new Error(`prueba #${i}: ${pr.error}`);
+        p.proofMs.push(pr.ms);
+        await sleep(Math.max(0, PROOF_DELAY_MS - pr.ms)); // un teléfono tarda más que este equipo en generar la prueba
+        const v = await retry429("POST /api/elections/:id/vote", `/api/elections/${electionId}/vote`, { method: "POST", body: JSON.stringify({ proof: pr.proof }), timeoutMs: 60_000 }, p);
+        const code = (v.body as { code?: string } | null)?.code;
+        p.voteStatus = v.status;
+        if (v.status === 201) { if (sentProofs.length < 5) sentProofs.push(pr.proof); break; }
+        if (code === "stale_root" && attempt < 2) { p.stale += 1; continue; }
+        if (code === "anonymity_pending" && attempt < 20) { p.kWaits += 1; await sleep(3_000); continue; }
+        throw new Error(`vote #${i}: HTTP ${v.status} ${v.text.slice(0, 200)}`);
+      }
+      p.tVoted = performance.now();
+      await retry429("POST /api/voters/:id/voted", `/api/voters/${voterId}/voted`, { method: "POST", body: JSON.stringify({ inviteToken }) }, p);
+    } catch (e) {
+      p.error = (e as Error).message;
+      log("  error:", p.error);
+    }
+  };
+  const voters: Promise<void>[] = [];
+  for (let i = 0; i < N; i++) {
+    voters.push(voter(i));
+    await sleep(1000 / RATE);
+  }
+  await Promise.all(voters);
+  const tAllVoted = performance.now();
+  const ok = people.filter((p) => p.tVoted);
+  log(`votaron ${ok.length}/${N} en ${((tAllVoted - tStart) / 1000).toFixed(1)} s desde la primera entrada`);
+  await sleep(4_000); // que los proyectores vean el último estado antes de cerrar
+
+  // Doble voto: 5 reenvíos simultáneos de pruebas ya incluidas → 409 already_voted.
+  const dbl = await Promise.all(sentProofs.map((proof) => call("POST /api/elections/:id/vote (doble voto)", `/api/elections/${electionId}/vote`, { method: "POST", body: JSON.stringify({ proof }) })));
+  const dblCodes = countBy(dbl.map((r) => `${r.status} ${String((r.body as { code?: string } | null)?.code ?? "")}`));
+  log(`doble voto: ${JSON.stringify(dblCodes)}`);
+  const before = must(await call("GET /api/elections/:id/tally", `/api/elections/${electionId}/tally`), [200], "tally antes de cerrar");
+
+  // 4. Cierre, auditoría, verificador CLI (con ancla), sorteo
+  const tClose = performance.now();
+  const closed = must(await call("POST /api/elections/:id/close", `/api/elections/${electionId}/close`, { method: "POST", token, timeoutMs: 180_000 }), [200], "cerrar");
+  const closeMs = performance.now() - tClose;
+  log(`close → ${closed.status} en ${(closeMs / 1000).toFixed(1)} s · ancla ${JSON.stringify(closed.anchor)}`);
+  const roomAfter = must(await call("GET /api/elections/:id/room (tras cerrar)", `/api/elections/${electionId}/room`), [200], "room tras cerrar");
+  const lateJoin = await call("POST /api/rooms/:code/join (tras cerrar)", `/api/rooms/${roomCode}/join`, { method: "POST", body: JSON.stringify({ displayName: "Tarde" }) });
+  const audit = must(await call("GET /api/elections/:id/audit", `/api/elections/${electionId}/audit`), [200], "audit") as { auditResult: { valid: boolean; checks: { name: string; passed?: boolean; reason?: string }[] }; packageDigest: string; anchorStatus: unknown };
+  log(`audit: valid=${audit.auditResult.valid} ancla ${JSON.stringify(audit.anchorStatus)}`);
+  const art = await call("GET /api/elections/:id/artifacts", `/api/elections/${electionId}/artifacts`, { timeoutMs: 60_000 });
+  const pkgFile = resolve(cwd, PKG_OUT || `load-test-package-${electionId}.json`);
+  writeFileSync(pkgFile, art.text);
+  type Cli = { code: number; valid?: boolean; checks?: { name: string; passed?: boolean; reason?: string }[]; ms: number };
+  const runCli = async (file: string): Promise<Cli> => {
+    const t = performance.now();
+    const cliArgs = ["--filter", "@quorum/verifier", "verify", file, ...(ANCHOR_RPC ? ["--anchor-rpc", ANCHOR_RPC] : [])];
+    try {
+      const { stdout } = await promisify(execFile)("pnpm", cliArgs, { cwd: resolve(import.meta.dirname, "../../.."), maxBuffer: 50e6 });
+      const j = JSON.parse(stdout.trim().split("\n").pop()!);
+      return { code: 0, valid: j.valid, checks: j.checks, ms: performance.now() - t };
+    } catch (e) {
+      const err = e as { code?: number; stdout?: string };
+      try { const j = JSON.parse(String(err.stdout).trim().split("\n").pop()!); return { code: err.code ?? 1, valid: j.valid, checks: j.checks, ms: performance.now() - t }; } catch { return { code: err.code ?? 1, ms: performance.now() - t }; }
+    }
+  };
+  const cli = await runCli(pkgFile);
+  const cliMs = cli.ms;
+  log(`verificador CLI (${ANCHOR_RPC ? `--anchor-rpc ${ANCHOR_RPC}` : "sin ancla"}): exit ${cli.code} valid=${cli.valid} en ${(cliMs / 1000).toFixed(1)} s`);
+  let drawn: Record<string, unknown> | null = null;
+  let drawMs = 0;
+  let cliDrawn: Cli | null = null;
+  if (closed.status === "auditable") {
+    const t = performance.now();
+    must(await call("POST /api/elections/:id/draw", `/api/elections/${electionId}/draw`, { method: "POST", token, timeoutMs: 120_000 }), [200, 201], "sorteo");
+    drawMs = performance.now() - t;
+    drawn = must(await call("GET /api/elections/:id/draw", `/api/elections/${electionId}/draw`), [200], "draw");
+    log(`sorteo: n=${drawn.n} ganadores ${JSON.stringify(drawn.winners)}`);
+    const art2 = await call("GET /api/elections/:id/artifacts (tras sorteo)", `/api/elections/${electionId}/artifacts`, { timeoutMs: 60_000 });
+    const drawnFile = pkgFile.replace(/\.json$/, "") + "-drawn.json";
+    writeFileSync(drawnFile, art2.text);
+    cliDrawn = await runCli(drawnFile);
+    log(`verificador CLI tras sorteo: exit ${cliDrawn.code} valid=${cliDrawn.valid} → ${drawnFile}`);
+  }
+  const finalTally = must(await call("GET /api/elections/:id/tally", `/api/elections/${electionId}/tally`), [200], "tally final");
+  polling = false;
+  await Promise.all(projectors);
+  await prover.close();
+
+  // ---------------------------------------------------------------------------------------------- informe
+  const sec = (ms: number) => +(ms / 1000).toFixed(2);
+  const enrollToVote = ok.map((p) => p.tVoted! - p.tEnrolled!);
+  const joinToVote = ok.map((p) => p.tVoted! - p.tJoin);
+  const joinToEnrolled = people.filter((p) => p.tEnrolled).map((p) => p.tEnrolled! - p.tJoin);
+  const pkg = JSON.parse(art.text) as { ledger: { kind: string; groupSize?: number }[] };
+  const groupSizes = pkg.ledger.filter((e) => e.kind === "ballot").map((e) => e.groupSize ?? 0);
+  const result = {
+    mode: "continuous", base: BASE, startedAt: startedAt.toISOString(), finishedAt: new Date().toISOString(), electionId, roomCode, K,
+    voters: N, rate: RATE, pollers: POLLERS, proofDelayMs: PROOF_DELAY_MS,
+    voted: ok.length, errors: people.filter((p) => p.error).map((p) => `#${p.i}: ${p.error}`),
+    staleRoot: people.reduce((a, p) => a + p.stale, 0), votersWithStale: people.filter((p) => p.stale > 0).length,
+    anonymityPendingRetries: people.reduce((a, p) => a + p.kWaits, 0), votersWaitedForK: people.filter((p) => p.gatePolls > 1).length,
+    retries429: people.reduce((a, p) => a + p.r429, 0),
+    proofMsLocal: { p50: pct(people.flatMap((p) => p.proofMs), 50), p95: pct(people.flatMap((p) => p.proofMs), 95) },
+    joinToEnrolledS: { p50: sec(pct(joinToEnrolled, 50)), p95: sec(pct(joinToEnrolled, 95)), max: sec(Math.max(...joinToEnrolled)) },
+    enrolledToVotedS: { p50: sec(pct(enrollToVote, 50)), p95: sec(pct(enrollToVote, 95)), max: sec(Math.max(...enrollToVote)) },
+    joinToVotedS: { p50: sec(pct(joinToVote, 50)), p95: sec(pct(joinToVote, 95)), max: sec(Math.max(...joinToVote)) },
+    allVotedS: sec(tAllVoted - tStart),
+    tallyBeforeClose: before, closedStatus: closed.status, closeS: sec(closeMs), anchor: closed.anchor ?? null, anchorStatus: audit.anchorStatus,
+    roomAfterClose: { open: roomAfter.open, closedReason: roomAfter.closedReason }, lateJoinStatus: lateJoin.status,
+    serverAuditValid: audit.auditResult.valid,
+    serverChecks: audit.auditResult.checks.map((c) => `${c.name}:${c.passed ? "ok" : "fail"}`),
+    serverAnonymity: audit.auditResult.checks.find((c) => c.name === "anonymity_set_min")?.reason,
+    groupSizes: { min: Math.min(...groupSizes), median: pct(groupSizes, 50), max: Math.max(...groupSizes), n: groupSizes.length },
+    packageDigest: audit.packageDigest, packageBytes: art.text.length,
+    cliVerifier: { code: cli.code, valid: cli.valid, s: sec(cliMs), checks: cli.checks?.map((c) => `${c.name}:${c.passed ? "ok" : "fail"} — ${c.reason}`) },
+    doubleVote: dblCodes,
+    drawS: sec(drawMs), draw: drawn, finalTally,
+    cliVerifierAfterDraw: cliDrawn ? { code: cliDrawn.code, valid: cliDrawn.valid, s: sec(cliDrawn.ms), checks: cliDrawn.checks?.filter((c) => /anchor|draw|root_history|anonymity/.test(c.name)).map((c) => `${c.name}:${c.passed ? "ok" : "fail"} — ${c.reason}`) } : null,
+    liveSeries: liveSeries.filter((_, k) => k % 3 === 0),
+    table: statsTable(), totalRequests: samples.length,
+  };
+  console.log("\n" + JSON.stringify(result, null, 2));
+  if (OUT) writeFileSync(resolve(cwd, OUT), JSON.stringify({ ...result, people, samples }, null, 2));
+}
+
 function countBy(xs: (string | number)[]) {
   const o: Record<string, number> = {};
   for (const x of xs) o[String(x)] = (o[String(x)] ?? 0) + 1;
   return o;
 }
 
-main().then(() => process.exit(0)).catch((e) => {
+(MODE === "continuous" ? mainContinuous : main)().then(() => process.exit(0)).catch((e) => {
   polling = false;
   console.error("load-test falló:", e instanceof Error ? e.message : e);
   process.exit(1);
