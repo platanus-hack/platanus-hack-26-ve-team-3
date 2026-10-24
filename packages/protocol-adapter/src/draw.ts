@@ -22,6 +22,11 @@ export type DrawCandidate = { id: string; label: string; amount?: number };
 export type DrawRule = {
   candidates: DrawCandidate[];
   winnersCount: { kind: "fixed"; n: number } | { kind: "from-result"; optionValues: number[] };
+  /**
+   * Regla de empate para N cuando `winnersCount.kind = "from-result"` (PROPUESTA, pendiente de aprobación humana):
+   * `"lowest"` = si varias opciones empatan en votos, gana la de MENOR valor N. Entra en `manifestHash`.
+   */
+  tieBreak?: "lowest";
 };
 
 export type DrawResult = { seed: Hex32; n: number; winners: string[]; method: typeof DRAW_METHOD; finalHash: Hex32 };
@@ -52,25 +57,26 @@ export function drawWinners(candidates: readonly { id: string }[], n: number, fi
 }
 
 /**
- * Índice de la opción ganadora según el recuento (máximo de `counts`; empate → el índice menor).
- * Devuelve null si no hay votos válidos.
+ * Índice de la opción ganadora según el recuento. Empate en el máximo → la opción de MENOR `value`
+ * (regla `tieBreak: "lowest"`); sin valores, el índice menor. Devuelve null si no hay votos válidos.
  */
-export function winningOptionIndex(t: Pick<Tally, "counts">): number | null {
+export function winningOptionIndex(t: Pick<Tally, "counts">, values?: readonly number[]): number | null {
+  const max = Math.max(0, ...t.counts);
+  if (max === 0) return null;
   let best = -1;
-  let bestCount = 0;
   t.counts.forEach((c, i) => {
-    if (c > bestCount) {
-      best = i;
-      bestCount = c;
-    }
+    if (c !== max) return;
+    if (best < 0) best = i;
+    else if (values && values[i] < values[best]) best = i;
   });
-  return best >= 0 ? best : null;
+  return best;
 }
 
 /** N de ganadores según la regla del manifiesto y el recuento. Null si la regla depende del resultado y no hay votos. */
 export function winnersCountFor(rule: DrawRule, t: Pick<Tally, "counts">): number | null {
   if (rule.winnersCount.kind === "fixed") return rule.winnersCount.n;
-  const idx = winningOptionIndex(t);
+  if (rule.tieBreak !== "lowest") throw new Error("TIE_BREAK_MISSING: from-result rules must declare tieBreak \"lowest\" in the manifest");
+  const idx = winningOptionIndex(t, rule.winnersCount.optionValues);
   if (idx === null) return null;
   const v = rule.winnersCount.optionValues[idx];
   return v === undefined ? null : v;

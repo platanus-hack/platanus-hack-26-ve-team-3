@@ -34,6 +34,7 @@ const DrawRuleSchema = z.object({
     z.object({ kind: z.literal("fixed"), n: z.number().int().min(0) }),
     z.object({ kind: z.literal("from-result"), optionValues: z.array(z.number().int().min(0)) }),
   ]),
+  tieBreak: z.literal("lowest").optional(),
 });
 const DrawSchema = z.object({
   seed: Hex32Lower,
@@ -330,11 +331,14 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
       let expectedN: number | null;
       if (rule.winnersCount.kind === "fixed") expectedN = rule.winnersCount.n;
       else {
+        // Empate en el máximo → gana la opción de MENOR valor N (tieBreak "lowest", declarado en el manifiesto).
+        const values = rule.winnersCount.optionValues;
+        const max = Math.max(0, ...counts);
         let best = -1;
-        let bestCount = 0;
-        counts.forEach((c, i) => { if (c > bestCount) { best = i; bestCount = c; } });
-        expectedN = best >= 0 ? (rule.winnersCount.optionValues[best] ?? null) : null;
-        if (rule.winnersCount.optionValues.length !== n) problems.push(`optionValues tiene ${rule.winnersCount.optionValues.length} valores, el manifiesto ${n} opciones`);
+        if (max > 0) counts.forEach((c, i) => { if (c === max && (best < 0 || values[i] < values[best])) best = i; });
+        expectedN = best >= 0 ? (values[best] ?? null) : null;
+        if (values.length !== n) problems.push(`optionValues tiene ${values.length} valores, el manifiesto ${n} opciones`);
+        if (rule.tieBreak !== "lowest") problems.push("el manifiesto no declara regla de empate (tieBreak) para N");
       }
       if (expectedN === null) problems.push("no hay boletas válidas: la regla no fija N y no debería existir sorteo");
       if (draw.finalHash !== pkg.finalHash) problems.push(`sorteo hecho sobre finalHash ${draw.finalHash.slice(0, 18)}… ≠ finalHash del paquete ${pkg.finalHash.slice(0, 18)}…`);

@@ -15,6 +15,7 @@ const rule: DrawRule = {
   ],
   // El demo tiene 3 opciones: valen 1, 2 y 3 ganadores.
   winnersCount: { kind: "from-result", optionValues: [1, 2, 3] },
+  tieBreak: "lowest",
 };
 
 let base: AuditPackage; // con regla de sorteo, sin sorteo
@@ -61,6 +62,24 @@ describe("draw_matches", () => {
     s.draw!.seed = `0x${"00".repeat(32)}`;
     expect(reasonOf(await verifyPackage(s), "draw_matches")).toMatch(/semilla publicada/);
   });
+
+  it("empate: gana el N menor (tieBreak 'lowest'); sin tieBreak declarado → falla", async () => {
+    // votos [1,1,0] con valores [3,1,2]: empate entre opción 0 (N=3) y 1 (N=1) → N=1
+    const demo = await buildDemoElection({ votes: [0, 1], electionId: "test-draw-tie" });
+    const tieRule: DrawRule = { ...rule, winnersCount: { kind: "from-result", optionValues: [3, 1, 2] } };
+    const manifest = { ...demo.manifest, drawRule: tieRule };
+    const t = demo.pkg.tally;
+    const draw = runDraw(tieRule, t, demo.pkg.finalHash);
+    expect(draw.n).toBe(1);
+    const pkg = buildAuditPackage({ electionId: manifest.electionId, manifest, commitments: demo.commitments, ledger: demo.ledger, tally: t, draw });
+    expect((await verifyPackage(pkg)).valid).toBe(true);
+    const lie = structuredClone(pkg);
+    lie.draw = { ...draw, ...recomputeDraw(tieRule.candidates.map((c) => c.id), 3, pkg.finalHash) };
+    expect(reasonOf(await verifyPackage(lie), "draw_matches")).toMatch(/N publicado 3 ≠ N recomputado 1/);
+    const noTie = { ...manifest, drawRule: { ...tieRule, tieBreak: undefined } };
+    const pkg2 = buildAuditPackage({ electionId: manifest.electionId, manifest: noTie, commitments: demo.commitments, ledger: demo.ledger, tally: t, draw });
+    expect(reasonOf(await verifyPackage(pkg2), "draw_matches")).toMatch(/regla de empate/);
+  }, 60_000);
 
   it("sorteo sin regla en el manifiesto → falla; regla añadida tras publicar → manifest_hash falla", async () => {
     const noRule = structuredClone(drawn);

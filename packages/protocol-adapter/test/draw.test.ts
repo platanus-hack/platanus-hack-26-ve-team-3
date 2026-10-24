@@ -46,10 +46,13 @@ describe("sorteo verificable (drawWinners)", () => {
     expect(() => drawWinners([{ id: "x" }, { id: "x" }], 1, FINAL)).toThrow(/unique/);
   });
 
-  it("N desde el resultado: opción ganadora (empate → índice menor) → valor de la opción", () => {
+  it("N desde el resultado: opción ganadora (empate → gana el N menor, tieBreak 'lowest') → valor de la opción", () => {
     expect(winningOptionIndex({ counts: [0, 2, 2, 1, 0] })).toBe(1);
+    expect(winningOptionIndex({ counts: [0, 2, 2] }, [5, 3, 1])).toBe(2); // empate entre N=3 y N=1 → N=1
     expect(winningOptionIndex({ counts: [0, 0, 0] })).toBeNull();
-    const rule: DrawRule = { candidates, winnersCount: { kind: "from-result", optionValues: [1, 2, 3, 4, 5] } };
+    const rule: DrawRule = { candidates, winnersCount: { kind: "from-result", optionValues: [1, 2, 3, 4, 5] }, tieBreak: "lowest" };
+    expect(winnersCountFor(rule, { counts: [0, 2, 0, 2, 1] })).toBe(2);
+    expect(() => winnersCountFor({ ...rule, tieBreak: undefined }, { counts: [1, 0, 0, 0, 0] })).toThrow(/TIE_BREAK_MISSING/);
     expect(winnersCountFor(rule, { counts: [0, 0, 3, 1, 0] })).toBe(3);
     expect(winnersCountFor({ candidates, winnersCount: { kind: "fixed", n: 2 } }, { counts: [0, 0] })).toBe(2);
     const r = runDraw(rule, { counts: [0, 0, 3, 1, 0] }, FINAL);
