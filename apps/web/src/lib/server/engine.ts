@@ -13,6 +13,7 @@
 import { Election, Receipt, type AuditResult, type CastVoteInput } from "@quorum/contracts";
 import {
   anchorOnBaseSepolia,
+  anchorOnRegistry,
   appendBallot,
   buildAuditPackage,
   canonicalJson,
@@ -286,19 +287,39 @@ export async function closeElection(id: string): Promise<Election> {
     const fh = finalHash(engine.ledger);
 
     // Ancla opcional: solo con ORGANIZER_PRIVATE_KEY + BASE_SEPOLIA_RPC. Sin credenciales: deshabilitada y se dice.
-    let anchor: { chainId: number; txHash: `0x${string}` } | null = null;
+    // Con QuorumRegistry (fijado en el manifiesto, o NEXT_PUBLIC_REGISTRY_ADDRESS): `anchor(keccak256(electionId), finalHash)`.
+    // Sin registro: modo antiguo (tx a sí mismo con el acta en calldata).
+    let anchor: { chainId: number; txHash: `0x${string}`; registryAddress?: string } | null = null;
     let anchorStatus: EngineState["anchorStatus"];
     const pk = env.organizerPrivateKey;
     const rpc = env.rpcUrl;
+    const policy = engine.manifest.anchorPolicy;
+    // Si el manifiesto fijó el modo, se respeta; si no (elecciones publicadas antes de M1), decide el entorno.
+    const registry = (policy ? policy.registryAddress : (e.registryAddress ?? env.registryAddress)) as Address | undefined;
+    const transportOpt = hooks.anchorTransport ? { transport: hooks.anchorTransport } : {};
     if (!pk || !rpc) {
       anchorStatus = { mode: "disabled", reason: "ancla deshabilitada: faltan ORGANIZER_PRIVATE_KEY y/o BASE_SEPOLIA_RPC; el verificador la declara no evaluada" };
+    } else if (registry) {
+      try {
+        const r = await anchorOnRegistry({ electionId: id, finalHash: fh, registryAddress: registry }, pk, rpc, {
+          ...transportOpt,
+          ...(policy ? { expectedOrganizer: policy.organizer as Address } : {}),
+        });
+        anchor = { chainId: r.chainId, txHash: r.txHash, registryAddress: r.registryAddress };
+        anchorStatus = { mode: "anchored", reason: `anclado vía QuorumRegistry ${r.registryAddress} en Base Sepolia, tx ${r.txHash}` };
+      } catch (err) {
+        anchorStatus = { mode: "error", reason: `no se pudo anclar en el QuorumRegistry: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}` };
+      }
     } else {
       try {
-        const r = await anchorOnBaseSepolia({ finalHash: fh, groupRoot: engine.ledger.groupRoot, tallyHash: tallyHash(t), electionId: id }, pk, rpc, hooks.anchorTransport ? { transport: hooks.anchorTransport } : {});
+        const r = await anchorOnBaseSepolia({ finalHash: fh, groupRoot: engine.ledger.groupRoot, tallyHash: tallyHash(t), electionId: id }, pk, rpc, {
+          ...transportOpt,
+          ...(policy ? { expectedOrganizer: policy.organizer as Address } : {}),
+        });
         anchor = { chainId: r.chainId, txHash: r.txHash };
-        anchorStatus = { mode: "anchored", reason: `anclado en Base Sepolia, tx ${r.txHash}` };
+        anchorStatus = { mode: "anchored", reason: `anclado en Base Sepolia (calldata, sin registro), tx ${r.txHash}` };
       } catch (err) {
-        anchorStatus = { mode: "error", reason: `no se pudo anclar: ${err instanceof Error ? err.message : String(err)}` };
+        anchorStatus = { mode: "error", reason: `no se pudo anclar: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}` };
       }
     }
 

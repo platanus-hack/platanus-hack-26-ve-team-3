@@ -1,7 +1,7 @@
 import path from "node:path";
 import { configDefaults, defineConfig } from "vitest/config";
 
-/** Unitarios de @quorum/web. Los `e2e/**` son de Playwright y se excluyen aquí. */
+/** Unitarios de @quorum/web. Los `e2e/**` son de Playwright y los `*.net.test.ts` (red real) van en `test:net`. */
 export default defineConfig({
   resolve: {
     alias: { "@": path.resolve(__dirname, "src") },
@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    exclude: [...configDefaults.exclude, "e2e/**", ".next/**"],
+    exclude: [...configDefaults.exclude, "e2e/**", ".next/**", "src/**/*.net.test.ts"],
     passWithNoTests: true,
     env: {
       QUORUM_STORE: "memory",

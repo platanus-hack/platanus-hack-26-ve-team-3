@@ -4,7 +4,9 @@
  * Sin PII en nada que salga hacia afuera.
  */
 import { Aggregates, Election, Voter, VoterSummary, type CreateElectionInput } from "@quorum/contracts";
-import { manifestHash, MERKLE_TREE_DEPTH, type DrawRule, type ElectionManifest } from "@quorum/protocol-adapter";
+import { manifestHash, MERKLE_TREE_DEPTH, type AnchorPolicy, type DrawRule, type ElectionManifest } from "@quorum/protocol-adapter";
+import { getAddress } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
 import { randomId, randomToken } from "./crypto";
 import { env, MIN_VOTES_FOR_BREAKDOWN } from "./env";
@@ -87,9 +89,25 @@ export function drawRuleOf(e: Election): DrawRule | undefined {
   return undefined;
 }
 
+/**
+ * Hallazgo M1: fija en el manifiesto (antes de votar) quién puede anclar y dónde. Con registro: `quorum-registry`
+ * (QuorumRegistry + organizador); sin registro pero con clave: `calldata` (modo antiguo, solo organizador).
+ * Sin clave del organizador no se promete nada. La dirección se deriva de la clave en el servidor; la clave nunca sale.
+ */
+export function anchorPolicyOf(e: Election): AnchorPolicy | undefined {
+  const pk = env.organizerPrivateKey;
+  if (!pk) return undefined;
+  const organizer = privateKeyToAccount(pk).address;
+  const registry = e.registryAddress ?? env.registryAddress;
+  return registry
+    ? { kind: "quorum-registry", chainId: env.chainId, registryAddress: getAddress(registry), organizer }
+    : { kind: "calldata", chainId: env.chainId, organizer };
+}
+
 /** Manifiesto canónico del adaptador (`ElectionManifest`). Su SHA-256 es `manifestHash`; lo recomputa el verificador. */
 export function manifestOf(e: Election): ElectionManifest {
   const drawRule = drawRuleOf(e);
+  const anchorPolicy = anchorPolicyOf(e);
   return {
     electionId: e.id,
     title: e.title,
@@ -101,6 +119,7 @@ export function manifestOf(e: Election): ElectionManifest {
     merkleTreeDepth: MERKLE_TREE_DEPTH,
     label: MANIFEST_LABEL,
     ...(drawRule ? { drawRule } : {}),
+    ...(anchorPolicy ? { anchorPolicy } : {}),
   };
 }
 

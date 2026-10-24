@@ -20,12 +20,29 @@ export type ElectionManifest = {
   label?: string;
   /** Regla del sorteo verificable (D-12). Opcional; si está, entra en `manifestHash`. */
   drawRule?: DrawRule;
+  /**
+   * Hallazgo M1: quién puede anclar y dónde, fijado ANTES de votar. Aditivo y opcional; si está, entra en
+   * `manifestHash`. El verificador exige que el evento `Anchored` venga de `registryAddress` con `organizer` igual.
+   */
+  anchorPolicy?: AnchorPolicy;
+};
+
+export type AnchorPolicy = {
+  /** `quorum-registry`: `QuorumRegistry.anchor`; `calldata`: modo antiguo (tx del organizador a sí mismo). */
+  kind: "quorum-registry" | "calldata";
+  chainId: number;
+  /** Dirección del QuorumRegistry (checksum EIP-55). Obligatoria con `quorum-registry`; ausente con `calldata`. */
+  registryAddress?: string;
+  /** Dirección del organizador (checksum EIP-55), la única que el contrato acepta en `anchor`. */
+  organizer: string;
 };
 
 export type AnchorRef = {
   chainId: number;
   txHash?: Hex32;
   attestationUid?: Hex32;
+  /** Presente si el ancla es una llamada a `QuorumRegistry.anchor` (si falta: modo antiguo, tx a sí mismo con calldata). */
+  registryAddress?: string;
 } | null;
 
 export type AuditPackage = {

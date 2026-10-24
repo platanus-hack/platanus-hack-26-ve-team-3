@@ -15,6 +15,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
+import { electionIdToBytes32, encodeAnchor as encodeRegistryAnchor, registryAbi } from "@quorum/wallet";
 import type { Hex32 } from "./ledger";
 
 /** Base Sepolia (testnet de Base). Fuente: https://docs.base.org/chain/network-information (consultado 2026-10-24). */
@@ -77,6 +78,7 @@ export function viemTransport(rpcUrl: string, privateKey?: Hex): AnchorTransport
     },
     getReceiptLogs: async (hash) => {
       const r = await publicClient.waitForTransactionReceipt({ hash });
+      if (r.status !== "success") throw new Error(`tx ${hash} revertida`);
       return r.logs.map((l) => ({ address: l.address, data: l.data, topics: [...l.topics] as Hex[] }));
     },
     call: async (to, data) => (await publicClient.call({ to, data })).data ?? "0x",
@@ -96,12 +98,15 @@ export async function anchorOnBaseSepolia(
   payload: AnchorPayload,
   privateKey: Hex,
   rpcUrl: string,
-  opts: { transport?: AnchorTransport } = {},
+  opts: { transport?: AnchorTransport; expectedOrganizer?: Address } = {},
 ): Promise<AnchorResult> {
   const t = opts.transport ?? viemTransport(rpcUrl, privateKey);
   const chainId = await t.chainId();
   if (chainId !== BASE_SEPOLIA_CHAIN_ID) throw new Error(`expected chainId ${BASE_SEPOLIA_CHAIN_ID} (Base Sepolia), got ${chainId}`);
   const from = t.sender();
+  if (opts.expectedOrganizer && from.toLowerCase() !== opts.expectedOrganizer.toLowerCase()) {
+    throw new Error(`la clave configurada (${from}) no es el organizador fijado en el manifiesto (${opts.expectedOrganizer})`);
+  }
   const calldata = encodeAnchorCalldata(payload);
   const txHash = (await t.send(from, calldata)) as Hex32;
   return { chainId, txHash, from, calldata };
@@ -115,6 +120,68 @@ export async function readAnchor(txHash: Hex, rpcUrl: string, opts: { transport?
   const chainId = await t.chainId();
   const tx = await t.getTransaction(txHash);
   return { chainId, from: tx.from, to: tx.to, selfTransfer: tx.to?.toLowerCase() === tx.from.toLowerCase(), payload: decodeAnchorCalldata(tx.input) };
+}
+
+// ---------------------------------------------------------------------------
+// Ancla vía QuorumRegistry (contrato propio, ABI en @quorum/wallet): `anchor(keccak256(utf8(electionId)), finalHash)`.
+// El contrato solo acepta al `organizer` fijado al desplegar y emite
+// `Anchored(electionId indexed, finalHash, castCount, organizer indexed)`, que es lo que lee el verificador.
+// ---------------------------------------------------------------------------
+
+export type RegistryAnchorResult = {
+  chainId: number;
+  txHash: Hex32;
+  registryAddress: Address;
+  organizer: Address;
+  /** `castCount` que emitió el evento (compromisos `cast` registrados para esa elección). */
+  castCount: string;
+};
+
+export type AnchoredEvent = { electionId: Hex32; finalHash: Hex32; castCount: bigint; organizer: Address };
+
+/** Busca y decodifica el evento `Anchored` emitido por `registryAddress` en los logs de un receipt. */
+export function findAnchoredEvent(logs: { address: Address; data: Hex; topics: Hex[] }[], registryAddress: Address): AnchoredEvent | null {
+  for (const log of logs) {
+    if (log.address.toLowerCase() !== registryAddress.toLowerCase()) continue;
+    try {
+      const ev = decodeEventLog({ abi: registryAbi, data: log.data, topics: log.topics as [Hex, ...Hex[]] });
+      if (ev.eventName === "Anchored") {
+        const a = ev.args as { electionId: Hex; finalHash: Hex; castCount: bigint; organizer: Address };
+        return { electionId: a.electionId.toLowerCase() as Hex32, finalHash: a.finalHash.toLowerCase() as Hex32, castCount: a.castCount, organizer: a.organizer };
+      }
+    } catch {
+      /* otro evento */
+    }
+  }
+  return null;
+}
+
+/**
+ * Ancla `finalHash` llamando a `QuorumRegistry.anchor(keccak256(utf8(electionId)), finalHash)` desde la clave del
+ * organizador. Espera el receipt y exige que el evento `Anchored` del registro coincida con lo enviado; si no, lanza.
+ * Lo que garantiza: que el organizador fijado en el contrato fijó ese hash una sola vez (el contrato rechaza un segundo
+ * `anchor` para la misma elección). Lo que NO garantiza: que el ledger sea correcto (eso lo recomputa el verificador).
+ */
+export async function anchorOnRegistry(
+  input: { electionId: string; finalHash: Hex32; registryAddress: Address },
+  privateKey: Hex,
+  rpcUrl: string,
+  opts: { transport?: AnchorTransport; expectedOrganizer?: Address } = {},
+): Promise<RegistryAnchorResult> {
+  const t = opts.transport ?? viemTransport(rpcUrl, privateKey);
+  const chainId = await t.chainId();
+  if (chainId !== BASE_SEPOLIA_CHAIN_ID) throw new Error(`expected chainId ${BASE_SEPOLIA_CHAIN_ID} (Base Sepolia), got ${chainId}`);
+  const organizer = t.sender();
+  if (opts.expectedOrganizer && organizer.toLowerCase() !== opts.expectedOrganizer.toLowerCase()) {
+    throw new Error(`la clave configurada (${organizer}) no es el organizador fijado en el manifiesto (${opts.expectedOrganizer})`);
+  }
+  const txHash = (await t.send(input.registryAddress, encodeRegistryAnchor(input.electionId, input.finalHash))) as Hex32;
+  const ev = findAnchoredEvent(await t.getReceiptLogs(txHash), input.registryAddress);
+  if (!ev) throw new Error(`el receipt de ${txHash} no contiene el evento Anchored del registro ${input.registryAddress}`);
+  if (ev.electionId !== electionIdToBytes32(input.electionId).toLowerCase()) throw new Error("Anchored.electionId no coincide con la elección");
+  if (ev.finalHash !== input.finalHash.toLowerCase()) throw new Error("Anchored.finalHash no coincide con el enviado");
+  if (ev.organizer.toLowerCase() !== organizer.toLowerCase()) throw new Error("Anchored.organizer no coincide con el remitente");
+  return { chainId, txHash, registryAddress: input.registryAddress, organizer, castCount: ev.castCount.toString() };
 }
 
 // ---------------------------------------------------------------------------

@@ -31,7 +31,12 @@ export const Draw = z.object({
 });
 export type Draw = z.infer<typeof Draw>;
 
-export const AnchorInfo = z.object({ chainId: z.number().int(), txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/) });
+export const AnchorInfo = z.object({
+  chainId: z.number().int(),
+  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+  /** Presente si se ancló vía `QuorumRegistry.anchor` (aditivo; sin él, modo antiguo de calldata). */
+  registryAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+});
 
 export const Election = z.object({
   id: z.string(),
@@ -222,7 +227,8 @@ export const LiveLayout = z.object({ columns: z.enum(["1", "2", "3"]), tiles: z.
 export type LiveLayout = z.infer<typeof LiveLayout>;
 
 /** Resultado del verificador independiente (apps/verifier). Nunca derivado de un booleano de nuestra DB. */
-export const AuditCheck = z.object({ name: z.string(), passed: z.boolean(), reason: z.string().optional() });
+/** `status` (aditivo, opcional): estado honesto del check. "no evaluado" lleva `passed: true` pero NO es "verificado". */
+export const AuditCheck = z.object({ name: z.string(), passed: z.boolean(), reason: z.string().optional(), status: z.enum(["verificado", "no evaluado", "fallo detectado"]).optional() });
 export const AuditResult = z.object({
   electionId: z.string(), verifierVersion: z.string(), protocol: Protocol, inputArtifactDigest: z.string(), checkedAt: z.string().datetime(),
   valid: z.boolean(), checks: z.array(AuditCheck), unsupportedGuarantees: z.array(z.string()),
