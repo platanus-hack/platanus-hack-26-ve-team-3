@@ -84,8 +84,6 @@ test("vinculando → listo → boleta → enviando → comprobante", async ({ pa
   await shot(page, "07-vinculando");
   await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
   await shot(page, "08-listo");
-  await page.getByText("Detalles técnicos").click();
-  await shot(page, "09-listo-detalles-tecnicos", true);
   mock.phase = "open";
   await page.getByRole("radio", { name: /3$/ }).click({ timeout: 15_000 });
   await shot(page, "10-boleta");
@@ -95,8 +93,6 @@ test("vinculando → listo → boleta → enviando → comprobante", async ({ pa
   await shot(page, "11-enviando");
   await expect(page.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible({ timeout: 60_000 });
   await shot(page, "12-comprobante");
-  await page.getByText("Detalles técnicos").click();
-  await shot(page, "13-comprobante-detalles-tecnicos", true);
 });
 
 test("votación terminada → resultados", async ({ page }) => {

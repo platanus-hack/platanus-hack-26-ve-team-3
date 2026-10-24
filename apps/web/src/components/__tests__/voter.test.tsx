@@ -8,21 +8,23 @@ import { memoryKeyStore, openIdentity, peekIdentity, savePendingFace, setDeviceK
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
 
-/** Palabras técnicas que NO deben aparecer en el flujo principal del votante (sí dentro de "Detalles técnicos"). */
-const FORBIDDEN = /\bwallet|\bfirma|EIP-712|Semaphore|credencial|nullifier|commitment|Kernel|on-chain/i;
-/** Texto visible del flujo principal: sin el desplegable "Detalles técnicos". */
+/**
+ * Jerga que NO debe aparecer en el flujo del votante, ni visible ni plegada (pedido de producto: para la persona es
+ * "un proceso de verificación para votar"). Los detalles técnicos viven solo en /e/[id], /audit y los docs.
+ */
+const FORBIDDEN = /\bwallet|smart wallet|\bfirma|EIP-?712|FaceBinding|Semaphore|credencial|nullifier|commitment|Kernel|eoa-demo|on-?chain|blockchain|Base Sepolia|ZeroDev|testnet/i;
+/** Todo el texto del flujo (incluidos desplegables: ya no hay "Detalles técnicos" en el flujo del votante). */
 function mainText(root: HTMLElement): string {
-  const c = root.cloneNode(true) as HTMLElement;
-  c.querySelectorAll('[data-testid="tech-details"]').forEach((d) => d.remove());
-  return c.textContent ?? "";
+  return root.textContent ?? "";
 }
 
 const FBH = `0x${"5a".repeat(32)}`;
 type Phase = "draft" | "registration" | "open" | "closed" | "auditable";
-function invite(phase: Phase, voter: Partial<{ walletAddress: string | null; livenessPassedAt: string | null; votedAt: string | null }> = {}) {
+function invite(phase: Phase, voter: Partial<{ walletAddress: string | null; livenessPassedAt: string | null; votedAt: string | null }> = {}, clock: { votingStartsAt?: string | null; serverNow?: string } = {}) {
   return {
-    election: { id: "e1", title: "Asamblea ficticia (fixture): ¿pintamos el pasillo?", kind: "yes-no", options: [{ id: "si", label: "Sí" }, { id: "no", label: "No" }], status: phase, endsAt: "2026-10-24T22:00:00.000Z" },
+    election: { id: "e1", title: "Asamblea ficticia (fixture): ¿pintamos el pasillo?", kind: "yes-no", options: [{ id: "si", label: "Sí" }, { id: "no", label: "No" }], status: phase, endsAt: "2026-10-24T22:00:00.000Z", votingStartsAt: clock.votingStartsAt ?? null },
     voter: { id: "v1", displayName: "Vecina Ana", walletAddress: null, livenessPassedAt: null, votedAt: null, ...voter },
+    ...(clock.serverNow ? { serverNow: clock.serverNow } : {}),
   };
 }
 
@@ -79,7 +81,9 @@ describe("VoterFlow · inscripción", () => {
     const { container } = render(<VoterFlow token="tok" />);
     expect(await screen.findByText("Vinculando este teléfono…")).toBeTruthy();
     expect(await screen.findByText("¡Listo! Ya estás inscrito.", undefined, { timeout: 15_000 })).toBeTruthy();
-    expect(screen.getByText(/Deja esta página abierta: la votación aparecerá aquí cuando empiece/)).toBeTruthy();
+    expect(screen.getByText(/Deja esta página abierta: la boleta aparecerá aquí sola/)).toBeTruthy();
+    // Sin hora programada: lo dice, sin cuenta regresiva.
+    expect(screen.getByTestId("voting-countdown").textContent).toContain("Esperando que el organizador abra la votación…");
     const linkBody = calls.find((c) => c.url.endsWith("/wallet"))!.body as { kind: string; bindingSignature: string; walletAddress: string };
     wallet = linkBody.walletAddress;
     expect(linkBody.kind).toBe("eoa-demo");
@@ -92,9 +96,10 @@ describe("VoterFlow · inscripción", () => {
     expect(peekIdentity("e1")?.commitment).toBe(idBody.commitment);
     await expect(openIdentity("e1")).resolves.toMatchObject({ commitment: idBody.commitment });
     expect(mainText(container)).not.toMatch(FORBIDDEN);
-    // Lo técnico sí está, dentro de Detalles técnicos, con la etiqueta demo.
-    expect(screen.getByTestId("tech-details").textContent).toMatch(/Wallet demo \(eoa-demo\)/);
-    expect(screen.getByTestId("commitment").textContent).toBe(idBody.commitment);
+    // Ni "Detalles técnicos" ni la etiqueta del modo de vinculación en el flujo del votante (viven en /e/[id]).
+    expect(screen.queryByTestId("tech-details")).toBeNull();
+    expect(screen.queryByTestId("link-mode")).toBeNull();
+    expect(container.textContent).not.toContain(idBody.commitment);
   }, 30_000);
 
   it("si el rostro se comprobó en otro teléfono, no intenta otra vez: lo explica", async () => {
@@ -141,4 +146,48 @@ describe("VoterFlow · otras fases", () => {
     expect(si.getAttribute("aria-checked")).toBe("true");
     expect(mainText(container)).not.toMatch(FORBIDDEN);
   });
+});
+
+describe("VoterFlow · espera con cuenta regresiva", () => {
+  async function registeredHere() {
+    const { sealIdentity, markRegistered } = await import("@/lib/client/identityVault");
+    await sealIdentity("e1", { voterId: "v1", faceBindingHash: FBH as `0x${string}`, address: "0x0000000000000000000000000000000000000001", walletMode: "eoa-demo" }, { privateKey: "1", commitment: "1" });
+    markRegistered("e1", "1");
+  }
+  const registered = { walletAddress: "0x0000000000000000000000000000000000000001", livenessPassedAt: "2026-10-24T14:00:00.000Z" };
+
+  it("'La votación empieza en 04:32' con el reloj del SERVIDOR aunque el teléfono vaya 1 h atrasado", async () => {
+    await registeredHere();
+    const serverNow = Date.now() + 3_600_000; // el teléfono va una hora atrasado
+    mockFetch(() => ({ status: 200, body: invite("registration", registered, { serverNow: new Date(serverNow).toISOString(), votingStartsAt: new Date(serverNow + 272_500).toISOString() }) }));
+    const { container } = render(<VoterFlow token="tok" />);
+    expect(await screen.findByText("¡Listo! Ya estás inscrito.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("countdown-value").textContent).toMatch(/^04:3[23]$/));
+    expect(screen.getByTestId("voting-countdown").textContent).toContain("La votación empieza en");
+    expect(screen.getByTestId("voting-countdown").dataset.state).toBe("counting");
+    expect(mainText(container)).not.toMatch(FORBIDDEN);
+  });
+
+  it("más de una hora: h:mm:ss", async () => {
+    await registeredHere();
+    const serverNow = Date.now();
+    mockFetch(() => ({ status: 200, body: invite("registration", registered, { serverNow: new Date(serverNow).toISOString(), votingStartsAt: new Date(serverNow + 3_600_000 + 4 * 60_000 + 32_500).toISOString() }) }));
+    render(<VoterFlow token="tok" />);
+    await waitFor(() => expect(screen.getByTestId("countdown-value").textContent).toMatch(/^1:04:3[23]$/));
+  });
+
+  it("al llegar a 0: 'Abriendo la votación…' y la boleta aparece sola cuando el servidor dice open", async () => {
+    await registeredHere();
+    let phase: Phase = "registration";
+    const serverNow = Date.now();
+    const startsAt = new Date(serverNow + 1_200).toISOString();
+    mockFetch(() => ({ status: 200, body: invite(phase, registered, { serverNow: new Date().toISOString(), votingStartsAt: startsAt }) }));
+    render(<VoterFlow token="tok" />);
+    expect(await screen.findByText("¡Listo! Ya estás inscrito.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("voting-countdown").dataset.state).toBe("opening"), { timeout: 4_000 });
+    expect(screen.getByTestId("waiting-status").textContent).toContain("Abriendo la votación…");
+    phase = "open";
+    // Consulta inmediata al llegar a 0 + sondeo cada 2 s en la ventana final.
+    expect(await screen.findByRole("radio", { name: "Sí" }, { timeout: 6_000 })).toBeTruthy();
+  }, 15_000);
 });

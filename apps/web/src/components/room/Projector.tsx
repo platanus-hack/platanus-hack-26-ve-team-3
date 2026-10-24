@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RoomStatus } from "@quorum/contracts";
 import { StatusPill } from "@/components/StatusPill";
-import { request } from "@/lib/client/api";
+import { describeError, request } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
+import { countdownText, formatStartTime, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { formatInt, formatPercent, shortHash } from "@/lib/client/format";
 import { saveOrgToken, loadOrgToken } from "@/lib/client/orgStore";
 import { phaseLabel } from "@/lib/client/phases";
@@ -25,13 +26,14 @@ const checkLabel: Record<string, string> = {
   proofs_valid: "Pruebas",
   nullifiers_unique: "Un voto por inscrito",
   tally_matches: "Recuento",
-  anchor_matches: "Ancla on-chain",
+  anchor_matches: "Sello público",
   draw_matches: "Sorteo",
 };
 
 /** Pantalla grande para la sala: legible desde la última fila, alto contraste fijo (no sigue el tema), sin scroll. */
 export function Projector({ electionId }: { electionId: string }) {
   const now = useNow(1000);
+  const { offset, record } = useServerClock();
   const [origin, setOrigin] = useState<string>("");
   const [hasToken, setHasToken] = useState(false);
   const [election, setElection] = useState<ElectionV1 | null>(null);
@@ -57,12 +59,14 @@ export function Projector({ electionId }: { electionId: string }) {
 
   const loadElection = useCallback(async () => {
     try {
-      setElection(await apiV1.getElection(electionId));
+      const { value, sample } = await timed(() => apiV1.getElection(electionId));
+      record(sample);
+      setElection(value);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [electionId]);
+  }, [electionId, record]);
 
   useEffect(() => {
     const first = window.setTimeout(() => void loadElection(), 0);
@@ -126,6 +130,7 @@ export function Projector({ electionId }: { electionId: string }) {
       <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 md:flex-nowrap border-b-4 border-[#0B1626] px-[3vw] py-[1.6vh]">
         <h1 className="min-w-0 truncate text-[clamp(1.5rem,3.2vw,3.5rem)] font-extrabold leading-tight">{election?.title ?? "Cargando…"}</h1>
         <div className="flex shrink-0 items-center gap-4">
+          {hasToken && phase === "registration" ? <ProjectorStartControls electionId={electionId} onChanged={() => void loadElection()} /> : null}
           {phase ? <span className="rounded-full border-4 border-[#0B1626] px-5 py-1 text-[clamp(1rem,1.8vw,2rem)] font-bold">{phaseLabel[phase]}</span> : null}
           {stale ? <span className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold text-[#8A1F1F]">sin conexión: último dato</span> : null}
         </div>
@@ -134,7 +139,7 @@ export function Projector({ electionId }: { electionId: string }) {
       <main className="flex min-h-0 flex-1 items-start overflow-auto px-[3vw] py-[3vh] md:items-stretch md:overflow-hidden">
         {error && !election ? <Big title="No se pudo cargar la votación" body={error} /> : null}
         {!election && !error ? <Big title="Cargando…" /> : null}
-        {election && (phase === "registration" || phase === "draft") ? <RegistrationView election={election} room={room} counts={counts} hasToken={hasToken} now={now} /> : null}
+        {election && (phase === "registration" || phase === "draft") ? <RegistrationView election={election} room={room} counts={counts} hasToken={hasToken} now={now} offset={offset} /> : null}
         {election && tally && (phase === "open" || phase === "closed" || phase === "tallying") ? <LiveView tally={tally} phase={phase} electionId={electionId} origin={origin} now={now} /> : null}
         {election && tally && (phase === "auditable" || phase === "failed") ? <ResultView election={election} tally={tally} audit={audit} auditMissing={auditMissing} electionId={electionId} origin={origin} /> : null}
         {election && phase === "drawn" ? <DrawnView election={election} tally={tally} audit={audit} draw={draw} electionId={electionId} origin={origin} /> : null}
@@ -156,8 +161,11 @@ function Big({ title, body }: { title: string; body?: string }) {
   );
 }
 
-function RegistrationView({ election, room, counts, hasToken, now }: { election: ElectionV1; room: RoomStatus | null; counts: VotersListV1["counts"] | null; hasToken: boolean; now: number | null }) {
-  const left = room?.open ? remaining(room.expiresAt, now) : null;
+function RegistrationView({ election, room, counts, hasToken, now, offset }: { election: ElectionV1; room: RoomStatus | null; counts: VotersListV1["counts"] | null; hasToken: boolean; now: number | null; offset: number }) {
+  const startsAt = election.status === "registration" ? (election.votingStartsAt ?? null) : null;
+  const startLeft = useCountdown(startsAt, offset, 500);
+  // Si la entrada cierra justo cuando empieza la votación (lo normal), se muestra solo la cuenta del inicio.
+  const left = room?.open && !(startsAt && room.expiresAt === startsAt) ? remaining(room.expiresAt, now) : null;
   const joinUrl = room?.joinUrl ?? null;
   const ready = counts?.withIdentity ?? counts?.registered ?? null;
   return (
@@ -176,7 +184,7 @@ function RegistrationView({ election, room, counts, hasToken, now }: { election:
           </div>
         )}
       </div>
-      <div className="flex min-w-0 flex-col gap-[3vh]">
+      <div className="flex min-w-0 flex-col gap-[2vh]">
         <p className="text-[clamp(1.5rem,3vw,3.5rem)] font-bold leading-tight">Escanea con tu teléfono para votar</p>
         {room?.roomCode ? (
           <p className="text-[clamp(1.2rem,2.2vw,2.6rem)] font-semibold">
@@ -187,20 +195,85 @@ function RegistrationView({ election, room, counts, hasToken, now }: { election:
           </p>
         ) : null}
         <div aria-live="polite">
-          <p className="text-[clamp(3rem,9vw,11rem)] font-extrabold leading-none tabular-nums" data-testid="projector-seats">
+          <p className={`${startsAt ? "text-[clamp(2.6rem,7vw,8.5rem)]" : "text-[clamp(3rem,9vw,11rem)]"} font-extrabold leading-none tabular-nums`} data-testid="projector-seats">
             {room ? formatInt(room.seatsTaken) : "—"}
             <span className="text-[0.45em] font-bold"> de {room?.maxSeats !== null && room?.maxSeats !== undefined ? formatInt(room.maxSeats) : "—"} inscritos</span>
           </p>
           {ready !== null ? <p className="mt-2 text-[clamp(1.1rem,2vw,2.4rem)] font-semibold">{formatInt(ready)} ya vincularon su teléfono</p> : null}
         </div>
+        {startsAt && startLeft !== null ? (
+          <p className="text-[clamp(1.6rem,3.6vw,4.4rem)] font-extrabold leading-tight tabular-nums" data-testid="projector-start-countdown">
+            {startLeft > 0 ? (
+              <>
+                La votación empieza en {countdownText(startLeft)}
+                <span className="text-[0.45em] font-bold"> · a las {formatStartTime(startsAt)}</span>
+              </>
+            ) : (
+              "Abriendo la votación…"
+            )}
+          </p>
+        ) : election.status === "registration" ? (
+          <p className="text-[clamp(1.2rem,2.2vw,2.6rem)] font-bold" data-testid="projector-start-countdown">
+            La votación empieza cuando el organizador la abra.
+          </p>
+        ) : null}
         {left ? (
-          <p className="text-[clamp(1.4rem,3vw,3.6rem)] font-bold tabular-nums" data-testid="projector-countdown">
+          <p className="text-[clamp(1.2rem,2.4vw,2.8rem)] font-bold tabular-nums" data-testid="projector-countdown">
             La entrada cierra en {left}
           </p>
         ) : null}
         <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#2C3A4E]">Entras con un nombre o apodo. El descriptor facial (demo) se borra al abrir la votación.</p>
         {election.status === "draft" ? <p className="text-[clamp(1rem,1.5vw,1.8rem)] font-bold">La inscripción todavía no abre.</p> : null}
       </div>
+    </div>
+  );
+}
+
+/** "Abrir ahora" y "+5 min" en el proyector (solo con el token del organizador en esta pestaña). */
+function ProjectorStartControls({ electionId, onChanged }: { electionId: string; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function run(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await fn();
+      setConfirm(false);
+      onChanged();
+    } catch (e) {
+      setErr(describeError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const btn = "min-h-11 rounded-lg border-[3px] border-[#0B1626] px-4 text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold disabled:opacity-50";
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="projector-start-controls">
+      {confirm ? (
+        <>
+          <button type="button" className={`${btn} bg-[#0B1626] text-white`} disabled={busy} onClick={() => run(() => apiV1.open(electionId))}>
+            Sí, abrir la votación ahora
+          </button>
+          <button type="button" className={btn} disabled={busy} onClick={() => setConfirm(false)}>
+            Cancelar
+          </button>
+        </>
+      ) : (
+        <>
+          <button type="button" className={`${btn} bg-[#0B1626] text-white`} disabled={busy} onClick={() => setConfirm(true)}>
+            Abrir ahora
+          </button>
+          <button type="button" className={btn} disabled={busy} onClick={() => run(() => apiV1.schedule(electionId, { addSeconds: 300 }))}>
+            +5 min
+          </button>
+        </>
+      )}
+      {err ? (
+        <p role="alert" className="w-full text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold text-[#8A1F1F]">
+          {err}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -310,7 +383,7 @@ function VerifierBlock({ election, audit, auditMissing }: { election: ElectionV1
       </ul>
       {tx ? (
         <p className="text-[clamp(0.9rem,1.3vw,1.5rem)]">
-          Ancla en Base: {txUrl ? <a href={txUrl} target="_blank" rel="noreferrer" className="q-mono font-bold underline">{shortHash(tx, 12, 8)}</a> : <span className="q-mono font-bold">{shortHash(tx, 12, 8)}</span>}
+          Sello público del resultado: {txUrl ? <a href={txUrl} target="_blank" rel="noreferrer" className="q-mono font-bold underline">{shortHash(tx, 12, 8)}</a> : <span className="q-mono font-bold">{shortHash(tx, 12, 8)}</span>}
         </p>
       ) : anchorText ? (
         <p className="text-[clamp(0.85rem,1.2vw,1.4rem)] text-[#2C3A4E]">Ancla: {anchorText}</p>

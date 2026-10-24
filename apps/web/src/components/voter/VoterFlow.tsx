@@ -10,16 +10,17 @@ import { ObserverPanel } from "@/components/room/ObserverPanel";
 import { ErrorState, LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { describeError } from "@/lib/client/api";
+import { voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
+import { countdownText, formatStartTime, spokenCountdown, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { formatDate } from "@/lib/client/format";
 import { clearPendingFace, isRegistered, loadPendingFace, loadReceipt, peekIdentity, savePendingFace, type StoredReceipt, type VaultInfo } from "@/lib/client/identityVault";
 import { linkThisPhone, type LinkProgress, type LinkResult } from "@/lib/client/linkPhone";
 import { prefetchHeavyAssets, roomJoinForToken } from "@/lib/client/room";
 import { BallotScreen } from "./BallotScreen";
 import { Consent } from "./Consent";
-import { LinkModeBadge, VoteReceiptCard, type ReceiptView } from "./VoteReceiptCard";
-import { StepIndicator, TechDetails, TechRow, VoterShell } from "./VoterUi";
+import { VoteReceiptCard, type ReceiptView } from "./VoteReceiptCard";
+import { StepIndicator, VoterShell } from "./VoterUi";
 
 type ReceiptV1 = z.infer<typeof Receipt>;
 
@@ -37,6 +38,11 @@ const FaceCapture = dynamic(() => import("./FaceCapture"), {
 const HumanPreloader = dynamic(() => import("./HumanPreloader"), { ssr: false });
 
 const POLL_MS = 5000;
+/** En los últimos 10 s de la cuenta regresiva (y al llegar a 0) se consulta más seguido para que la boleta aparezca ya. */
+const POLL_FAST_MS = 2000;
+const FAST_WINDOW_MS = 10_000;
+/** Si pasado este tiempo desde la hora programada la votación no abrió (p. ej. nadie terminó la inscripción), se dice. */
+const LATE_MS = 60_000;
 
 export type View = "intro" | "face" | "linking" | "waiting" | "ballot" | "receipt" | "voted" | "closed" | "not-linked" | "other-device" | "observer" | "draft";
 type Local = { identity: VaultInfo | null; registered: boolean; receipt: StoredReceipt | null; pendingFace: `0x${string}` | null };
@@ -104,8 +110,8 @@ export function VoterFlow({ token }: { token: string }) {
   const [attempt, setAttempt] = useState(0);
   const [view, setView] = useState<View | null>(null);
   const [faceHash, setFaceHash] = useState<`0x${string}` | null>(null);
-  const [linked, setLinked] = useState<LinkResult | null>(null);
   const [receipt, setReceipt] = useState<ReceiptV1 | null>(null);
+  const { offset, record } = useServerClock();
   const viewRef = useRef<View | null>(null);
   useEffect(() => {
     viewRef.current = view;
@@ -113,10 +119,10 @@ export function VoterFlow({ token }: { token: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    apiV1
-      .getInvite(token)
-      .then((data) => {
+    timed(() => apiV1.getInvite(token))
+      .then(({ value: data, sample }) => {
         if (cancelled) return;
+        record(sample);
         const l = readLocal(data.election.id, data.voter.id);
         const auto = autoView(data, l, Boolean(roomJoinForToken(token)?.consentAt));
         setInvite(data);
@@ -132,22 +138,37 @@ export function VoterFlow({ token }: { token: string }) {
         }
       })
       .catch((e: unknown) => {
-        if (!cancelled && viewRef.current === null) setLoadError(describeError(e));
+        if (!cancelled && viewRef.current === null) setLoadError(voterMessage(e));
       });
     return () => {
       cancelled = true;
     };
-  }, [token, attempt]);
+  }, [token, attempt, record]);
 
-  // Esperando (inscrito, borrador, o leyendo la invitación): consultar la fase cada 5 s mientras la pestaña esté visible.
+  // Cuenta regresiva hasta el inicio programado (hora del servidor, corregida por el desfase del reloj del teléfono).
+  const startsAt = invite?.election.status === "registration" ? (invite.election.votingStartsAt ?? null) : null;
+  const left = useCountdown(view === "waiting" ? startsAt : null, offset);
+  const fast = left !== null && left <= FAST_WINDOW_MS && left > -LATE_MS;
+
+  // Esperando (inscrito, borrador, o leyendo la invitación): consultar la fase cada 5 s (2 s al final de la cuenta)
+  // mientras la pestaña esté visible.
   const polling = view !== null && FOLLOWS_PHASE.has(view);
+  const pollMs = fast ? POLL_FAST_MS : POLL_MS;
   useEffect(() => {
     if (!polling) return;
     const t = window.setInterval(() => {
       if (document.visibilityState === "visible") setAttempt((a) => a + 1);
-    }, POLL_MS);
+    }, pollMs);
     return () => clearInterval(t);
-  }, [polling]);
+  }, [polling, pollMs]);
+
+  // Al llegar a 0: una consulta inmediata (con medio segundo de margen) para que la boleta aparezca sin esperar el turno.
+  const reachedZero = left !== null && left <= 0;
+  useEffect(() => {
+    if (!reachedZero) return;
+    const t = window.setTimeout(() => setAttempt((a) => a + 1), 500);
+    return () => clearTimeout(t);
+  }, [reachedZero]);
 
   // Mantener la pantalla encendida mientras espera la apertura (si el navegador lo permite).
   useEffect(() => {
@@ -245,7 +266,6 @@ export function VoterFlow({ token }: { token: string }) {
           linkedAddress={invite.voter.walletAddress}
           onDone={(r) => {
             clearPendingFace(voterId);
-            setLinked(r);
             refreshLocal();
             setInvite((i) => (i ? { ...i, voter: { ...i.voter, walletAddress: r.address } } : i));
             setView(invite.election.status === "open" ? "ballot" : "waiting");
@@ -259,26 +279,8 @@ export function VoterFlow({ token }: { token: string }) {
         <VoterShell className="items-center text-center">
           <CheckCircle2 className="size-20 text-success" aria-hidden="true" strokeWidth={1.75} />
           <h1 className="text-display font-bold tracking-tight">¡Listo! Ya estás inscrito.</h1>
-          <p className="text-heading">Deja esta página abierta: la votación aparecerá aquí cuando empiece.</p>
-          <p role="status" aria-live="polite" className="flex items-center gap-2 text-base text-muted-foreground" data-testid="waiting-status">
-            <Clock className="size-5" aria-hidden="true" /> Esperando que empiece la votación…
-          </p>
-          <TechDetails className="w-full text-left">
-            <div>
-              <p className="text-muted-foreground">Vinculación del teléfono</p>
-              <LinkModeBadge mode={linked?.mode ?? local.identity?.walletMode ?? null} />
-            </div>
-            <TechRow label="Dirección (wallet)">{linked?.address ?? local.identity?.address ?? "—"}</TechRow>
-            <TechRow label="Commitment Semaphore (público)" testId="commitment">
-              {linked?.commitment ?? local.identity?.commitment ?? "—"}
-            </TechRow>
-            {linked ? <TechRow label="Inscritos hasta ahora">{linked.registeredCount}</TechRow> : null}
-            <p className="text-muted-foreground">
-              Este teléfono firmó EIP-712 FaceBinding (rostro ↔ wallet) y creó una credencial Semaphore. Su clave privada queda cifrada en este navegador con una clave del dispositivo (no extraíble) y nunca se envía. Al servidor sólo fue el commitment. Nada se envió on-chain.
-            </p>
-            {linked?.fellBack ? <p className="text-warning-strong">ZeroDev no respondió: se usó la wallet demo (eoa-demo).</p> : null}
-            {linked && !linked.persisted ? <p className="text-warning-strong">Este navegador no guardó la clave de la wallet (¿modo privado?).</p> : null}
-          </TechDetails>
+          <WaitingCountdown startsAt={startsAt} left={left} />
+          <p className="text-heading">Deja esta página abierta: la boleta aparecerá aquí sola cuando empiece la votación.</p>
         </VoterShell>
       );
 
@@ -307,13 +309,13 @@ export function VoterFlow({ token }: { token: string }) {
     case "receipt":
     case "voted": {
       const r: ReceiptView | null = receipt
-        ? { inclusionId: receipt.inclusionId, nullifier: receipt.nullifier ?? receipt.inclusionId, index: receipt.index, hash: receipt.hash, state: receipt.state === "incluido" ? "incluido" : "recibido" }
+        ? { inclusionId: receipt.inclusionId, nullifier: receipt.nullifier ?? receipt.inclusionId, state: receipt.state === "incluido" ? "incluido" : "recibido", at: receipt.includedAt ?? receipt.receivedAt }
         : local.receipt
-          ? { inclusionId: local.receipt.inclusionId, nullifier: local.receipt.nullifier, index: local.receipt.index, hash: local.receipt.hash, state: local.receipt.state ?? "recibido" }
+          ? { inclusionId: local.receipt.inclusionId, nullifier: local.receipt.nullifier, state: local.receipt.state ?? "recibido", at: local.receipt.savedAt }
           : null;
       return (
         <VoterShell>
-          <VoteReceiptCard electionId={electionId} receipt={r} walletMode={local.identity?.walletMode ?? null} votedAt={invite.voter.votedAt ? formatDate(invite.voter.votedAt) : null} />
+          <VoteReceiptCard electionId={electionId} receipt={r} votedAt={invite.voter.votedAt ? formatDate(invite.voter.votedAt) : null} />
         </VoterShell>
       );
     }
@@ -355,6 +357,39 @@ export function VoterFlow({ token }: { token: string }) {
   }
 }
 
+/**
+ * Debajo de "¡Listo!": "La votación empieza en 04:32" (en vivo), "Abriendo la votación…" al llegar a 0, o
+ * "Esperando que el organizador abra la votación…" si no hay hora programada (o si pasó un minuto y no abrió).
+ * El número no se anuncia cada segundo: el lector de pantalla oye los minutos que faltan.
+ */
+function WaitingCountdown({ startsAt, left }: { startsAt: string | null; left: number | null }) {
+  const state = !startsAt || left === null ? "manual" : left > 0 ? "counting" : left > -LATE_MS ? "opening" : "manual";
+  return (
+    <div className="flex w-full flex-col items-center gap-1 rounded-lg border border-border bg-card px-4 py-5" data-testid="voting-countdown" data-state={state}>
+      {state === "counting" && left !== null ? (
+        <>
+          <p className="text-heading font-semibold">La votación empieza en</p>
+          <p className="text-[clamp(3.5rem,18vw,5.5rem)] font-extrabold leading-none tabular-nums" role="timer" aria-hidden="true" data-testid="countdown-value">
+            {countdownText(left)}
+          </p>
+          <p className="text-base text-muted-foreground">a las {formatStartTime(startsAt!)}</p>
+          <p className="sr-only" role="status" aria-live="polite">
+            La votación empieza en {spokenCountdown(left)}
+          </p>
+        </>
+      ) : state === "opening" ? (
+        <p role="status" aria-live="polite" className="flex items-center gap-2 text-title font-bold" data-testid="waiting-status">
+          <span className="q-spinner" aria-hidden="true" /> Abriendo la votación…
+        </p>
+      ) : (
+        <p role="status" aria-live="polite" className="flex items-center gap-2 text-heading text-muted-foreground" data-testid="waiting-status">
+          <Clock className="size-5" aria-hidden="true" /> Esperando que el organizador abra la votación…
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Watch({ title, body, electionId }: { title: string; body: string; electionId: string }) {
   return (
     <VoterShell>
@@ -389,7 +424,7 @@ function Linking({ electionId, voterId, inviteToken, faceBindingHash, linkedAddr
     started.current = run;
     linkThisPhone({ electionId, voterId, inviteToken, faceBindingHash, linkedAddress, onProgress: setProgress })
       .then(onDone)
-      .catch((e: unknown) => setError(describeError(e)));
+      .catch((e: unknown) => setError(voterMessage(e)));
   }, [run, electionId, voterId, inviteToken, faceBindingHash, linkedAddress, onDone]);
 
   const pct = Math.round(((progress.step - (error ? 1 : 0.5)) / progress.of) * 100);

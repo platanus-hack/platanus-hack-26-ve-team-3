@@ -11,6 +11,7 @@ import {
   CreateElectionResult,
   DrawResponse,
   Election,
+  ElectionResponse,
   FaceEnrollResult,
   IdentityResult,
   InviteResponse,
@@ -18,8 +19,10 @@ import {
   MarkVotedResult,
   Receipt,
   RollResponse,
+  ScheduleResult,
   VotersListResponse,
   CreateElectionInput,
+  type ScheduleInput,
   type SemaphoreProofInput,
 } from "@quorum/contracts";
 import { z } from "zod";
@@ -38,7 +41,8 @@ const org = (electionId: string, init: RequestInit = {}): RequestInit => ({ ...i
 
 export const apiV1 = {
   getInvite: (token: string) => request(`/api/invite/${e(token)}`, undefined, InviteResponse),
-  getElection: (id: string) => request(`/api/elections/${e(id)}`, undefined, Election),
+  /** Incluye `serverNow` (hora del servidor) para corregir el reloj del teléfono en las cuentas regresivas. */
+  getElection: (id: string) => request(`/api/elections/${e(id)}`, undefined, ElectionResponse),
   getTally: (id: string) => request(`/api/elections/${e(id)}/tally`, undefined, Aggregates),
   /** Con token del organizador trae `voters`; sin token sólo `counts` (nunca lista nominal pública). */
   listVoters: (id: string) => request(`/api/elections/${e(id)}/voters`, org(id), VotersListResponse),
@@ -77,6 +81,8 @@ export const apiV1 = {
   open: (id: string) => request(`/api/elections/${e(id)}/open`, org(id, post()), Election),
   close: (id: string) => request(`/api/elections/${e(id)}/close`, org(id, post()), Election),
   draw: (id: string) => request(`/api/elections/${e(id)}/draw`, org(id, post()), Election),
+  /** Inicio programado (solo en inscripción): `{ inSeconds }`, `{ addSeconds }` o `{ votingStartsAt: ISO | null }`. */
+  schedule: (id: string, body: ScheduleInput) => request(`/api/elections/${e(id)}/schedule`, org(id, post(body)), ScheduleResult),
 };
 
 /**

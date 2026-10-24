@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, DoorClosed, DoorOpen, MonitorUp } from "lucide-react";
+import { CalendarClock, Copy, DoorClosed, DoorOpen, MonitorUp, Play } from "lucide-react";
 import type { RoomStatus } from "@quorum/contracts";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
 import { describeError } from "@/lib/client/api";
+import { apiV1 } from "@/lib/client/apiV1";
+import { countdownText, formatStartTime, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { copyText } from "@/lib/client/download";
 import { formatInt } from "@/lib/client/format";
 import { loadOrgToken } from "@/lib/client/orgStore";
@@ -33,25 +35,29 @@ export function openProjector(electionId: string) {
  * Tarjeta "Sala abierta" del panel (fase `registration`): tope y minutos, Abrir / Ampliar / Cerrar, código y enlace,
  * botón "Proyectar". Datos de `GET/POST/DELETE /api/elections/:id/room` con Bearer.
  */
-export function RoomCard({ electionId, hasToken }: { electionId: string; hasToken: boolean }) {
+export function RoomCard({ electionId, hasToken, onPhaseChange }: { electionId: string; hasToken: boolean; onPhaseChange?: () => void }) {
   const now = useNow(1000);
+  const { offset, record } = useServerClock();
   const [status, setStatus] = useState<RoomStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [seats, setSeats] = useState("60");
   const [minutes, setMinutes] = useState("15");
-  const [busy, setBusy] = useState<"open" | "close" | null>(null);
+  const [busy, setBusy] = useState<"open" | "close" | "schedule" | "start" | null>(null);
+  const [confirmStart, setConfirmStart] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await roomApi.status(electionId));
+      const { value, sample } = await timed(() => roomApi.status(electionId));
+      record(sample);
+      setStatus(value);
       setLoadError(null);
     } catch (e) {
       setLoadError(describeError(e));
     }
-  }, [electionId]);
+  }, [electionId, record]);
 
   useEffect(() => {
     const first = window.setTimeout(() => void refresh(), 0);
@@ -95,6 +101,37 @@ export function RoomCard({ electionId, hasToken }: { electionId: string; hasToke
     }
   }
 
+  /** "Empezar en 5 min" / "+5 min" / "Sin hora": mueve el inicio programado (reloj del servidor). */
+  async function reschedule(body: Parameters<typeof apiV1.schedule>[1]) {
+    setBusy("schedule");
+    setActionError(null);
+    try {
+      const { sample } = await timed(() => apiV1.schedule(electionId, body));
+      record(sample);
+      await refresh();
+    } catch (e) {
+      setActionError(describeError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** "Abrir ahora": la misma transición de siempre (`POST /open`), sin esperar la hora. */
+  async function startNow() {
+    setBusy("start");
+    setActionError(null);
+    try {
+      await apiV1.open(electionId);
+      setConfirmStart(false);
+      onPhaseChange?.();
+    } catch (e) {
+      setActionError(describeError(e));
+      void refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function copy(text: string) {
     if (await copyText(text)) {
       setCopied(true);
@@ -104,6 +141,8 @@ export function RoomCard({ electionId, hasToken }: { electionId: string; hasToke
 
   const isOpen = status?.open ?? false;
   const left = isOpen ? remaining(status?.expiresAt, now) : null;
+  const startsAt = status?.votingStartsAt ?? null;
+  const startLeft = useCountdown(startsAt, offset, 500);
 
   return (
     <Card data-testid="room-card">
@@ -145,6 +184,67 @@ export function RoomCard({ electionId, hasToken }: { electionId: string; hasToke
               </div>
             ) : null}
           </dl>
+        ) : null}
+
+        {status ? (
+          <section className="flex flex-col gap-3 rounded-md border border-border p-3" aria-labelledby="start-title" data-testid="start-schedule">
+            <div className="flex items-start gap-3">
+              <CalendarClock className="mt-1 size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0">
+                <h3 id="start-title" className="text-body font-semibold">
+                  Inicio de la votación
+                </h3>
+                {startsAt && startLeft !== null && startLeft > 0 ? (
+                  <>
+                    <p className="text-title font-bold tabular-nums" data-testid="start-countdown">
+                      La votación empieza en {countdownText(startLeft)}
+                    </p>
+                    <p className="text-small text-muted-foreground">
+                      A las {formatStartTime(startsAt)}, sin que toques nada: se congela el padrón, se cierra la sala y los teléfonos inscritos muestran la boleta.
+                    </p>
+                  </>
+                ) : startsAt && startLeft !== null ? (
+                  <p className="text-small font-semibold" data-testid="start-countdown">
+                    Llegó la hora programada ({formatStartTime(startsAt)}). Si nadie terminó la inscripción, la votación no puede abrir: el padrón estaría vacío.
+                  </p>
+                ) : (
+                  <p className="text-small text-muted-foreground" data-testid="start-countdown">
+                    Sin hora programada: la votación empieza cuando toques «Abrir ahora».
+                  </p>
+                )}
+              </div>
+            </div>
+            {hasToken ? (
+              <div className="flex flex-wrap gap-2">
+                {confirmStart ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-md border border-danger/50 p-2">
+                    <span className="text-small">Se congela el padrón y se cierra la sala. ¿Abrir la votación ahora?</span>
+                    <Button size="sm" variant="danger" onClick={startNow} loading={busy === "start"} data-testid="start-now-confirm">
+                      Sí, abrir ahora
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmStart(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" onClick={() => setConfirmStart(true)} disabled={busy !== null} data-testid="start-now">
+                    <Play aria-hidden="true" /> Abrir ahora
+                  </Button>
+                )}
+                <Button size="sm" variant="secondary" onClick={() => reschedule({ inSeconds: 300 })} disabled={busy !== null} data-testid="start-in-5">
+                  <CalendarClock aria-hidden="true" /> Empezar en 5 min
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => reschedule({ addSeconds: 300 })} disabled={busy !== null} data-testid="start-plus-5">
+                  +5 min
+                </Button>
+                {startsAt ? (
+                  <Button size="sm" variant="ghost" onClick={() => reschedule({ votingStartsAt: null })} disabled={busy !== null}>
+                    Quitar la hora
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
         ) : null}
 
         {status?.joinUrl ? (
@@ -196,7 +296,7 @@ export function RoomCard({ electionId, hasToken }: { electionId: string; hasToke
             )
           ) : null}
         </div>
-        {isOpen ? <p className="text-small text-muted-foreground">&quot;Ampliar&quot; conserva el mismo código y QR: cambia el tope y reinicia los minutos desde ahora.</p> : null}
+        {isOpen ? <p className="text-small text-muted-foreground">&quot;Ampliar&quot; conserva el mismo código y QR: cambia el tope y reinicia los minutos desde ahora. Si la hora de inicio estaba en el cierre de la sala (lo normal), se mueve con él.</p> : null}
         {actionError ? (
           <Alert tone="danger" title="La acción sobre la sala falló">
             {actionError}
