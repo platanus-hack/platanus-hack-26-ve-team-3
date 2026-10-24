@@ -192,7 +192,7 @@ function RegistrationView({ election, room, counts, hasToken, now, offset }: { e
           </div>
         )}
       </div>
-      <div className="flex min-w-0 flex-col gap-[2vh]">
+      <div className="flex min-w-0 flex-col gap-[1.4vh]">
         <p className="text-[clamp(1.5rem,3vw,3.5rem)] font-bold leading-tight" data-testid="projector-instruction">
           {election.eligibility?.method === "event-badge" ? "Escanea este código y luego tu credencial" : "Escanea con tu teléfono para votar"}
         </p>
@@ -262,7 +262,7 @@ function ContinuousView({ election, room, tally, hasToken }: { election: Electio
           </div>
         )}
       </div>
-      <div className="flex min-w-0 flex-col gap-[2vh]">
+      <div className="flex min-w-0 flex-col gap-[1.4vh]">
         <p className="text-[clamp(1.5rem,3vw,3.5rem)] font-bold leading-tight" data-testid="projector-instruction">
           {election.eligibility?.method === "event-badge" ? "Escanea este código y luego tu credencial: te inscribes y votas al momento" : "Escanea con tu teléfono: te inscribes y votas al momento"}
         </p>
