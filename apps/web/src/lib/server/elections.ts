@@ -1,36 +1,61 @@
 /**
- * Servicio de elecciones: crear, publicar (manifiesto + layout), censo, cierre, tally y paquete
- * de auditoría. Sin PII en nada que salga hacia afuera.
+ * Servicio de elecciones (Contrato v1): crear, publicar (manifiesto + layout → `registration`), censo,
+ * resumen de inscritos y agregados. El motor (padrón, ledger, cierre, sorteo) vive en `engine.ts`.
+ * Sin PII en nada que salga hacia afuera.
  */
-import { Aggregates, Election, Receipt, Voter, type CreateElectionInput } from "@quorum/contracts";
+import { Aggregates, Election, Voter, VoterSummary, type CreateElectionInput } from "@quorum/contracts";
+import { manifestHash, MERKLE_TREE_DEPTH, type DrawRule, type ElectionManifest } from "@quorum/protocol-adapter";
 import { z } from "zod";
-
-type ReceiptT = z.infer<typeof Receipt>;
-import { canonicalJson, randomId, randomToken, sha256Hex } from "./crypto";
+import { randomId, randomToken } from "./crypto";
 import { env, MIN_VOTES_FOR_BREAKDOWN } from "./env";
 import { HttpError } from "./errors";
 import { generateLayout, layoutHints } from "./layout";
-import { getStore, type Ballot } from "./store";
+import { getStore, type EngineState } from "./store";
 
-export const APP_VERSION = "0.1.0";
-/** Motor: pendiente ADR-001. Mientras tanto, `integrity-demo` (boleta en claro sin vínculo al votante). */
-export const ENGINE = { protocol: "integrity-demo" as const, version: "stub-pending-ADR-001" };
+export const APP_VERSION = "0.2.0";
+/** Motor del ADR-001 (Plan A). */
+export const ENGINE = { protocol: "semaphore-ledger" as const, version: "protocol-adapter 0.1.0 / semaphore 4.14.5" };
+/** Etiqueta honesta del manifiesto: la demo corre en testnet con datos ficticios. */
+export const MANIFEST_LABEL = "simulación";
 
 export async function requireElection(id: string): Promise<Election> {
   const store = await getStore();
   const e = await store.getElection(id);
   if (!e) throw new HttpError("not_found", "Elección no encontrada");
-  return e;
+  // Rellena defaults v1 en datos guardados con v0.
+  return Election.parse(e);
 }
 
-export async function createElection(input: CreateElectionInput): Promise<Election> {
+export async function requireEngine(id: string): Promise<EngineState> {
+  const s = await (await getStore()).getEngine(id);
+  if (!s) throw new HttpError("closed", "La elección aún no está publicada", 409);
+  return s;
+}
+
+function validateDrawConfig(input: CreateElectionInput) {
+  const candidates = input.candidates ?? [];
+  if (new Set(candidates.map((c) => c.id)).size !== candidates.length) throw new HttpError("invalid_input", "Ids de candidatos repetidos");
+  if (input.winnersCountFromResult) {
+    if (!input.optionValues || input.optionValues.length !== input.options.length) {
+      throw new HttpError("invalid_input", "winnersCountFromResult exige optionValues con un valor por opción");
+    }
+    if (candidates.length === 0) throw new HttpError("invalid_input", "El sorteo necesita al menos un candidato");
+  }
+  if (input.winnersCount !== undefined && candidates.length === 0) throw new HttpError("invalid_input", "winnersCount sin candidatos");
+  if (candidates.length > 0 && !input.winnersCountFromResult && input.winnersCount === undefined) {
+    throw new HttpError("invalid_input", "Con candidatos hay que fijar winnersCount o winnersCountFromResult");
+  }
+}
+
+export async function createElection(input: CreateElectionInput, opts: { id?: string } = {}): Promise<Election> {
   if (Date.parse(input.endsAt) <= Date.parse(input.startsAt)) {
     throw new HttpError("invalid_input", "endsAt debe ser posterior a startsAt");
   }
   const ids = new Set(input.options.map((o) => o.id));
   if (ids.size !== input.options.length) throw new HttpError("invalid_input", "Ids de opciones repetidos");
+  validateDrawConfig(input);
   const election = Election.parse({
-    id: randomId("el"),
+    id: opts.id ?? randomId("el"),
     title: input.title,
     description: input.description ?? "",
     kind: input.kind,
@@ -43,45 +68,65 @@ export async function createElection(input: CreateElectionInput): Promise<Electi
     eligibilityIssuerId: "demo-issuer",
     organizerId: "demo-organizer",
     layout: null,
+    candidates: input.candidates ?? [],
+    winnersCountFromResult: input.winnersCountFromResult ?? false,
+    winnersCount: input.winnersCount ?? null,
+    optionValues: input.optionValues ?? null,
+    registryAddress: env.registryAddress ?? null,
   });
   const store = await getStore();
   await store.putElection(election);
   return election;
 }
 
-/** Manifiesto = JSON canónico (claves ordenadas) de `{title, kind, options, startsAt, endsAt}`. */
-export function manifestOf(e: Pick<Election, "title" | "kind" | "options" | "startsAt" | "endsAt">) {
-  return { title: e.title, kind: e.kind, options: e.options, startsAt: e.startsAt, endsAt: e.endsAt };
+export function drawRuleOf(e: Election): DrawRule | undefined {
+  if (!e.candidates || e.candidates.length === 0) return undefined;
+  const candidates = e.candidates.map((c) => ({ id: c.id, label: c.label, ...(c.amount !== undefined ? { amount: c.amount } : {}) }));
+  if (e.winnersCountFromResult && e.optionValues) return { candidates, winnersCount: { kind: "from-result", optionValues: [...e.optionValues] }, tieBreak: "lowest" };
+  if (e.winnersCount) return { candidates, winnersCount: { kind: "fixed", n: e.winnersCount } };
+  return undefined;
 }
 
-export function manifestHashOf(e: Pick<Election, "title" | "kind" | "options" | "startsAt" | "endsAt">): string {
-  return sha256Hex(canonicalJson(manifestOf(e)));
+/** Manifiesto canónico del adaptador (`ElectionManifest`). Su SHA-256 es `manifestHash`; lo recomputa el verificador. */
+export function manifestOf(e: Election): ElectionManifest {
+  const drawRule = drawRuleOf(e);
+  return {
+    electionId: e.id,
+    title: e.title,
+    kind: e.kind,
+    options: e.options.map((o) => ({ id: o.id, label: o.label })),
+    startsAt: e.startsAt,
+    endsAt: e.endsAt,
+    protocol: "semaphore-ledger",
+    merkleTreeDepth: MERKLE_TREE_DEPTH,
+    label: MANIFEST_LABEL,
+    ...(drawRule ? { drawRule } : {}),
+  };
 }
 
+/** `draft → registration`: fija manifiesto y layout; abre la inscripción (rostro + wallet + identidad). */
 export async function publishElection(id: string): Promise<Election> {
   const store = await getStore();
   const e = await requireElection(id);
   if (e.status !== "draft") throw new HttpError("closed", `La elección ya está en estado ${e.status}`, 409);
+  const manifest = manifestOf(e);
   const { layout } = await generateLayout(layoutHints(e));
-  const published: Election = { ...e, status: "open", manifestHash: manifestHashOf(e), layout };
+  const published: Election = { ...e, status: "registration", manifestHash: manifestHash(manifest), layout };
+  await store.putEngine({
+    electionId: id,
+    manifest,
+    roll: [],
+    commitments: [],
+    ledger: null,
+    receipts: {},
+    tally: null,
+    packageJson: null,
+    packageDigest: null,
+    auditResult: null,
+    anchorStatus: null,
+  });
   await store.putElection(published);
   return published;
-}
-
-/** Cierre: `closed` → `tallying` → `auditable`. El tally real lo hará el motor (ADR-001); aquí es el stub. */
-export async function closeElection(id: string): Promise<Election> {
-  const store = await getStore();
-  const e = await requireElection(id);
-  if (e.status !== "open") throw new HttpError("closed", `La elección no está abierta (estado ${e.status})`, 409);
-  await store.putElection({ ...e, status: "closed" });
-  await store.putElection({ ...e, status: "tallying" });
-  const now = new Date().toISOString();
-  for (const b of await store.listBallots(id)) {
-    if (!b.includedAt) await store.putBallot({ ...b, includedAt: now });
-  }
-  const final: Election = { ...e, status: "auditable" };
-  await store.putElection(final);
-  return final;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +139,11 @@ export const AddVotersInput = z.object({
     .max(500),
 });
 
+/** Fases en las que se admiten nuevos votantes/invitaciones: antes de congelar el padrón. */
+export function acceptsVoters(status: Election["status"]): boolean {
+  return status === "draft" || status === "registration";
+}
+
 export function inviteUrlFor(token: string): string {
   return `${env.appUrl}/v/${token}`;
 }
@@ -101,7 +151,7 @@ export function inviteUrlFor(token: string): string {
 export async function addVoters(electionId: string, input: z.infer<typeof AddVotersInput>) {
   const store = await getStore();
   const e = await requireElection(electionId);
-  if (e.status !== "draft" && e.status !== "open") throw new HttpError("closed", "La elección ya cerró", 409);
+  if (!acceptsVoters(e.status)) throw new HttpError("closed", "El padrón ya está congelado", 409);
   const created: Voter[] = [];
   for (const v of input.voters) {
     const voter: Voter = {
@@ -115,6 +165,9 @@ export async function addVoters(electionId: string, input: z.infer<typeof AddVot
       livenessPassedAt: null,
       credentialIssuedAt: null,
       votedAt: null,
+      faceBindingHash: null,
+      walletKind: null,
+      registeredAt: null,
     };
     await store.putVoter(voter);
     created.push(voter);
@@ -138,29 +191,53 @@ export async function requireVoter(id: string): Promise<Voter> {
   return v;
 }
 
-// ---------------------------------------------------------------------------
-// Recibos y agregados
-// ---------------------------------------------------------------------------
-export function receiptOf(b: Ballot): ReceiptT {
-  return Receipt.parse({
-    electionId: b.electionId,
-    inclusionId: b.inclusionId,
-    receivedAt: b.receivedAt,
-    includedAt: b.includedAt,
-    state: b.includedAt ? "incluido" : "recibido",
-  });
+export function voterState(v: Voter): z.infer<typeof VoterSummary>["state"] {
+  if (v.votedAt) return "voted";
+  if (v.registeredAt) return "registered";
+  return "invited";
 }
 
+/** Agregados públicos del censo: cuántos invitados, inscritos (rostro + wallet), con identidad y que dicen haber votado. */
+export async function voterCounts(electionId: string) {
+  await requireElection(electionId);
+  const voters = await (await getStore()).listVoters(electionId);
+  return {
+    total: voters.length,
+    invited: voters.filter((v) => voterState(v) === "invited").length,
+    registered: voters.filter((v) => Boolean(v.registeredAt)).length,
+    withIdentity: voters.filter((v) => Boolean(v.credentialIssuedAt)).length,
+    voted: voters.filter((v) => Boolean(v.votedAt)).length,
+  };
+}
+
+/** GET /voters del organizador: sin teléfono ni commitment; nunca la opción. */
+export async function listVoterSummaries(electionId: string) {
+  const counts = await voterCounts(electionId);
+  const voters = await (await getStore()).listVoters(electionId);
+  return {
+    voters: voters.map((v) =>
+      VoterSummary.parse({ id: v.id, displayName: v.displayName, state: voterState(v), walletAddress: v.walletAddress, hasIdentity: Boolean(v.credentialIssuedAt) }),
+    ),
+    counts,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Agregados (solo totales; con < 5 votos no se desglosa)
+// ---------------------------------------------------------------------------
 export async function computeAggregates(e: Election): Promise<Aggregates> {
-  const store = await getStore();
-  const [ballots, voters] = await Promise.all([store.listBallots(e.id), store.listVoters(e.id)]);
-  const total = ballots.length;
-  const eligible = voters.length;
-  const counts = new Map<string, number>();
-  for (const b of ballots) if (b.choice !== undefined) counts.set(b.choice, (counts.get(b.choice) ?? 0) + 1);
+  const engine = await (await getStore()).getEngine(e.id);
+  const entries = engine?.ledger?.entries ?? [];
+  const total = entries.length;
+  const eligible = engine ? (engine.commitments.length || engine.roll.length) : 0;
+  const counts = new Array<number>(e.options.length).fill(0);
+  for (const en of entries) {
+    const m = Number(en.proof.message);
+    if (Number.isInteger(m) && m >= 0 && m < counts.length) counts[m] += 1;
+  }
   const breakdown = total >= MIN_VOTES_FOR_BREAKDOWN;
-  const options = e.options.map((o) => ({ id: o.id, label: o.label, count: breakdown ? (counts.get(o.id) ?? 0) : null }));
-  const max = breakdown ? Math.max(0, ...e.options.map((o) => counts.get(o.id) ?? 0)) : 0;
+  const options = e.options.map((o, i) => ({ id: o.id, label: o.label, count: breakdown ? counts[i] : null }));
+  const max = breakdown ? Math.max(0, ...counts) : 0;
   return Aggregates.parse({
     electionId: e.id,
     turnout: eligible > 0 ? Math.min(1, total / eligible) : 0,
@@ -171,39 +248,4 @@ export async function computeAggregates(e: Election): Promise<Aggregates> {
     status: e.status,
     options,
   });
-}
-
-/**
- * Paquete de auditoría (sin PII): manifiesto, commitments/boletas, resultado, versiones y checksums.
- * En `integrity-demo` la boleta incluye la opción en claro, sin ningún vínculo con el elector.
- */
-export async function buildArtifacts(e: Election) {
-  const store = await getStore();
-  const ballots = (await store.listBallots(e.id))
-    .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.inclusionId.localeCompare(b.inclusionId))
-    .map((b) => ({ inclusionId: b.inclusionId, commitment: b.commitment, choice: b.choice ?? null, includedAt: b.includedAt }));
-  const counts: Record<string, number> = Object.fromEntries(e.options.map((o) => [o.id, 0]));
-  for (const b of ballots) if (b.choice && b.choice in counts) counts[b.choice] += 1;
-  const manifest = manifestOf(e);
-  const ballotsJson = canonicalJson(ballots);
-  const resultJson = canonicalJson(counts);
-  const pkg = {
-    format: "quorum-audit-package",
-    formatVersion: "0.1",
-    label: "simulación", // motor stub; no afirma garantías criptográficas (regla dura 5)
-    electionId: e.id,
-    status: e.status,
-    protocol: e.protocol,
-    engine: ENGINE,
-    manifest,
-    manifestHash: e.manifestHash ?? manifestHashOf(e),
-    manifestCanonicalization: "json-sorted-keys/sha256-hex",
-    eligibleCount: (await store.listVoters(e.id)).length,
-    ballots,
-    result: { totalVotes: ballots.length, counts },
-    versions: { app: APP_VERSION, engine: ENGINE.version },
-    checksums: { ballots: sha256Hex(ballotsJson), result: sha256Hex(resultJson) },
-    generatedAt: new Date().toISOString(),
-  };
-  return pkg;
 }

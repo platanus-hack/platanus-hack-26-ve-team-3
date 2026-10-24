@@ -7,11 +7,13 @@
  * para producción (la clave es adivinable) y solo existe para que la demo corra sin configuración.
  * En producción `FACE_KEY` es obligatoria (se lanza error si NODE_ENV=production y falta).
  */
-import { FaceEnrollInput, FaceVerifyInput, FaceVerifyResult } from "@quorum/contracts";
+import { FaceEnrollInput, FaceEnrollResult, FaceVerifyInput, FaceVerifyResult } from "@quorum/contracts";
+import { keccak256, stringToBytes } from "viem";
 import { z } from "zod";
-import { keyFromSecret, open, randomBytes32Hex, seal } from "./crypto";
+import { canonicalJson, keyFromSecret, open, randomBytes32Hex, seal, sha256Hex, type SealedBlob } from "./crypto";
 import { env, VOTE_NONCE_TTL_MS } from "./env";
 import { HttpError } from "./errors";
+import { withLock } from "./lock";
 import { requireVoter } from "./elections";
 import { getStore, type VoteNonce } from "./store";
 
@@ -52,30 +54,57 @@ export async function issueVoteNonce(voterId: string, electionId: string): Promi
   return entry.nonce;
 }
 
-export async function enrollFace(input: z.infer<typeof FaceEnrollInput>): Promise<{ ok: true; voteNonce: string }> {
+/**
+ * `faceBindingHash = keccak256(utf8(electionId | voterId | sha256(canonicalJson(descriptorCifrado))))`.
+ * Liga el rostro inscrito (su plantilla cifrada, nunca el descriptor en claro) a un votante de una elección.
+ * La wallet lo firma (EIP-712 `FaceBinding`) para quedar enlazada a ese rostro.
+ */
+export function faceBindingHashOf(electionId: string, voterId: string, sealed: SealedBlob): `0x${string}` {
+  return keccak256(stringToBytes(`${electionId}|${voterId}|${sha256Hex(canonicalJson(sealed))}`));
+}
+
+/**
+ * Inscripción facial (solo en `registration`) con **dedupe 1:N**: compara el descriptor contra todas las
+ * plantillas de la misma elección; si alguna supera `FACE_DEDUPE_THRESHOLD` → 409 `duplicate_identity`
+ * y NO se guarda nada. Modo demo: descriptor de un modelo local, no es una garantía biométrica fuerte.
+ */
+export async function enrollFace(input: z.infer<typeof FaceEnrollInput>): Promise<z.infer<typeof FaceEnrollResult>> {
   const store = await getStore();
   const voter = await requireVoter(input.voterId);
   if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
   const election = await store.getElection(voter.electionId);
-  if (!election || (election.status !== "open" && election.status !== "draft")) throw new HttpError("closed", "La elección no acepta enrolamientos");
-  if (await store.getFaceTemplate(voter.id)) throw new HttpError("forbidden", "Ya existe una prueba de vida para este votante");
-
-  const now = new Date().toISOString();
-  await store.putFaceTemplate({
-    voterId: voter.id,
-    electionId: voter.electionId,
-    dims: input.descriptor.length,
-    sealed: seal(faceKey(), JSON.stringify(input.descriptor)),
-    createdAt: now,
+  if (!election || election.status !== "registration") throw new HttpError("closed", "La elección no está en fase de inscripción");
+  // Serializado por elección: el dedupe 1:N no puede tener carreras.
+  return withLock(`enroll:${voter.electionId}`, async () => {
+    if (await store.getFaceTemplate(voter.id)) throw new HttpError("forbidden", "Ya existe una prueba de vida para este votante");
+    const key = faceKey();
+    const threshold = env.faceDedupeThreshold;
+    for (const tpl of await store.listFaceTemplates(voter.electionId)) {
+      let other: number[];
+      try {
+        other = JSON.parse(open(key, tpl.sealed)) as number[];
+      } catch {
+        throw new HttpError("unavailable", "No se pudo abrir una plantilla (¿cambió FACE_KEY?)");
+      }
+      // Nunca se revela con quién coincide ni la similitud exacta.
+      if (cosineSimilarity(other, input.descriptor) >= threshold) {
+        throw new HttpError("duplicate_identity", "Este rostro ya está inscrito en esta votación");
+      }
+    }
+    const now = new Date().toISOString();
+    const sealed = seal(key, JSON.stringify(input.descriptor));
+    const faceBindingHash = faceBindingHashOf(voter.electionId, voter.id, sealed);
+    await store.putFaceTemplate({ voterId: voter.id, electionId: voter.electionId, dims: input.descriptor.length, sealed, createdAt: now });
+    await store.putVoter({ ...voter, livenessPassedAt: now, faceBindingHash });
+    const voteNonce = await issueVoteNonce(voter.id, voter.electionId);
+    return FaceEnrollResult.parse({ ok: true, faceBindingHash, voteNonce });
   });
-  await store.putVoter({ ...voter, livenessPassedAt: now });
-  const voteNonce = await issueVoteNonce(voter.id, voter.electionId);
-  return { ok: true, voteNonce };
 }
 
 export async function verifyFace(input: z.infer<typeof FaceVerifyInput>): Promise<z.infer<typeof FaceVerifyResult>> {
   const store = await getStore();
   const voter = await requireVoter(input.voterId);
+  if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
   const template = await store.getFaceTemplate(voter.id);
   if (!template) throw new HttpError("not_found", "No hay prueba de vida enrolada para este votante");
   const threshold = env.faceThreshold;
@@ -92,5 +121,6 @@ export async function verifyFace(input: z.infer<typeof FaceVerifyInput>): Promis
     await store.putVoter({ ...voter, livenessPassedAt: new Date().toISOString() });
     voteNonce = await issueVoteNonce(voter.id, voter.electionId);
   }
-  return FaceVerifyResult.parse({ ok, similarity: Number(similarity.toFixed(4)), threshold, voteNonce, mode: "demo-liveness" });
+  // A3: solo ok/no-ok; nunca la similitud ni el umbral (no sirve de oráculo para ajustar un descriptor).
+  return FaceVerifyResult.parse({ ok, voteNonce, mode: "demo-liveness" });
 }

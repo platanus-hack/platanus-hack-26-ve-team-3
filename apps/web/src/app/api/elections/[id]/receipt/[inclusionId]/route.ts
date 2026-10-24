@@ -1,11 +1,7 @@
-import { receiptOf, requireElection } from "@/lib/server/elections";
-import { HttpError, json, route } from "@/lib/server/errors";
-import { getStore } from "@/lib/server/store";
+import { getReceipt } from "@/lib/server/engine";
+import { json, route } from "@/lib/server/errors";
 
-/** GET /api/elections/:id/receipt/:inclusionId → Receipt (nunca revela la opción) */
+/** GET /api/elections/:id/receipt/:inclusionId → Receipt (busca el nullifier en el ledger; nunca revela la opción) */
 export const GET = route<{ id: string; inclusionId: string }>(async (_req, { id, inclusionId }) => {
-  await requireElection(id);
-  const ballot = await (await getStore()).getBallot(id, inclusionId);
-  if (!ballot) throw new HttpError("not_found", "Recibo no encontrado");
-  return json(receiptOf(ballot));
+  return json(await getReceipt(id, inclusionId));
 });

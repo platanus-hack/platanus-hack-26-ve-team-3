@@ -101,7 +101,7 @@ export async function handleOptIn(msg: Incoming): Promise<"sent" | "ignored" | "
   if (!phone) return "ignored";
   const store = await getStore();
   const election = await store.getElection(electionId);
-  if (!election || (election.status !== "open" && election.status !== "draft")) return "ignored";
+  if (!election || (election.status !== "registration" && election.status !== "draft")) return "ignored";
 
   let voter = await store.getVoterByPhone(electionId, phone);
   if (!voter) {
