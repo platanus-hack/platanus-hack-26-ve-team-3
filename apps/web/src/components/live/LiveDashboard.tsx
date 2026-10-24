@@ -2,13 +2,17 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LiveLayout as LiveLayoutSchema, type Aggregates, type LiveLayout } from "@quorum/contracts";
+import { LiveLayout as LiveLayoutSchema, type LiveLayout } from "@quorum/contracts";
 import { Badge } from "@/components/ui/badge";
 import { ErrorState, LoadingState } from "@/components/states";
 import { BarTile, CountdownTile, DonutTile, StatTile, TextTile } from "@/components/LiveResultTile";
 import { api, describeError } from "@/lib/client/api";
+import { apiV1 } from "@/lib/client/apiV1";
+import { PhaseTimeline } from "@/components/election/PhaseTimeline";
+import { phaseLabel } from "@/lib/client/phases";
+import type { AggregatesV1 as Aggregates, ElectionPhase } from "@/lib/client/v1";
 import { defaultLayout } from "@/lib/client/fixtures";
-import { formatDateTime, statusLabel } from "@/lib/client/format";
+import { formatDateTime } from "@/lib/client/format";
 
 const POLL_MS = 3000;
 
@@ -18,14 +22,16 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
   const [layout, setLayout] = useState<LiveLayout | null>(null);
   const [layoutSource, setLayoutSource] = useState<"servidor" | "por defecto">("por defecto");
   const [data, setData] = useState<Aggregates | null>(null);
+  const [phase, setPhase] = useState<ElectionPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const timer = useRef<number | null>(null);
 
   const fetchTally = useCallback(async () => {
     try {
-      const t = await api.getTally(electionId);
+      const t = await apiV1.getTally(electionId);
       setData(t);
+      setPhase(t.status);
       setError(null);
       setUpdatedAt(Date.now());
     } catch (e) {
@@ -38,9 +44,10 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
     (async () => {
       let kind = "multiple";
       try {
-        const e = await api.getElection(electionId);
+        const e = await apiV1.getElection(electionId);
         if (cancelled) return;
         setTitle(e.title);
+        setPhase(e.status);
         kind = e.kind;
         const fromElection = LiveLayoutSchema.safeParse(e.layout);
         if (fromElection.success) {
@@ -83,14 +90,21 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="neutral">Resultados en vivo</Badge>
-          {data ? <Badge tone={data.status === "open" ? "success" : "neutral"}>{statusLabel[data.status] ?? data.status}</Badge> : null}
+          {phase ? <Badge tone={phase === "open" ? "success" : "neutral"}>{phaseLabel[phase]}</Badge> : null}
           <Badge tone="neutral">Layout: {layoutSource}</Badge>
         </div>
         <h1 className="text-title font-bold tracking-tight md:text-display">{title || "Elección"}</h1>
         <p className="text-small text-muted-foreground" aria-live="polite">
-          Sólo agregados; se actualiza cada 3 s. {updatedAt ? `Última actualización: ${formatDateTime(new Date(updatedAt).toISOString())}` : ""}
+          Sólo agregados (participación y, desde 5 votos, conteo por opción); se actualiza cada 3 s. {updatedAt ? `Última actualización: ${formatDateTime(new Date(updatedAt).toISOString())}` : ""}
         </p>
       </header>
+
+      {phase ? <PhaseTimeline phase={phase} /> : null}
+      {phase === "registration" ? (
+        <p role="status" className="rounded-md border border-border bg-neutral-soft p-3 text-small">
+          Inscripción en curso: la votación aún no abre. Los agregados aparecerán cuando se congele el padrón.
+        </p>
+      ) : null}
 
       {error && !data ? <ErrorState message={error} onRetry={fetchTally} /> : null}
       {error && data ? (

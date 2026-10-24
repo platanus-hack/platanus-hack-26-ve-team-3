@@ -4,43 +4,64 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Stepper } from "@/components/Stepper";
-import { ReceiptCard } from "@/components/ReceiptCard";
 import { ErrorState, LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
-import { api, describeError, type InviteResponse } from "@/lib/client/api";
-import { privyAppId } from "@/lib/client/wallet";
-import type { VoteSigner } from "@/lib/client/vote";
-import type { Receipt } from "@/lib/client/types";
-import { InviteStep } from "./InviteStep";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { describeError } from "@/lib/client/api";
+import { apiV1 } from "@/lib/client/apiV1";
+import { loadReceipt, peekIdentity, type StoredReceipt } from "@/lib/client/identityVault";
+import type { InviteV1, ReceiptV1 } from "@/lib/client/v1";
+import { CredentialStep } from "./CredentialStep";
 import { IdentityStep } from "./IdentityStep";
-import { DemoWalletStep } from "./DemoWalletStep";
-import { BallotStep } from "./BallotStep";
-import { VOTER_STEPS, type LivenessOutcome, type VoterStepId } from "./flowTypes";
+import { InviteStep, type InviteMode } from "./InviteStep";
+import { ProofBallotStep } from "./ProofBallotStep";
+import { VoteReceiptCard } from "./VoteReceiptCard";
+import { REGISTRATION_STEPS, VOTING_STEPS, type LivenessOutcome } from "./flowTypes";
+import { EOA_DEMO_LABEL } from "./wallet/eoaDemo";
+import { WalletStep, type WalletStepResult } from "./wallet";
 
-/* Human y Privy tocan window/WebGL: sólo en cliente. */
+/* Human toca window/WebGL: sólo en cliente. */
 const LivenessStep = dynamic(() => import("./LivenessStep"), { ssr: false, loading: () => <LoadingState label="Cargando prueba de vida…" /> });
-const PrivyWalletStep = dynamic(() => import("./PrivyWalletStep"), { ssr: false, loading: () => <LoadingState label="Cargando proveedor de wallets…" /> });
-const PrivyShell = dynamic(() => import("./PrivyShell"), { ssr: false });
 
+type Step = "invite" | "identity" | "liveness" | "wallet" | "credential" | "registered" | "ballot" | "receipt";
+type Local = { identity: ReturnType<typeof peekIdentity>; receipt: StoredReceipt | null };
+
+function deriveMode(invite: InviteV1, local: Local): InviteMode {
+  const phase = invite.election.status;
+  if (local.receipt) return "already-voted";
+  if (phase === "registration") return local.identity && invite.voter.state !== "invited" ? "registered-waiting" : "register";
+  if (phase === "open") return local.identity ? "vote" : "readonly";
+  return "readonly";
+}
+
+/**
+ * Flujo del votante v1 (`/v/[token]`), según la fase:
+ * - registration: invitación → datos → rostro → wallet (firma FaceBinding) → enlace + credencial Semaphore → inscrito.
+ * - open: invitación → wallet (vuelve a firmar FaceBinding: esa firma abre la credencial) → boleta con prueba → comprobante.
+ * - resto: sólo lectura + enlace al centro de transparencia.
+ */
 export function VoterFlow({ token }: { token: string }) {
-  const [invite, setInvite] = useState<InviteResponse | null>(null);
+  const [invite, setInvite] = useState<InviteV1 | null>(null);
+  const [local, setLocal] = useState<Local>({ identity: null, receipt: null });
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [step, setStep] = useState<VoterStepId>("invite");
-  const [displayName, setDisplayName] = useState("");
-  const [liveness, setLiveness] = useState<LivenessOutcome | null>(null);
-  const [signer, setSigner] = useState<VoteSigner | null>(null);
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
-
   const [attempt, setAttempt] = useState(0);
+  const [step, setStep] = useState<Step>("invite");
+  const [displayName, setDisplayName] = useState("");
+  const [face, setFace] = useState<LivenessOutcome | null>(null);
+  const [wallet, setWallet] = useState<WalletStepResult | null>(null);
+  const [registered, setRegistered] = useState<{ commitment: string; registeredCount: number } | null>(null);
+  const [receipt, setReceipt] = useState<ReceiptV1 | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    api
+    apiV1
       .getInvite(token)
       .then((data) => {
         if (cancelled) return;
         setInvite(data);
-        setDisplayName(data.voter.displayName ?? "");
+        setDisplayName((n) => n || (data.voter.displayName ?? ""));
+        setLocal({ identity: peekIdentity(data.election.id), receipt: loadReceipt(data.election.id) });
       })
       .catch((e: unknown) => {
         if (!cancelled) setLoadError(describeError(e));
@@ -50,32 +71,65 @@ export function VoterFlow({ token }: { token: string }) {
     };
   }, [token, attempt]);
 
-  const load = useCallback(() => {
+  const mode = invite ? deriveMode(invite, local) : null;
+
+  // Inscrito esperando apertura: refrescar la fase cada 5 s (pausa si la pestaña no está visible).
+  useEffect(() => {
+    if (mode !== "registered-waiting" && step !== "registered") return;
+    const t = window.setInterval(() => {
+      if (document.visibilityState === "visible") setAttempt((a) => a + 1);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [mode, step]);
+
+  const retry = useCallback(() => {
     setLoadError(null);
     setInvite(null);
     setAttempt((a) => a + 1);
   }, []);
 
-  const stepIndex = VOTER_STEPS.findIndex((s) => s.id === step);
-
-  const content = (() => {
-    if (loadError) {
-      return (
-        <ErrorState title="No se pudo abrir la invitación" message={loadError} onRetry={load}>
+  if (loadError) {
+    return (
+      <Shell steps={null} current={0}>
+        <ErrorState title="No se pudo abrir la invitación" message={loadError} onRetry={retry}>
           <Link href="/" className="inline-flex min-h-tap items-center px-2 text-body font-semibold underline underline-offset-4">
             Ir al inicio
           </Link>
         </ErrorState>
-      );
-    }
-    if (!invite) return <LoadingState label="Abriendo tu invitación…" lines={4} />;
+      </Shell>
+    );
+  }
+  if (!invite || !mode) {
+    return (
+      <Shell steps={null} current={0}>
+        <LoadingState label="Abriendo tu invitación…" lines={4} />
+      </Shell>
+    );
+  }
 
-    const voterId = invite.voter.id;
-    const linked = invite.voter.walletAddress ?? null;
+  const electionId = invite.election.id;
+  const voterId = invite.voter.id;
+  const linked = invite.voter.walletAddress ?? null;
+  const votingFlow = invite.election.status === "open" || step === "ballot" || step === "receipt";
+  const steps = votingFlow ? VOTING_STEPS : REGISTRATION_STEPS;
+  const current = Math.max(0, steps.findIndex((s) => s.id === step));
+  // faceBindingHash para el WalletStep: el recién emitido (inscripción) o el guardado con la credencial (votación).
+  const bindingHash = votingFlow ? (local.identity?.faceBindingHash ?? null) : (face?.faceBindingHash ?? null);
 
+  const storedReceipt = local.receipt;
+
+  const content = (() => {
     switch (step) {
       case "invite":
-        return <InviteStep invite={invite} onNext={() => setStep("identity")} />;
+        if (mode === "already-voted" && storedReceipt) {
+          return (
+            <div className="flex flex-col gap-4">
+              <InviteStep invite={invite} mode={mode} onNext={() => undefined} />
+              <VoteReceiptCard electionId={electionId} electionTitle={invite.election.title} receipt={{ ...storedReceipt, state: "recibido" }} />
+            </div>
+          );
+        }
+        return <InviteStep invite={invite} mode={mode} onNext={() => setStep(mode === "vote" ? "wallet" : "identity")} />;
       case "identity":
         return (
           <IdentityStep
@@ -94,40 +148,78 @@ export function VoterFlow({ token }: { token: string }) {
             inviteToken={token}
             onBack={() => setStep("identity")}
             onNext={(o) => {
-              setLiveness(o);
+              setFace(o);
               setStep("wallet");
             }}
           />
         );
-      case "wallet": {
-        const next = (s: VoteSigner) => {
-          setSigner(s);
-          setStep("ballot");
-        };
-        if (privyAppId) {
-          return (
-            <PrivyShell appId={privyAppId}>
-              <PrivyWalletStep voterId={voterId} inviteToken={token} linkedAddress={linked} onBack={() => setStep("liveness")} onNext={next} />
-            </PrivyShell>
-          );
-        }
-        return <DemoWalletStep voterId={voterId} inviteToken={token} linkedAddress={linked} onBack={() => setStep("liveness")} onNext={next} />;
-      }
-      case "ballot":
-        if (!signer || !liveness) {
-          return (
-            <Alert tone="warning" title="Faltan pasos">
-              Completa la prueba de vida y la wallet antes de votar.
-            </Alert>
-          );
-        }
+      case "wallet":
+        if (!bindingHash) return <MissingStep onBack={() => setStep(votingFlow ? "invite" : "liveness")} />;
         return (
-          <BallotStep
-            electionId={invite.election.id}
+          <WalletStep
+            electionId={electionId}
+            voterId={votingFlow ? (local.identity?.voterId ?? voterId) : voterId}
+            faceBindingHash={bindingHash}
+            onBack={() => setStep(votingFlow ? "invite" : "liveness")}
+            onDone={(r) => {
+              setWallet(r);
+              setStep(votingFlow ? "ballot" : "credential");
+            }}
+          />
+        );
+      case "credential":
+        if (!wallet || !face) return <MissingStep onBack={() => setStep("wallet")} />;
+        return (
+          <CredentialStep
+            electionId={electionId}
+            voterId={voterId}
+            inviteToken={token}
+            faceBindingHash={face.faceBindingHash}
+            wallet={wallet}
+            linkedAddress={linked}
+            onBack={() => setStep("wallet")}
+            onDone={(r) => {
+              setRegistered(r);
+              setLocal((l) => ({ ...l, identity: peekIdentity(electionId) }));
+              setStep("registered");
+            }}
+          />
+        );
+      case "registered":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle as="h1" className="text-title">
+                Inscripción completa
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <Alert tone="success" title="Tu credencial está registrada">
+                {registered ? `Inscritos hasta ahora: ${registered.registeredCount}. ` : ""}Cuando el organizador congele el padrón y abra la votación, esta página te llevará a la boleta.
+              </Alert>
+              {invite.election.status === "open" ? (
+                <Button full onClick={() => setStep("wallet")}>
+                  La votación está abierta: ir a votar
+                </Button>
+              ) : (
+                <p role="status" aria-live="polite" className="text-small text-muted-foreground">
+                  Esperando la apertura… (se comprueba cada 5 s)
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "ballot":
+        if (!wallet) return <MissingStep onBack={() => setStep("wallet")} />;
+        return (
+          <ProofBallotStep
+            electionId={electionId}
             electionTitle={invite.election.title}
             options={invite.election.options}
-            signer={signer}
-            liveness={liveness}
+            unlock={{ address: wallet.address, signature: wallet.signature }}
+            walletLabel={wallet.mode === "kernel" ? "Smart wallet demo" : EOA_DEMO_LABEL}
+            voterId={voterId}
+            inviteToken={token}
             onBack={() => setStep("wallet")}
             onDone={(r) => {
               setReceipt(r);
@@ -138,23 +230,39 @@ export function VoterFlow({ token }: { token: string }) {
       case "receipt":
         return receipt ? (
           <div className="flex flex-col gap-4">
-            <ReceiptCard receipt={receipt} electionTitle={invite.election.title} />
-            <Link href={`/e/${encodeURIComponent(invite.election.id)}/live`} className="inline-flex min-h-tap items-center justify-center rounded-md border border-border bg-card px-4 font-semibold hover:bg-muted">
+            <VoteReceiptCard electionId={electionId} electionTitle={invite.election.title} receipt={receipt} />
+            <Link href={`/e/${encodeURIComponent(electionId)}/live`} className="inline-flex min-h-tap items-center justify-center rounded-md border border-border bg-card px-4 font-semibold hover:bg-muted">
               Ver resultados en vivo (sólo agregados)
             </Link>
           </div>
         ) : (
-          <Alert tone="warning" title="Sin comprobante">
-            No hay un comprobante en esta sesión.
-          </Alert>
+          <MissingStep onBack={() => setStep("ballot")} />
         );
     }
   })();
 
   return (
-    <div className="q-container q-narrow flex flex-col gap-6 py-6 md:py-10">
-      <Stepper steps={VOTER_STEPS} current={Math.max(0, stepIndex)} />
+    <Shell steps={mode === "readonly" || mode === "already-voted" ? null : steps} current={current}>
       {content}
+    </Shell>
+  );
+}
+
+function Shell({ steps, current, children }: { steps: { id: string; label: string }[] | null; current: number; children: React.ReactNode }) {
+  return (
+    <div className="q-container q-narrow flex flex-col gap-6 py-6 md:py-10">
+      {steps ? <Stepper steps={steps} current={current} /> : null}
+      {children}
     </div>
+  );
+}
+
+function MissingStep({ onBack }: { onBack: () => void }) {
+  return (
+    <Alert tone="warning" title="Falta un paso anterior">
+      <button type="button" onClick={onBack} className="min-h-tap font-semibold underline underline-offset-4">
+        Volver
+      </button>
+    </Alert>
   );
 }

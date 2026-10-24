@@ -2,50 +2,84 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { Aggregates } from "@quorum/contracts";
+import { AuditChecklist } from "@/components/AuditChecklist";
+import { Alert } from "@/components/ui/alert";
 import { Badge, FixtureTag } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/states";
-import { api, artifactsUrl, describeError, type PublicElection } from "@/lib/client/api";
-import { fixtureAggregates, fixtureElection } from "@/lib/client/fixtures";
-import { formatDateTime, formatInt, formatPercent, kindLabel, statusLabel } from "@/lib/client/format";
+import { describeError } from "@/lib/client/api";
+import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
+import { FIXTURE_PACKAGE_ID, FIXTURE_PACKAGE_URL } from "@/lib/client/fixtures";
+import { formatDateTime, formatInt, formatPercent, kindLabel } from "@/lib/client/format";
+import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
+import type { AggregatesV1, ElectionV1, StoredAudit } from "@/lib/client/v1";
+import { MyVoteCheck } from "./MyVoteCheck";
+import { PhaseTimeline } from "./PhaseTimeline";
+import { VerifyNowPanel, type PackageSource, type VerifiedPackage } from "./VerifyNowPanel";
+
+
+type Fixture = { election: ElectionV1; tally: AggregatesV1 };
+
+async function loadFixture(): Promise<Fixture> {
+  const res = await fetch(FIXTURE_PACKAGE_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const pkg = (await res.json()) as { electionId: string; manifest: { title: string; kind: ElectionV1["kind"]; options: { id: string; label: string }[]; startsAt: string; endsAt: string }; manifestHash: string; groupRoot: string; commitments: string[]; tally: { counts: number[]; total: number } };
+  const m = pkg.manifest;
+  return {
+    election: { id: pkg.electionId, title: m.title, description: "Paquete fixture generado por el adaptador con 3 boletas reales (simulación).", kind: m.kind, options: m.options, status: "auditable", protocol: "semaphore-ledger", manifestHash: pkg.manifestHash, startsAt: m.startsAt, endsAt: m.endsAt, groupRoot: pkg.groupRoot, candidates: [] },
+    tally: {
+      electionId: pkg.electionId,
+      turnout: pkg.tally.total / pkg.commitments.length,
+      totalVotes: pkg.tally.total,
+      eligible: pkg.commitments.length,
+      leadingShare: null,
+      closesAt: m.endsAt,
+      status: "auditable",
+      options: m.options.map((o, i) => ({ id: o.id, label: o.label, count: pkg.tally.total < 5 ? null : (pkg.tally.counts[i] ?? 0) })),
+    },
+  };
+}
 
 /**
- * Centro público de transparencia: agregados, manifiesto, quién certificó elegibilidad y límites.
- * Si el id es el de la elección fixture y la API no responde, muestra el fixture etiquetado.
+ * Centro público de transparencia v1: fase, agregados (sin listas nominales), manifiesto, "Verificar ahora" en el
+ * navegador, "Mi voto está" y enlace al sorteo. Si el id es el del paquete fixture y la API no responde, usa el fixture.
  */
 export function TransparencyCenter({ electionId }: { electionId: string }) {
-  const [election, setElection] = useState<PublicElection | null>(null);
-  const [tally, setTally] = useState<Aggregates | null>(null);
+  const [election, setElection] = useState<ElectionV1 | null>(null);
+  const [tally, setTally] = useState<AggregatesV1 | null>(null);
+  const [serverAudit, setServerAudit] = useState<StoredAudit | null>(null);
   const [isFixture, setIsFixture] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
+  const [verified, setVerified] = useState<VerifiedPackage | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const e = await api.getElection(electionId);
+        const e = await apiV1.getElection(electionId);
         if (cancelled) return;
         setElection(e);
-        try {
-          const t = await api.getTally(electionId);
-          if (!cancelled) setTally(t);
-        } catch {
-          if (!cancelled) setTally(null);
-        }
+        const [t, a] = await Promise.allSettled([apiV1.getTally(electionId), hasAuditPackage(e.status) ? apiV1.getAudit(electionId) : Promise.reject(new Error("sin paquete"))]);
+        if (cancelled) return;
+        setTally(t.status === "fulfilled" ? t.value : null);
+        setServerAudit(a.status === "fulfilled" ? a.value : null);
       } catch (err) {
         if (cancelled) return;
-        if (electionId === fixtureElection.id) {
-          setElection(fixtureElection);
-          setTally(fixtureAggregates);
-          setIsFixture(true);
-        } else {
-          setError(describeError(err));
-        }
+        if (electionId === FIXTURE_PACKAGE_ID) {
+          try {
+            const f = await loadFixture();
+            if (cancelled) return;
+            setElection(f.election);
+            setTally(f.tally);
+            setIsFixture(true);
+          } catch {
+            setError(describeError(err));
+          }
+        } else setError(describeError(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -71,7 +105,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
   if (error || !election) {
     return (
       <div className="q-container py-10">
-        <ErrorState title="No encontramos esta elección" message={error ?? "Sin datos"} onRetry={load}>
+        <ErrorState title="No encontramos esta votación" message={error ?? "Sin datos"} onRetry={load}>
           <Link href="/" className="inline-flex min-h-tap items-center px-2 font-semibold underline underline-offset-4">
             Ir al inicio
           </Link>
@@ -81,37 +115,60 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
   }
 
   const hidden = tally?.options.some((o) => o.count === null) ?? false;
+  const auditable = hasAuditPackage(election.status);
+  const source: PackageSource = isFixture ? { kind: "fixture", url: FIXTURE_PACKAGE_URL, label: "fixture · simulación" } : { kind: "api", electionId };
 
   return (
     <div className="q-container flex flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="neutral">Centro de transparencia</Badge>
-          <Badge tone={election.status === "open" ? "success" : "neutral"}>{statusLabel[election.status] ?? election.status}</Badge>
+          <Badge tone={election.status === "failed" ? "danger" : "neutral"}>{phaseLabel[election.status]}</Badge>
           {isFixture ? <FixtureTag>fixture · API sin respuesta</FixtureTag> : null}
         </div>
         <h1 className="text-title font-bold tracking-tight md:text-display">{election.title}</h1>
         {election.description ? <p className="max-w-prose text-body text-muted-foreground">{election.description}</p> : null}
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "primary" }))}>
+        <PhaseTimeline phase={election.status} />
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "secondary" }))}>
             Resultados en vivo
           </Link>
-          <Link href={`/audit?id=${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "secondary" }))}>
-            Verificar escrutinio
-          </Link>
-          {!isFixture ? (
-            <a href={artifactsUrl(electionId)} className={cn(buttonVariants({ variant: "secondary" }))} download>
-              Descargar paquete de auditoría
-            </a>
+          {election.status === "drawn" || (election.candidates?.length ?? 0) > 0 ? (
+            <Link href={`/e/${encodeURIComponent(electionId)}/draw`} className={cn(buttonVariants({ variant: "secondary" }))}>
+              Sorteo verificable
+            </Link>
           ) : null}
         </div>
       </header>
+
+      {election.status === "failed" ? (
+        serverAudit ? (
+          <AuditChecklist result={serverAudit.auditResult} runtime="servidor" title="El verificador rechazó el paquete publicado" />
+        ) : (
+          <Alert tone="danger" title="Fallo detectado">
+            El verificador rechazó el paquete de esta votación, pero no se pudo leer su resultado (GET /audit). Verifícalo tú abajo.
+          </Alert>
+        )
+      ) : null}
+
+      {auditable ? (
+        <VerifyNowPanel source={source} serverAudit={serverAudit} onVerified={setVerified} />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Verificar ahora</CardTitle>
+            <CardDescription>El paquete de auditoría se publica al cerrar la votación. Fase actual: {phaseLabel[election.status]}.</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      {!isFixture ? <MyVoteCheck electionId={electionId} verified={verified} /> : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Cifras agregadas</CardTitle>
-            <CardDescription>Nunca votos individuales ni listas nominales.</CardDescription>
+            <CardDescription>Publicadas por el organizador. Nunca votos individuales ni listas nominales.</CardDescription>
           </CardHeader>
           <CardContent>
             {tally ? (
@@ -121,7 +178,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
                   <dd className="text-heading font-bold">{formatPercent(tally.turnout)}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Votos incluidos</dt>
+                  <dt className="text-muted-foreground">Boletas en el registro</dt>
                   <dd className="text-heading font-bold">
                     {formatInt(tally.totalVotes)} <span className="text-small font-normal text-muted-foreground">de {formatInt(tally.eligible)}</span>
                   </dd>
@@ -145,21 +202,27 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
                 </div>
               </dl>
             ) : (
-              <p className="text-small text-muted-foreground">Aún no hay agregados publicados para esta elección.</p>
+              <p className="text-small text-muted-foreground">Aún no hay agregados publicados.</p>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Manifiesto</CardTitle>
-            <CardDescription>Hash canónico de título, opciones y fechas. Cualquier cambio lo invalida.</CardDescription>
+            <CardTitle>Manifiesto y padrón</CardTitle>
+            <CardDescription>El hash del manifiesto fija título, opciones y fechas; la raíz del padrón fija quién puede votar.</CardDescription>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-small">
               <div>
                 <dt className="text-muted-foreground">Hash del manifiesto</dt>
-                <dd className="q-mono break-all font-semibold">{election.manifestHash ?? "Aún no publicado (borrador)"}</dd>
+                <dd className="q-mono break-all font-semibold" data-testid="manifest-hash">
+                  {election.manifestHash ?? "Aún no publicado (borrador)"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Raíz del padrón (groupRoot)</dt>
+                <dd className="q-mono break-all font-semibold">{election.groupRoot ?? "Se fija al abrir la votación"}</dd>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -189,45 +252,38 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
                   </ol>
                 </dd>
               </div>
-            </dl>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Elegibilidad</CardTitle>
-            <CardDescription>Quién certificó el padrón y cómo se invitó.</CardDescription>
-          </CardHeader>
-          <CardContent className="text-small">
-            <dl className="flex flex-col gap-2">
               <div>
-                <dt className="text-muted-foreground">Certificó elegibilidad</dt>
-                <dd className="q-mono font-semibold">{election.eligibilityIssuerId ?? "No declarado"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Padrón</dt>
-                <dd>Lista cerrada cargada por el organizador; una invitación de un solo uso por participante. Quórum no verifica identidad civil.</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Prueba de vida</dt>
-                <dd>Modo demo en el navegador, no certificada. Nunca se guardan imágenes.</dd>
+                <dt className="text-muted-foreground">Ancla on-chain</dt>
+                <dd className="q-mono break-all">{election.anchor?.txHash ? `Base Sepolia · ${election.anchor.txHash}` : "Sin ancla publicada"}</dd>
               </div>
             </dl>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Límites conocidos</CardTitle>
-            <CardDescription>Lo que esta demostración no garantiza.</CardDescription>
+            <CardTitle>Qué garantiza y qué no</CardTitle>
+            <CardDescription>Protocolo semaphore-ledger (ADR-001, Plan A).</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ul className="list-disc space-y-1 pl-5 text-small text-muted-foreground">
-              <li>No es un sistema electoral certificado ni apto para procesos públicos.</li>
-              <li>Modo <span className="q-mono">integrity-demo</span>: el verificador comprueba integridad y coherencia; no hay cifrado ni pruebas ZK hasta que se integre un motor (ADR-001).</li>
-              <li>La privacidad depende de que el servidor no guarde identidad junto a opción; no se protege contra metadatos ni coerción.</li>
-              <li>«Verificado» sólo aparece cuando el verificador independiente devuelve <span className="q-mono">valid: true</span>.</li>
-            </ul>
+          <CardContent className="grid grid-cols-1 gap-4 text-small md:grid-cols-2">
+            <div>
+              <p className="mb-1 font-semibold">Se puede comprobar</p>
+              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                <li>Cada boleta trae una prueba de pertenencia al padrón publicado. La prueba no revela quién emitió cada boleta; el servidor ve el contenido de la boleta.</li>
+                <li>Una credencial produce un solo nullifier por votación: no hay doble voto.</li>
+                <li>El registro es una cadena de hashes y el recuento lo reproduce cualquiera.</li>
+                <li>Tu nullifier te permite comprobar que tu boleta sigue en el registro.</li>
+              </ul>
+            </div>
+            <div>
+              <p className="mb-1 font-semibold">No se garantiza</p>
+              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                <li>Secreto del contenido frente al servidor, ni resistencia a coacción.</li>
+                <li>Que el padrón sea correcto: lo decide el organizador. La comprobación de rostro es de demostración y no impide todos los duplicados.</li>
+                <li>Completitud del registro sin ancla on-chain evaluada.</li>
+                <li>No es un sistema electoral certificado. «Verificado» sólo lo muestra el verificador, nunca un dato del servidor.</li>
+              </ul>
+            </div>
           </CardContent>
         </Card>
       </div>

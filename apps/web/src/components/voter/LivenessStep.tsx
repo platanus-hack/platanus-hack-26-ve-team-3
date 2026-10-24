@@ -6,21 +6,29 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { api, describeError } from "@/lib/client/api";
+import { ApiClientError, describeError } from "@/lib/client/api";
+import { apiV1 } from "@/lib/client/apiV1";
 import { actionLabel, actionSatisfied, averageDescriptors, cameraErrorMessage, loadHuman, pickAction, type HumanInstance, type LivenessAction } from "@/lib/client/human";
-import { localFallbackNonce } from "@/lib/client/vote";
 import type { LivenessOutcome } from "./flowTypes";
 
-type Phase = "idle" | "loading-models" | "starting-camera" | "detecting" | "action" | "capturing" | "enrolling" | "done" | "error";
+/** Umbrales mínimos de antispoof (`face.real`) y liveness (`face.live`) de Human (threat model M5). Siguen siendo demo. */
+const REAL_MIN = 0.5;
+const LIVE_MIN = 0.5;
+
+/** Sólo para pruebas automatizadas (Playwright no tiene cámara). Se fija en build; en producción es `false` y el código muere. */
+const E2E_FAKE_FACE = process.env.NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE === "1";
+
+type Phase = "idle" | "loading-models" | "starting-camera" | "detecting" | "spoof" | "action" | "capturing" | "enrolling" | "done" | "error";
 
 const phaseText: Record<Phase, string> = {
   idle: "Listo para empezar.",
   "loading-models": "Cargando modelos en tu navegador (sólo la primera vez)…",
   "starting-camera": "Iniciando la cámara…",
   detecting: "Buscando tu rostro. Mira a la cámara con buena luz.",
+  spoof: "No parece una persona presente (posible foto o pantalla). Mira directo a la cámara.",
   action: "Rostro detectado.",
   capturing: "Capturando descriptores…",
-  enrolling: "Registrando el descriptor (sin imagen)…",
+  enrolling: "Comprobando que no estés inscrito ya (1:N) y registrando el descriptor, sin imagen…",
   done: "Prueba de vida completada.",
   error: "No se pudo completar la prueba de vida.",
 };
@@ -28,6 +36,8 @@ const phaseText: Record<Phase, string> = {
 /**
  * Prueba de vida activa en el navegador con @vladmandic/human.
  * Pipeline: cámara → detectar rostro → pedir acción (parpadeo/giro) → capturar 3 descriptores → promedio → POST /api/face/enroll.
+ * Contrato v1: el servidor compara 1:N contra los inscritos de la misma votación (409 `duplicate_identity`) y devuelve
+ * `faceBindingHash`, que luego firma la wallet. Nunca se envían ni guardan imágenes: sólo el descriptor numérico.
  * Se carga con dynamic(..., { ssr: false }) desde VoterFlow.
  */
 export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: { voterId: string; inviteToken: string; onBack: () => void; onNext: (o: LivenessOutcome) => void }) {
@@ -44,6 +54,8 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
   const [error, setError] = useState<string | null>(null);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [faceOk, setFaceOk] = useState(false);
+  const [presenceOk, setPresenceOk] = useState(false);
+  const [duplicate, setDuplicate] = useState(false);
 
   const stopAll = useCallback(() => {
     stopRef.current = true;
@@ -88,8 +100,15 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
         const result = await humanRef.current.detect(videoRef.current);
         const face = result.face[0];
         const gestures = result.gesture.map((g) => String(g.gesture));
-        if (face && face.score > 0.5) {
+        const present = Boolean(face && (face.real ?? 0) >= REAL_MIN && (face.live ?? 0) >= LIVE_MIN);
+        if (face && face.score > 0.5 && !present) {
+          // Antispoof/liveness de Human por debajo del umbral: no avanzamos ni capturamos (M5).
           setFaceOk(true);
+          setPresenceOk(false);
+          if (!actionSeen) setPhase("spoof");
+        } else if (face && face.score > 0.5) {
+          setFaceOk(true);
+          setPresenceOk(true);
           if (!actionSeen) {
             setPhase("action");
             if (actionSatisfied(chosen, face, gestures)) {
@@ -129,19 +148,23 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
   async function enroll(descriptor: number[]) {
     try {
       setPhase("enrolling");
-      const res = await api.faceEnroll({ voterId, inviteToken, descriptor, consent: true });
+      const res = await apiV1.faceEnroll({ voterId, inviteToken, descriptor, consent: true });
       if (!res.ok) throw new Error("El servidor no aceptó el descriptor.");
       setPhase("done");
-      onNext({ mode: "enrolled", voteNonce: res.voteNonce });
+      onNext({ mode: "enrolled", faceBindingHash: res.faceBindingHash as `0x${string}` });
     } catch (e) {
+      if (e instanceof ApiClientError && e.code === "duplicate_identity") setDuplicate(true);
+      setCameraUnavailable(false);
       setError(describeError(e));
       setPhase("error");
     }
   }
 
-  function skip() {
+  /** Sólo E2E (NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE=1): envía un descriptor sintético al endpoint real/mock. Nunca en producción. */
+  async function e2eFakeFace() {
     stopAll();
-    onNext({ mode: "skipped", voteNonce: localFallbackNonce(), reason: error ?? "Sin cámara o sin permisos" });
+    const descriptor = Array.from({ length: 128 }, (_, i) => Number(Math.sin(i + voterId.length).toFixed(6)));
+    await enroll(descriptor);
   }
 
   const busy = phase !== "idle" && phase !== "error" && phase !== "done";
@@ -155,7 +178,9 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
           </CardTitle>
           <Badge tone="warning">modo demo · no certificada</Badge>
         </div>
-        <CardDescription>Todo ocurre en tu navegador. No guardamos tu imagen; sólo un descriptor numérico promediado de 3 capturas.</CardDescription>
+        <CardDescription>
+          Tu cámara se procesa en tu navegador. Enviamos un vector numérico cifrado (no tu foto) para evitar inscripciones duplicadas; se borra al abrir la votación. Comprobamos que tu rostro no esté ya inscrito en esta votación (modo demo).
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-border bg-muted">
@@ -180,9 +205,10 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
           {phase === "capturing" ? ` ${captured} de 3.` : ""}
         </p>
 
-        <ol className="grid grid-cols-3 gap-2 text-small" aria-label="Pasos de la prueba">
+        <ol className="grid grid-cols-2 gap-2 text-small sm:grid-cols-4" aria-label="Pasos de la prueba">
           {[
             { label: "Rostro", done: faceOk || actionDone || captured > 0 },
+            { label: "Presencia", done: presenceOk || actionDone },
             { label: action === "blink" ? "Parpadeo" : "Giro", done: actionDone },
             { label: "3 capturas", done: captured >= 3 },
           ].map((s) => (
@@ -194,9 +220,9 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
         </ol>
 
         {error ? (
-          <Alert tone="danger" title="No se pudo completar la prueba de vida">
+          <Alert tone="danger" title={duplicate ? "Rostro ya inscrito en esta votación" : "No se pudo completar la prueba de vida"}>
             {error}
-            {cameraUnavailable ? " Puedes reintentar o continuar sin prueba de vida (demo)." : ""}
+            {cameraUnavailable ? " Sin cámara no puedes inscribirte en esta votación: reintenta desde un dispositivo con cámara." : ""}
           </Alert>
         ) : null}
       </CardContent>
@@ -213,9 +239,9 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
             {phase === "enrolling" ? "Registrando…" : "En curso…"}
           </Button>
         )}
-        {phase === "error" ? (
-          <Button variant="ghost" onClick={skip} className="w-full md:w-auto">
-            Continuar sin prueba de vida (demo)
+        {E2E_FAKE_FACE && (phase === "idle" || phase === "error") ? (
+          <Button variant="ghost" onClick={e2eFakeFace} className="w-full md:w-auto" data-testid="e2e-fake-face">
+            Simular rostro (solo pruebas automatizadas)
           </Button>
         ) : null}
       </CardFooter>

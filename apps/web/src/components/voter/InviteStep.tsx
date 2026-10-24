@@ -1,21 +1,33 @@
 "use client";
 
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
-import type { InviteResponse } from "@/lib/client/api";
-import { formatDateTime, kindLabel, statusLabel } from "@/lib/client/format";
+import { PhaseTimeline } from "@/components/election/PhaseTimeline";
+import { cn } from "@/lib/client/cn";
+import { formatDateTime, kindLabel } from "@/lib/client/format";
+import type { InviteV1 } from "@/lib/client/v1";
 
-export function InviteStep({ invite, onNext }: { invite: InviteResponse; onNext: () => void }) {
-  const { election, voter } = invite;
-  const open = election.status === "open";
-  const alreadyVoted = Boolean(voter.votedAt);
+export type InviteMode = "register" | "vote" | "registered-waiting" | "already-voted" | "readonly";
+
+const cta: Record<InviteMode, string | null> = {
+  register: "Inscribirme",
+  vote: "Ir a votar",
+  "registered-waiting": null,
+  "already-voted": null,
+  readonly: null,
+};
+
+export function InviteStep({ invite, mode, onNext }: { invite: InviteV1; mode: InviteMode; onNext: () => void }) {
+  const { election } = invite;
+  const label = cta[mode];
   return (
     <Card>
       <CardHeader>
         <Badge tone="success" className="w-fit">
-          Invitado de demostración — voto privado
+          Invitación de demostración
         </Badge>
         <CardTitle as="h1" className="text-title">
           {election.title}
@@ -25,34 +37,39 @@ export function InviteStep({ invite, onNext }: { invite: InviteResponse; onNext:
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <dl className="grid grid-cols-2 gap-3 text-small">
-          <div>
-            <dt className="text-muted-foreground">Estado</dt>
-            <dd className="font-semibold">{statusLabel[election.status] ?? election.status}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Tu invitación</dt>
-            <dd className="font-semibold">{alreadyVoted ? "Ya usada" : "Disponible"}</dd>
-          </div>
-        </dl>
-        <p className="text-body text-muted-foreground">
-          Esta es una elección de demostración. Nadie verá tu opción: la boleta se firma con una wallet creada para ti y sólo se publica un comprobante de inclusión.
-        </p>
-        {!open ? (
-          <Alert tone="warning" title="La elección no está abierta">
-            Estado actual: {statusLabel[election.status] ?? election.status}. Puedes revisar el centro de transparencia, pero no se aceptan votos.
+        <PhaseTimeline phase={election.status} />
+        {mode === "register" ? (
+          <p className="text-body text-muted-foreground">
+            La inscripción tiene tres partes: comprobamos que tu rostro no esté ya inscrito en esta votación (modo demo), tu wallet firma ese enlace y tu navegador crea una credencial para votar.
+          </p>
+        ) : null}
+        {mode === "vote" ? <p className="text-body text-muted-foreground">El padrón está congelado. Vota desde el mismo navegador donde te inscribiste: allí está tu credencial.</p> : null}
+        {mode === "registered-waiting" ? (
+          <Alert tone="info" title="Ya estás inscrito">
+            Tu credencial está guardada en este navegador. Cuando el organizador abra la votación, vuelve a este enlace para votar.
           </Alert>
         ) : null}
-        {alreadyVoted ? (
-          <Alert tone="info" title="Esta invitación ya votó">
-            Registrado el {formatDateTime(voter.votedAt)}. Cada invitación vale un solo voto.
+        {mode === "already-voted" ? (
+          <Alert tone="info" title="Ya votaste desde este navegador">
+            Una credencial vale una sola boleta. Puedes comprobar que tu boleta está en el registro.
+          </Alert>
+        ) : null}
+        {mode === "readonly" ? (
+          <Alert tone="warning" title="Esta fase no admite inscripción ni voto">
+            {election.status === "open" ? "La inscripción ya cerró y en este navegador no hay una credencial para esta votación." : "Puedes seguir la votación desde el centro de transparencia."}
           </Alert>
         ) : null}
       </CardContent>
-      <CardFooter>
-        <Button full size="lg" onClick={onNext} disabled={!open || alreadyVoted}>
-          Comenzar
-        </Button>
+      <CardFooter className="flex-wrap">
+        {label ? (
+          <Button full size="lg" onClick={onNext}>
+            {label}
+          </Button>
+        ) : (
+          <Link href={`/e/${encodeURIComponent(election.id)}`} className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "w-full")}>
+            Ir al centro de transparencia
+          </Link>
+        )}
       </CardFooter>
     </Card>
   );
