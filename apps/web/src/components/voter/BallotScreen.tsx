@@ -58,7 +58,8 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
         try {
           receipt = await apiV1.vote(electionId, { proof: proved.proof });
         } catch (err) {
-          if (attempt < 2 && err instanceof ApiClientError && err.code === "stale_root") continue;
+          // Teléfonos lentos con mucha gente entrando: la lista cambia mientras se genera la prueba; se rehace sola (docs/LOAD_TEST.md).
+          if (attempt < 5 && err instanceof ApiClientError && err.code === "stale_root") continue;
           throw err;
         }
       }
