@@ -37,7 +37,7 @@ export function SiteFooter() {
             Verificador independiente
           </Link>
           <Link href="/audit/lab" className="inline-flex min-h-tap items-center underline underline-offset-4">
-            Laboratorio de ataques
+            Laboratorio del jurado
           </Link>
         </p>
       </div>
