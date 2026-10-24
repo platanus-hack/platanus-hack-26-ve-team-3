@@ -41,7 +41,7 @@ Se inscriben y votan en el mismo momento: el grupo Semaphore crece mientras se v
 | **Correlación por tiempo** | El servidor del organizador ve cuándo se completa cada inscripción y cuándo llega cada boleta, y el ledger publica el orden de ambas. Si alguien se inscribe y vota segundos después cuando entra poca gente, el servidor puede intuir qué boleta es suya. No hay mezcla ni retardo criptográfico. |
 | **Ventana de 32 raíces** | Una prueba vale contra cualquiera de las últimas 32 raíces del grupo. Si entran más de 32 personas mientras un teléfono genera su prueba, el servidor responde `stale_root` y el teléfono la rehace sola (hasta 2 reintentos). |
 | **El padrón no se congela** | En continuo la sala sigue abierta hasta cerrar. El dedupe facial 1:N funciona durante toda la votación (las plantillas cifradas se borran al cerrar, no al abrir), así que viven más tiempo en el servidor que en el modo con fases. |
-| **Laboratorio de ataques** | Las recetas del laboratorio están escritas para paquetes con fases; con un paquete continuo el laboratorio lo dice y no aplica alteraciones (el verificador sí lo verifica completo). |
+| **Laboratorio de ataques** | Con un paquete continuo el laboratorio ofrece 3 alteraciones (boleta con raíz inventada, mentir el tamaño del grupo, inflar el resultado); las demás recetas están escritas para el formato con fases y se muestran deshabilitadas con motivo (el verificador sí verifica el paquete continuo completo). Con el ancla real del QuorumRegistry (solo `finalHash`), «inflar el resultado» no cambia `anchor_matches`: lo detecta `tally_matches`. |
 
 ## 3. Confianza en el organizador
 
