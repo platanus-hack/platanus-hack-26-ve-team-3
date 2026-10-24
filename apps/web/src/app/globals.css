@@ -287,6 +287,53 @@ body {
   }
 }
 
+@keyframes q-flow-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.q-flow-in {
+  animation: q-flow-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+@keyframes q-flow-ring {
+  0% {
+    clip-path: inset(0 0 100% 0);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.q-flow-ring {
+  animation: q-flow-ring 1.4s ease-in-out 0.3s backwards;
+}
+@keyframes q-flow-link {
+  from {
+    transform: scale(0);
+  }
+}
+.q-flow-link {
+  animation: q-flow-link 0.5s ease-out 0.5s backwards;
+}
+@keyframes q-flow-timer {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+.q-flow-timer {
+  animation: q-flow-timer linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .q-flow-in,
+  .q-flow-ring,
+  .q-flow-link {
+    animation: none;
+  }
+}
+
 .q-grid-bg {
   background-image:
     linear-gradient(to right, color-mix(in srgb, var(--color-foreground) 6%, transparent) 1px, transparent 1px),

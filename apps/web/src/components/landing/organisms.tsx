@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ArrowRight, Calculator, Check, Eye, Fingerprint, Lock, QrCode, ReceiptText, ScanFace, ShieldAlert, UserRound } from "lucide-react";
+import { ArrowRight, Check, Lock } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { CheckList } from "@/components/ui/check-list";
 import { Glass } from "@/components/ui/glass";
 import { cn } from "@/lib/client/cn";
-import { FloatingChip, ResultsPreview, StatItem, StepCard } from "./molecules";
+import { FloatingChip, ResultsPreview, StatItem } from "./molecules";
+export { TrustFlow } from "./flow";
 export { Backdrop } from "@/components/ui/backdrop";
 
 export function Hero() {
@@ -42,101 +43,6 @@ export function Hero() {
           Opción privada
         </FloatingChip>
       </div>
-    </section>
-  );
-}
-
-const today = ["Actas que nadie puede revisar.", "Un resultado que depende de una persona.", "Sospechas que nadie puede probar."];
-const withQuorum = ["Cada voto trae su prueba.", "Cualquiera recalcula el resultado.", "Una alteración falla con causa."];
-
-export function Problem() {
-  return (
-    <section aria-labelledby="problema" className="q-reveal flex flex-col gap-5">
-      <h2 id="problema" className="font-display text-title font-bold tracking-tight md:text-[2.25rem]">
-        Hoy, alguien cuenta y los demás le creen.
-      </h2>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
-        <Glass className="rounded-xl p-6">
-          <p className="flex items-center gap-2 font-semibold text-muted-foreground">
-            <UserRound aria-hidden="true" className="size-5" /> Hoy
-          </p>
-          <CheckList items={today} tone="no" className="mt-4 text-body" />
-        </Glass>
-        <Glass strong className="rounded-xl p-6">
-          <p className="flex items-center gap-2 font-semibold text-primary-ink">
-            <Fingerprint aria-hidden="true" className="size-5" /> Con Quórum
-          </p>
-          <CheckList items={withQuorum} className="mt-4 text-body" />
-        </Glass>
-      </div>
-    </section>
-  );
-}
-
-const steps = [
-  { icon: <QrCode aria-hidden="true" />, title: "Entra", body: "Escanea el QR y mira a la cámara." },
-  { icon: <ScanFace aria-hidden="true" />, title: "Vota", body: "Elige tu opción. Dos toques." },
-  { icon: <ReceiptText aria-hidden="true" />, title: "Comprueba", body: "Tu comprobante prueba que tu voto está, sin revelar cuál fue." },
-];
-
-export function HowItWorks() {
-  return (
-    <section aria-labelledby="como-funciona" className="q-reveal flex flex-col gap-5">
-      <h2 id="como-funciona" className="font-display text-title font-bold tracking-tight md:text-[2.25rem]">
-        Así de simple
-      </h2>
-      <ol className="flex flex-col gap-3 md:grid md:grid-cols-3 md:gap-4">
-        {steps.map((s, i) => (
-          <li key={s.title}>
-            <StepCard n={i + 1} icon={s.icon} title={s.title} body={s.body} className="h-full" />
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-const verifyPoints = [
-  { icon: <Calculator aria-hidden="true" />, text: "Tu teléfono repite el conteo con los datos públicos." },
-  { icon: <Eye aria-hidden="true" />, text: "No necesitas confiar en nuestro servidor." },
-  { icon: <ShieldAlert aria-hidden="true" />, text: "Si alguien cambia un voto, falla y dice dónde." },
-];
-
-export function Recalculate() {
-  return (
-    <section aria-labelledby="recalcula" className="q-reveal flex flex-col gap-5">
-      <h2 id="recalcula" className="font-display text-title font-bold tracking-tight md:text-[2.25rem]">
-        El resultado se comprueba desde cualquier teléfono.
-      </h2>
-      <ul className="flex flex-col gap-3 md:grid md:grid-cols-3 md:gap-4">
-        {verifyPoints.map((p) => (
-          <li key={p.text}>
-            <Glass className="flex h-full items-start gap-3 rounded-xl p-5 text-body">
-              <span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary-soft text-primary-soft-foreground [&_svg]:size-5">{p.icon}</span>
-              <span className="pt-2">{p.text}</span>
-            </Glass>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-const uses = ["Condominios", "Universidades", "Cooperativas", "Sindicatos", "Juntas vecinales", "Clubes", "Asambleas", "Centros de estudiantes"];
-
-export function UseCases() {
-  return (
-    <section aria-labelledby="para-quien" className="q-reveal flex flex-col gap-5">
-      <h2 id="para-quien" className="font-display text-title font-bold tracking-tight md:text-[2.25rem]">
-        Para cualquier decisión colectiva en Latinoamérica.
-      </h2>
-      <ul className="flex flex-wrap gap-2">
-        {uses.map((u) => (
-          <li key={u} className="rounded-full border border-border bg-card px-4 py-2 text-body font-medium">
-            {u}
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }

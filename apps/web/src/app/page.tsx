@@ -1,4 +1,4 @@
-import { Backdrop, FinalCta, Hero, HowItWorks, Problem, Promise, Recalculate, UseCases } from "@/components/landing/organisms";
+import { Backdrop, FinalCta, Hero, Promise, TrustFlow } from "@/components/landing/organisms";
 
 export default function Home() {
   return (
@@ -6,10 +6,7 @@ export default function Home() {
       <Backdrop />
       <div className="q-container flex flex-col gap-16 py-8 md:gap-24 md:py-14">
         <Hero />
-        <Problem />
-        <HowItWorks />
-        <Recalculate />
-        <UseCases />
+        <TrustFlow />
         <Promise />
         <FinalCta />
       </div>
