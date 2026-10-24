@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RoomStatus } from "@quorum/contracts";
 import { StatusPill } from "@/components/StatusPill";
-import { describeError, request } from "@/lib/client/api";
+import { orgMessage, request } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { countdownText, formatStartTime, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { formatInt, formatPercent, shortHash } from "@/lib/client/format";
@@ -242,7 +242,7 @@ function ProjectorStartControls({ electionId, onChanged }: { electionId: string;
       setConfirm(false);
       onChanged();
     } catch (e) {
-      setErr(describeError(e));
+      setErr(orgMessage(e));
     } finally {
       setBusy(false);
     }

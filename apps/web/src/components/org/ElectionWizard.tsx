@@ -10,11 +10,10 @@ import { Stepper } from "@/components/Stepper";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox, Field, Input, Select, Textarea } from "@/components/ui/input";
-import { describeError } from "@/lib/client/api";
+import { Field, Input, Textarea } from "@/components/ui/input";
+import { orgMessage } from "@/lib/client/api";
 import { apiV1, type CreateElectionV1 } from "@/lib/client/apiV1";
 import { appendVoters, rememberElection, saveOrgToken } from "@/lib/client/orgStore";
-import { kindLabel } from "@/lib/client/format";
 import type { Candidate } from "@quorum/contracts";
 import { CandidatesEditor, CandidatesList } from "./CandidatesEditor";
 import { checkLabel, DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, methodLabel, type EligibilityDraft } from "./EligibilityPicker";
@@ -78,18 +77,28 @@ export function ElectionWizard() {
 
   // Paso 2 — D-19: ¿quién puede votar? (credencial del evento por defecto) + invitados opcionales
   const [eligibility, setEligibility] = useState<EligibilityDraft>(DEFAULT_ELIGIBILITY);
-  const [participants, setParticipants] = useState<Participant[]>([{ displayName: "", phoneE164: "" }]);
   const [pasted, setPasted] = useState("");
 
   // Paso 3
-  const [acknowledged, setAcknowledged] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
 
   const cleanOptions = useMemo(() => options.map((o) => o.trim()).filter(Boolean), [options]);
-  const cleanParticipants = useMemo(() => participants.map((p) => ({ displayName: p.displayName.trim(), phoneE164: p.phoneE164.trim() })).filter((p) => p.displayName), [participants]);
+  const cleanParticipants = useMemo<Participant[]>(
+    () =>
+      pasted
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => {
+          const [name, phone] = l.split(/[,;\t]/).map((x) => x?.trim() ?? "");
+          return { displayName: name, phoneE164: phone ?? "" };
+        })
+        .filter((p) => p.displayName),
+    [pasted],
+  );
 
   /** Con "según la opción ganadora", cada opción debe ser un número entero (p. ej. 1..5 proyectos). */
   const optionValues = useMemo(() => {
@@ -147,22 +156,6 @@ export function ElectionWizard() {
     if (!err) setStep((s) => Math.min(2, s + 1));
   }
 
-  function importPasted() {
-    const rows = pasted
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((l) => {
-        const [name, phone] = l.split(/[,;\t]/).map((s) => s?.trim() ?? "");
-        return { displayName: name, phoneE164: phone ?? "" };
-      })
-      .filter((p) => p.displayName);
-    if (rows.length === 0) return setStepError("No se detectaron filas. Usa «Nombre, +58412…» por línea.");
-    setParticipants((prev) => [...prev.filter((p) => p.displayName.trim()), ...rows]);
-    setPasted("");
-    setStepError(null);
-  }
-
   async function publish() {
     setError(null);
     setPublishing(true);
@@ -202,7 +195,7 @@ export function ElectionWizard() {
       await apiV1.publish(election.id);
       router.push(`/org/${encodeURIComponent(election.id)}`);
     } catch (e) {
-      setError(describeError(e));
+      setError(orgMessage(e));
       setPublishing(false);
       setProgress(null);
     }
@@ -260,29 +253,22 @@ export function ElectionWizard() {
             <Field label="Descripción (opcional)" htmlFor="description">
               <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
             </Field>
-            <Field label="Tipo" htmlFor="kind">
-              <Select id="kind" value={kind} onChange={(e) => setKind(e.target.value as CreateElectionV1["kind"])}>
-                {(["yes-no", "multiple", "ranking", "budget"] as const).map((k) => (
-                  <option key={k} value={k}>
-                    {kindLabel[k]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
             <fieldset className="flex flex-col gap-3">
               <legend className="mb-1 text-body font-semibold">Sorteo de proyectos</legend>
-              <p className="text-small text-muted-foreground">Al cerrar se sortean los ganadores. Nadie conoce la semilla antes.</p>
+              <p className="text-small text-muted-foreground">Al cerrar se sortean los ganadores. Nadie puede saber el resultado antes.</p>
               <CandidatesEditor candidates={candidates} onChange={setCandidates} />
               {candidates.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  <label className="flex min-h-tap items-center gap-2 text-body">
-                    <input type="radio" name="winnersRule" checked={winnersRule === "fromResult"} onChange={() => setWinnersRule("fromResult")} className="size-5 accent-[var(--color-primary)]" />
-                    La opción ganadora define cuántos ganan
-                  </label>
-                  <label className="flex min-h-tap items-center gap-2 text-body">
-                    <input type="radio" name="winnersRule" checked={winnersRule === "fixed"} onChange={() => setWinnersRule("fixed")} className="size-5 accent-[var(--color-primary)]" />
-                    Número fijo de ganadores
-                  </label>
+                <div className="flex flex-col gap-3">
+                  <ChoiceChips
+                    name="winnersRule"
+                    legend="¿Cuántos ganan?"
+                    choices={[
+                      { value: "fromResult", label: "Lo decide la votación" },
+                      { value: "fixed", label: "Un número fijo" },
+                    ]}
+                    value={winnersRule}
+                    onChange={setWinnersRule}
+                  />
                   {winnersRule === "fixed" ? (
                     <Field label="Ganadores" htmlFor="winnersCount">
                       <Input id="winnersCount" inputMode="numeric" value={winnersCount} onChange={(e) => setWinnersCount(e.target.value)} className="w-28" />
@@ -314,40 +300,13 @@ export function ElectionWizard() {
           <EligibilityPicker value={eligibility} onChange={setEligibility} />
 
           <Disclosure title={`Invitar por enlace${eligibility.method === "event-badge" ? " (opcional)" : ""}`} defaultOpen={eligibility.method !== "event-badge"} bodyClassName="flex flex-col gap-4" className="bg-card">
-            <p className="text-muted-foreground">Nombre y teléfono opcional. El teléfono nunca se publica.</p>
-            <ul className="flex flex-col gap-2">
-              {participants.map((p, i) => (
-                <li key={i} className="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                  <div>
-                    <label htmlFor={`p-name-${i}`} className="sr-only">
-                      Nombre del participante {i + 1}
-                    </label>
-                    <Input id={`p-name-${i}`} placeholder="Nombre" value={p.displayName} onChange={(e) => setParticipants((prev) => prev.map((x, j) => (j === i ? { ...x, displayName: e.target.value } : x)))} maxLength={80} />
-                  </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <label htmlFor={`p-phone-${i}`} className="sr-only">
-                      Teléfono del participante {i + 1} (opcional)
-                    </label>
-                    <Input id={`p-phone-${i}`} placeholder="+58412… (opcional)" inputMode="tel" value={p.phoneE164} onChange={(e) => setParticipants((prev) => prev.map((x, j) => (j === i ? { ...x, phoneE164: e.target.value } : x)))} />
-                  </div>
-                  <Button variant="ghost" size="sm" aria-label={`Quitar participante ${i + 1}`} onClick={() => setParticipants((prev) => prev.filter((_, j) => j !== i))} disabled={participants.length <= 1} className="row-start-1 col-start-2 size-tap px-0 sm:col-start-3">
-                    <Trash2 aria-hidden="true" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            <Button variant="ghost" size="sm" className="w-fit" onClick={() => setParticipants((p) => [...p, { displayName: "", phoneE164: "" }])}>
-              <Plus aria-hidden="true" /> Agregar persona
-            </Button>
+            <p className="text-muted-foreground">El teléfono es opcional y nunca se publica.</p>
             <Field label="Pegar lista (una por línea: Nombre, +58412…)" htmlFor="pasted">
               <Textarea id="pasted" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder={"Vecina A, +584121111111\nVecino B"} />
             </Field>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Button variant="secondary" size="sm" onClick={importPasted} disabled={!pasted.trim()}>
-                Importar lista
-              </Button>
-              <p className="text-small text-muted-foreground">{cleanParticipants.length} participantes listos.</p>
-            </div>
+            <p className="text-small text-muted-foreground" aria-live="polite">
+              {cleanParticipants.length} participantes listos.
+            </p>
           </Disclosure>
 
           {stepError ? (
@@ -356,7 +315,7 @@ export function ElectionWizard() {
             </Alert>
           ) : null}
           <ActionDock>
-            <Button variant="secondary" size="lg" onClick={() => setStep(0)}>
+            <Button variant="ghost" size="lg" onClick={() => setStep(0)}>
               Atrás
             </Button>
             <Button size="lg" className="flex-1" onClick={next}>
@@ -414,12 +373,7 @@ export function ElectionWizard() {
             ) : null}
           </dl>
 
-          <Checkbox
-            id="ack"
-            checked={acknowledged}
-            onChange={(e) => setAcknowledged(e.target.checked)}
-            label={<span>Entiendo que el padrón lo define esta lista y que el resultado vale cuando lo confirma el verificador.</span>}
-          />
+          <p className="text-small text-muted-foreground">Al publicar se abre la inscripción. Las opciones ya no se pueden cambiar.</p>
           {progress ? (
             <p role="status" aria-live="polite" className="flex items-center gap-2 text-small">
               <span className="q-spinner" aria-hidden="true" /> {progress}
@@ -431,10 +385,10 @@ export function ElectionWizard() {
             </Alert>
           ) : null}
           <ActionDock>
-            <Button variant="secondary" size="lg" onClick={() => setStep(1)} disabled={publishing}>
+            <Button variant="ghost" size="lg" onClick={() => setStep(1)} disabled={publishing}>
               Atrás
             </Button>
-            <Button size="lg" className="flex-1" onClick={publish} loading={publishing} disabled={!acknowledged}>
+            <Button size="lg" className="flex-1" onClick={publish} loading={publishing}>
               Publicar votación
             </Button>
           </ActionDock>

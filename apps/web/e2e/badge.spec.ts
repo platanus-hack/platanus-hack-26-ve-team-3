@@ -152,7 +152,7 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
 });
 
 test.describe("organizador y proyector (credencial)", () => {
-  test("asistente: '¿Quién puede votar?' con credencial por defecto y Lista 'Próximamente'; crea con eligibility", async ({ page }) => {
+  test("asistente: '¿Quién puede votar?' con credencial por defecto; crea con eligibility", async ({ page }) => {
     const mock = new MockV1("registration");
     await mock.install(page);
     await page.goto("/org/new");
@@ -162,16 +162,13 @@ test.describe("organizador y proyector (credencial)", () => {
     await page.getByRole("button", { name: "Continuar" }).click();
     const picker = page.getByTestId("eligibility-picker");
     await expect(picker.getByRole("radio", { name: /Credencial del evento/ })).toBeChecked();
-    await expect(picker.getByRole("radio", { name: /Lista \(correo o cédula\)/ })).toBeDisabled();
-    await expect(picker.getByText("Próximamente")).toBeVisible();
     await expect(page.getByText(/Verificación de rostro/)).toHaveCount(0);
-    await picker.getByRole("radio", { name: /Con una lista que cargo yo/ }).check();
+    await picker.locator("label", { hasText: "Con mi lista" }).click();
     await picker.getByLabel(/Usuarios permitidos/).fill("jgalvis414\n@ana-hack\nhttps://hack.platan.us/26-ve/id/beto-hack");
     await expect(picker.getByText(/3 usuarios/)).toBeVisible();
     await shot(page, "07-organizador-quien-puede-votar");
     await page.getByRole("button", { name: "Continuar" }).click();
     await expect(page.getByTestId("review-eligibility")).toContainText("Credencial del evento (comprobación con lista) + rostro");
-    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /publicar/i }).click();
     await expect.poll(() => mock.createBodies.length).toBe(1);
     expect((mock.createBodies[0] as { eligibility: unknown }).eligibility).toEqual({ method: "event-badge", badgeCheck: "list", badgeUrlPrefix: PREFIX, badgeAllowlist: ["jgalvis414", "ana-hack", "beto-hack"] });

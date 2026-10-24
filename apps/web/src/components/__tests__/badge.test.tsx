@@ -191,13 +191,10 @@ describe("/j en modo credencial", () => {
 });
 
 describe("selector del organizador", () => {
-  it("Credencial por defecto; Lista deshabilitada 'Próximamente'; sin opción de rostro", () => {
+  it("Credencial por defecto; sin opción de rostro", () => {
     const onChange = vi.fn();
     render(<EligibilityPicker value={DEFAULT_ELIGIBILITY} onChange={onChange} />);
     expect((screen.getByRole("radio", { name: /Credencial del evento/ }) as HTMLInputElement).checked).toBe(true);
-    const list = screen.getByRole("radio", { name: /Lista \(correo o cédula\)/ }) as HTMLInputElement;
-    expect(list.disabled).toBe(true);
-    expect(screen.getByText("Próximamente")).toBeTruthy();
     expect(screen.queryByText(/Verificación de rostro/)).toBeNull();
     expect(screen.getByText(/Siempre se comprueba el rostro/)).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: /Apodo libre/ }));

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
-import { describeError } from "@/lib/client/api";
+import { orgMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { countdownText, formatStartTime, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { copyText } from "@/lib/client/download";
@@ -57,7 +57,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
       setStatus(value);
       setLoadError(null);
     } catch (e) {
-      setLoadError(describeError(e));
+      setLoadError(orgMessage(e));
     }
   }, [electionId, record]);
 
@@ -86,7 +86,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
     try {
       setStatus(await roomApi.open(electionId, { maxSeats, expiresInMin }));
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setBusy(null);
     }
@@ -99,7 +99,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
       setStatus(await roomApi.close(electionId));
       setConfirmClose(false);
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setBusy(null);
     }
@@ -114,7 +114,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
       record(sample);
       await refresh();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setBusy(null);
     }
@@ -129,7 +129,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
       setConfirmStart(false);
       onPhaseChange?.();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
       void refresh();
     } finally {
       setBusy(null);
@@ -358,7 +358,7 @@ function EligibilityEditor({ electionId, eligibility, onSaved }: { electionId: s
       onSaved(await apiV1.setEligibility(electionId, parsed.value));
       setSaved(true);
     } catch (e) {
-      setError(describeError(e));
+      setError(orgMessage(e));
     } finally {
       setBusy(false);
     }

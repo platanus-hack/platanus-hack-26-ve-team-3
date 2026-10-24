@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { PhaseTimeline } from "@/components/election/PhaseTimeline";
-import { describeError, type InvitesResponse } from "@/lib/client/api";
+import { orgMessage, type InvitesResponse } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
 import { copyText } from "@/lib/client/download";
@@ -93,10 +93,10 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           setVotersError(null);
         } else {
           setVoters(null);
-          setVotersError(describeError(v.reason));
+          setVotersError(orgMessage(v.reason));
         }
       } catch (err) {
-        if (!cancelled) setError(describeError(err));
+        if (!cancelled) setError(orgMessage(err));
       }
     })();
     return () => {
@@ -141,7 +141,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       setConfirming(false);
       reload();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setActing(false);
     }
@@ -156,7 +156,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       const res = await apiV1.sendInvites(electionId, { electionId, voterIds: ids, channel });
       setInviteResults(res.results);
     } catch (e) {
-      setInviteError(describeError(e));
+      setInviteError(orgMessage(e));
     } finally {
       setSending(false);
     }
@@ -182,7 +182,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       setNewList("");
       reload();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setAdding(false);
     }

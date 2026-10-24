@@ -3,6 +3,8 @@
 import { BadgeUrlPrefix, DEFAULT_BADGE_URL_PREFIX, parseBadgeUrl, type BadgeCheck, type EligibilityInput } from "@quorum/contracts";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ChoiceChips } from "@/components/ui/choice-chips";
+import { Disclosure } from "@/components/ui/disclosure";
 
 /** Borrador del selector "¿Quién puede votar?" (D-19). El rostro es obligatorio siempre: aquí no se elige. */
 export type EligibilityDraft = { method: "open-alias" | "event-badge"; badgeCheck: BadgeCheck; allowlist: string; prefix: string };
@@ -11,12 +13,11 @@ export const DEFAULT_ELIGIBILITY: EligibilityDraft = { method: "event-badge", ba
 const METHODS = [
   { id: "event-badge", label: "Credencial del evento", cost: "Escanean el QR de su credencial. Una por persona.", recommended: true },
   { id: "open-alias", label: "Apodo libre", cost: "Entra quien tenga el código de la sala." },
-  { id: "list", label: "Lista (correo o cédula)", cost: "Solo las personas de tu lista.", soon: true },
 ] as const;
 
 const CHECKS: { id: BadgeCheck; label: string; cost: string }[] = [
-  { id: "live", label: "En vivo, con la página del evento", cost: "Se consulta la página del evento." },
-  { id: "list", label: "Con una lista que cargo yo", cost: "Pegas los usuarios permitidos. Funciona sin internet." },
+  { id: "live", label: "En vivo", cost: "Se consulta la página del evento." },
+  { id: "list", label: "Con mi lista", cost: "Pegas los usuarios permitidos. Funciona sin internet." },
   { id: "none", label: "Sin comprobar", cost: "Más rápido, pero menos seguro." },
 ];
 
@@ -55,23 +56,21 @@ export function EligibilityPicker({ value, onChange, disabled, idPrefix = "elig"
       <fieldset className="flex flex-col gap-2" disabled={disabled}>
         <legend className="mb-2 text-small font-medium text-muted-foreground">¿Quién puede votar?</legend>
         {METHODS.map((m) => {
-          const soon = "soon" in m && m.soon;
           return (
-            <label key={m.id} className={`flex min-h-tap items-start gap-3 rounded-md border bg-card p-4 transition-colors ${value.method === m.id ? "border-foreground shadow-card" : "border-border hover:border-subtle"} ${soon ? "opacity-60" : "cursor-pointer"}`}>
+            <label key={m.id} className={`flex min-h-tap cursor-pointer items-start gap-3 rounded-md border bg-card p-4 transition-colors ${value.method === m.id ? "border-foreground shadow-card" : "border-border hover:border-subtle"}`}>
               <input
                 type="radio"
                 name={`${idPrefix}-method`}
                 value={m.id}
                 checked={value.method === m.id}
-                disabled={soon || disabled}
-                onChange={() => !soon && onChange({ ...value, method: m.id as EligibilityDraft["method"] })}
+                disabled={disabled}
+                onChange={() => onChange({ ...value, method: m.id as EligibilityDraft["method"] })}
                 className="mt-1 size-5 shrink-0 accent-[var(--color-primary)]"
               />
               <span className="flex flex-col gap-0.5">
                 <span className="flex flex-wrap items-center gap-2 font-semibold">
                   {m.label}
                   {"recommended" in m && m.recommended ? <Badge tone="success">Recomendado</Badge> : null}
-                  {soon ? <Badge tone="neutral">Próximamente</Badge> : null}
                 </span>
                 <span className="text-small text-muted-foreground">{m.cost}</span>
               </span>
@@ -82,27 +81,18 @@ export function EligibilityPicker({ value, onChange, disabled, idPrefix = "elig"
 
       {value.method === "event-badge" ? (
         <fieldset className="flex flex-col gap-2" disabled={disabled}>
-          <legend className="mb-2 text-small font-medium text-muted-foreground">¿Cómo se comprueba?</legend>
-          {CHECKS.map((c) => (
-            <label key={c.id} className="flex min-h-tap cursor-pointer items-start gap-3">
-              <input type="radio" name={`${idPrefix}-check`} value={c.id} checked={value.badgeCheck === c.id} onChange={() => onChange({ ...value, badgeCheck: c.id })} className="mt-1 size-5 shrink-0 accent-[var(--color-primary)]" />
-              <span className="flex flex-col">
-                <span className="font-semibold">{c.label}</span>
-                <span className="text-small text-muted-foreground">{c.cost}</span>
-              </span>
-            </label>
-          ))}
+          <ChoiceChips name={`${idPrefix}-check`} legend="¿Cómo se comprueba?" choices={CHECKS.map((c) => ({ value: c.id, label: c.label }))} value={value.badgeCheck} onChange={(v) => onChange({ ...value, badgeCheck: v })} />
+          <p className="text-small text-muted-foreground">{CHECKS.find((c) => c.id === value.badgeCheck)?.cost}</p>
           {value.badgeCheck === "list" ? (
             <Field label="Usuarios permitidos (uno por línea)" htmlFor={`${idPrefix}-allowlist`} hint={`${listInfo?.users.length ?? 0} usuarios${listInfo?.bad.length ? ` · ${listInfo.bad.length} no válidos` : ""}. Acepta usuario, @usuario o la URL de la credencial.`}>
               <Textarea id={`${idPrefix}-allowlist`} value={value.allowlist} onChange={(e) => onChange({ ...value, allowlist: e.target.value })} placeholder={"usuario-1\nusuario-2"} rows={4} />
             </Field>
           ) : null}
-          <details>
-            <summary className="min-h-tap cursor-pointer text-small font-semibold text-primary-ink">Avanzado: dirección de la credencial</summary>
-            <Field label="Prefijo de la URL del QR" htmlFor={`${idPrefix}-prefix`} hint="El usuario va justo después. Por defecto, la credencial de Platanus Hack 26 Caracas.">
+          <Disclosure title="Avanzado">
+            <Field label="Dirección del QR de la credencial" htmlFor={`${idPrefix}-prefix`} hint="Déjalo así si usas la credencial de Platanus Hack.">
               <Input id={`${idPrefix}-prefix`} value={value.prefix} onChange={(e) => onChange({ ...value, prefix: e.target.value })} className="q-mono" />
             </Field>
-          </details>
+          </Disclosure>
         </fieldset>
       ) : null}
 

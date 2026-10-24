@@ -75,10 +75,8 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   await org.getByRole("button", { name: "Continuar" }).click();
   await org.getByText(/Invitar por enlace/).click();
   await org.getByLabel("Pegar lista (una por línea: Nombre, +58412…)").fill(VOTERS.join("\n"));
-  await org.getByRole("button", { name: "Importar lista" }).click();
   await expect(org.getByText(`${VOTERS.length} participantes listos.`)).toBeVisible();
   await org.getByRole("button", { name: "Continuar" }).click();
-  await org.getByRole("checkbox").check();
   await org.getByRole("button", { name: /publicar/i }).click();
 
   // Panel: el organizerToken se muestra UNA vez; lo guardamos.

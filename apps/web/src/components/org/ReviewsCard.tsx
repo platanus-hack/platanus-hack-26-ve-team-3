@@ -6,7 +6,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { describeError } from "@/lib/client/api";
+import { orgMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { formatDateTime } from "@/lib/client/format";
 
@@ -33,7 +33,7 @@ export function ReviewsCard({ electionId, reviews, hasToken, onDecided }: { elec
       setConfirm(null);
       onDecided();
     } catch (e) {
-      setError(describeError(e));
+      setError(orgMessage(e));
     } finally {
       setBusy(false);
     }
