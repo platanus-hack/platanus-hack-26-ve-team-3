@@ -35,9 +35,9 @@ const ELECTION_ID = process.env.NEXT_PUBLIC_DEMO_ELECTION_ID || "el_demo_los_sam
 
 export function losSamanes(now = Date.now()): CreateElectionInput {
   return {
-    title: "Condominio Los Samanes (ficticio): ¿cuántos proyectos vecinales financiamos?",
+    title: "Condominio Los Samanes: ¿cuántos proyectos vecinales financiamos?",
     description:
-      "Simulación para la demo de Quórum. La asamblea vota cuántos proyectos se financian (1 a 5); ese número fija cuántos ganadores salen de un sorteo verificable con semilla = keccak256(hash final del registro).",
+      "La asamblea vota cuántos proyectos se financian (1 a 5). Ese número fija cuántos ganan en un sorteo verificable.",
     kind: "multiple",
     options: [1, 2, 3, 4, 5].map((n) => ({ id: `n${n}`, label: `${n} proyecto${n > 1 ? "s" : ""}` })),
     optionValues: [1, 2, 3, 4, 5],

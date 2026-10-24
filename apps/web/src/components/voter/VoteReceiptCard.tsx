@@ -41,7 +41,7 @@ export function VoteReceiptCard({ electionId, receipt, votedAt }: { electionId: 
       </div>
       <nav className="flex w-full flex-col gap-2" aria-label="Después de votar">
         {receipt ? (
-          <Link href={`/e/${id}?comprobar=1#mi-voto`} className="inline-flex min-h-14 items-center justify-center rounded-md bg-primary px-4 text-heading font-semibold text-primary-foreground hover:bg-primary-hover">
+          <Link href={`/e/${id}?comprobar=1#mi-voto`} className="inline-flex min-h-14 items-center justify-center rounded-full bg-primary px-4 text-heading font-semibold text-primary-foreground shadow-primary hover:bg-primary-hover">
             Comprobar mi voto
           </Link>
         ) : null}

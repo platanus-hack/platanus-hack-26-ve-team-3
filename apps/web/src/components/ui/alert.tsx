@@ -14,7 +14,7 @@ const tones: Record<Tone, { box: string; icon: React.ReactNode; prefix: string }
 export function Alert({ tone = "info", title, children, className, role }: { tone?: Tone; title?: string; children?: React.ReactNode; className?: string; role?: "alert" | "status" }) {
   const t = tones[tone];
   return (
-    <div role={role ?? (tone === "danger" ? "alert" : "status")} className={cn("flex gap-3 rounded-md border p-3 text-body [&_svg]:mt-0.5 [&_svg]:size-5 [&_svg]:shrink-0", t.box, className)}>
+    <div role={role ?? (tone === "danger" ? "alert" : "status")} className={cn("flex gap-3 rounded-md border p-4 text-body [&_svg]:mt-0.5 [&_svg]:size-5 [&_svg]:shrink-0", t.box, className)}>
       {t.icon}
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{title ?? t.prefix}</p>

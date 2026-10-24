@@ -98,7 +98,7 @@ export function PackageLoader({ initialId = "", onLoaded, allowFixture }: { init
         </label>
         {allowFixture ? (
           <Button variant="ghost" loading={busy === "fixture"} onClick={() => void guard("fixture", () => loadSource({ kind: "fixture" }))}>
-            Usar paquete de ejemplo (fixture)
+            Usar paquete de ejemplo
           </Button>
         ) : null}
       </div>

@@ -170,7 +170,7 @@ export function ElectionWizard() {
     <div className="q-container flex max-w-3xl flex-col gap-6 py-6 md:py-10">
       <header>
         <h1 className="text-title font-bold tracking-tight md:text-display">Crear votación</h1>
-        <p className="mt-1 text-body text-muted-foreground">Tres pasos. Es una demostración: usa un título y opciones neutrales, nunca procesos políticos reales.</p>
+        <p className="mt-1 text-body text-muted-foreground">Tres pasos.</p>
       </header>
       <Stepper steps={STEPS} current={step} />
 
@@ -181,7 +181,7 @@ export function ElectionWizard() {
             <CardDescription>Qué se decide y entre qué alternativas.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            <Field label="Título de la votación" htmlFor="title" hint="Ejemplo: Fecha de la asamblea anual — Condominio Los Samanes (ficticio)">
+            <Field label="Título de la votación" htmlFor="title" hint="Ej.: Fecha de la asamblea anual">
               <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} required aria-describedby="title-hint" />
             </Field>
             <Field label="Descripción (opcional)" htmlFor="description">
@@ -263,14 +263,14 @@ export function ElectionWizard() {
         <Card>
           <CardHeader>
             <CardTitle>Participantes elegibles</CardTitle>
-            <CardDescription>Cómo entra la gente por la sala (el QR del proyector) y, si quieres, invitados por enlace.</CardDescription>
+            <CardDescription>Cómo entra la gente: QR de la sala o enlace.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 border-b border-border pb-5">
             <EligibilityPicker value={eligibility} onChange={setEligibility} />
           </CardContent>
           <CardHeader>
             <CardTitle as="h3" className="text-heading">Invitados por enlace {eligibility.method === "event-badge" ? "(opcional)" : ""}</CardTitle>
-            <CardDescription>Nombre y teléfono opcional (formato internacional). El teléfono sólo se usa para invitar; nunca se publica.</CardDescription>
+            <CardDescription>Nombre y teléfono opcional. El teléfono nunca se publica.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
             <ul className="flex flex-col gap-2">
@@ -297,7 +297,7 @@ export function ElectionWizard() {
             <Button variant="secondary" size="sm" className="w-fit" onClick={() => setParticipants((p) => [...p, { displayName: "", phoneE164: "" }])}>
               <Plus aria-hidden="true" /> Agregar participante
             </Button>
-            <Field label="Pegar lista (una por línea: Nombre, +58412…)" htmlFor="pasted" hint="Usa nombres ficticios en la demo.">
+            <Field label="Pegar lista (una por línea: Nombre, +58412…)" htmlFor="pasted" hint="Una persona por línea.">
               <Textarea id="pasted" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder={"Vecina A, +584121111111\nVecino B"} />
             </Field>
             <Button variant="secondary" size="sm" className="w-fit" onClick={importPasted} disabled={!pasted.trim()}>
@@ -325,7 +325,7 @@ export function ElectionWizard() {
         <Card>
           <CardHeader>
             <CardTitle>Revisar y publicar</CardTitle>
-            <CardDescription>Al publicar se fija el manifiesto (hash de título, opciones y fechas) y se abre la inscripción. La votación se abre después, desde el panel, al congelar el padrón.</CardDescription>
+            <CardDescription>Al publicar se fijan pregunta, opciones y fechas, y abre la inscripción. La votación la abres desde el panel.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <dl className="grid grid-cols-1 gap-3 text-small sm:grid-cols-2">
@@ -381,7 +381,7 @@ export function ElectionWizard() {
                 id="ack"
                 checked={acknowledged}
                 onChange={(e) => setAcknowledged(e.target.checked)}
-                label={<span>Entiendo que esto es una <strong>demostración</strong>: el padrón lo define esta lista, la prueba de vida no está certificada y el resultado sólo es confiable cuando lo confirme el verificador independiente.</span>}
+                label={<span>Entiendo que el padrón lo define esta lista y que el resultado vale cuando lo confirma el verificador.</span>}
               />
             </div>
             {progress ? (

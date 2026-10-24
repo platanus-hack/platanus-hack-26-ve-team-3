@@ -28,7 +28,7 @@ async function loadFixture(): Promise<Fixture> {
   const pkg = (await res.json()) as { electionId: string; manifest: { title: string; kind: ElectionV1["kind"]; options: { id: string; label: string }[]; startsAt: string; endsAt: string }; manifestHash: string; groupRoot: string; commitments: string[]; tally: { counts: number[]; total: number } };
   const m = pkg.manifest;
   return {
-    election: { id: pkg.electionId, title: m.title, description: "Paquete fixture generado por el adaptador con 3 boletas reales (simulación).", kind: m.kind, options: m.options, status: "auditable", protocol: "semaphore-ledger", eligibilityIssuerId: "fixture", organizerId: "fixture", layout: null, manifestHash: pkg.manifestHash, startsAt: m.startsAt, endsAt: m.endsAt, groupRoot: pkg.groupRoot, candidates: [] },
+    election: { id: pkg.electionId, title: m.title, description: "Paquete de ejemplo con 3 boletas reales.", kind: m.kind, options: m.options, status: "auditable", protocol: "semaphore-ledger", eligibilityIssuerId: "fixture", organizerId: "fixture", layout: null, manifestHash: pkg.manifestHash, startsAt: m.startsAt, endsAt: m.endsAt, groupRoot: pkg.groupRoot, candidates: [] },
     tally: {
       electionId: pkg.electionId,
       turnout: pkg.tally.total / pkg.commitments.length,
@@ -168,7 +168,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
         <Card>
           <CardHeader>
             <CardTitle>Cifras agregadas</CardTitle>
-            <CardDescription>Publicadas por el organizador. Nunca votos individuales ni listas nominales.</CardDescription>
+            <CardDescription>Nunca votos individuales ni listas de votantes.</CardDescription>
           </CardHeader>
           <CardContent>
             {tally ? (
@@ -210,7 +210,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
         <Card>
           <CardHeader>
             <CardTitle>Manifiesto y padrón</CardTitle>
-            <CardDescription>El hash del manifiesto fija título, opciones y fechas; la raíz del padrón fija quién puede votar.</CardDescription>
+            <CardDescription>Huellas que fijan la pregunta, las opciones y quién puede votar.</CardDescription>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-small">
@@ -263,28 +263,28 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Qué garantiza y qué no</CardTitle>
-            <CardDescription>Protocolo semaphore-ledger (ADR-001, Plan A).</CardDescription>
+            <CardDescription>Protocolo semaphore-ledger.</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 text-small md:grid-cols-2">
             <div>
               <p className="mb-1 font-semibold">Se puede comprobar</p>
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>Cada boleta trae una prueba de pertenencia al padrón publicado. La prueba no revela quién emitió cada boleta; el servidor ve el contenido de la boleta.</li>
-                <li>Una credencial produce un solo nullifier por votación: no hay doble voto.</li>
-                <li>El registro es una cadena de hashes y el recuento lo reproduce cualquiera.</li>
-                <li>Tu nullifier te permite comprobar que tu boleta sigue en el registro.</li>
+                <li>Cada boleta prueba que viene de alguien del padrón, sin decir de quién.</li>
+                <li>Un inscrito, un voto.</li>
+                <li>Cualquiera reproduce el recuento.</li>
+                <li>Tu comprobante confirma que tu boleta está en el registro.</li>
               </ul>
             </div>
             <div>
               <p className="mb-1 font-semibold">No se garantiza</p>
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>Secreto del contenido frente al servidor, ni resistencia a coacción.</li>
-                <li>Que el padrón sea correcto: lo decide el organizador. La comprobación de rostro es de demostración y no impide todos los duplicados.</li>
-                <li>Completitud del registro sin ancla on-chain evaluada.</li>
+                <li>Que el servidor no vea la opción de cada boleta.</li>
+                <li>Que el padrón sea correcto: lo define el organizador. La cámara no impide todos los duplicados.</li>
+                <li>Que no falten boletas, si no hay ancla on-chain.</li>
                 <li data-testid="link-mode-limit">
-                  Vinculación del teléfono en <span className="font-semibold text-warning-strong">modo demo</span>: smart wallet demo (Kernel/ZeroDev, Base Sepolia testnet, sin gas) o, sin proveedor, wallet demo (eoa-demo). La clave vive solo en el navegador del votante; si se borra, no puede votar.
+                  La clave del votante vive solo en su navegador (wallet en Base Sepolia testnet); si se borra, no puede votar.
                 </li>
-                <li>No es un sistema electoral certificado. «Verificado» sólo lo muestra el verificador, nunca un dato del servidor.</li>
+                <li>«Verificado» sólo lo muestra el verificador, nunca el servidor.</li>
               </ul>
             </div>
           </CardContent>

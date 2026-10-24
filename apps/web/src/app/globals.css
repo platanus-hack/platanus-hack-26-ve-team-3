@@ -15,6 +15,11 @@
   --color-primary: var(--color-primary);
   --color-primary-hover: var(--color-primary-hover);
   --color-primary-foreground: var(--color-primary-foreground);
+  --color-primary-ink: var(--color-primary-ink);
+  --color-primary-soft: var(--color-primary-soft);
+  --color-primary-soft-foreground: var(--color-primary-soft-foreground);
+  --color-primary-muted: var(--color-primary-muted);
+  --color-navy: var(--color-navy);
   --color-success: var(--color-success);
   --color-success-strong: var(--color-success-strong);
   --color-success-soft: var(--color-success-soft);
@@ -25,8 +30,20 @@
   --color-danger-strong: var(--color-danger-strong);
   --color-danger-soft: var(--color-danger-soft);
   --color-neutral-soft: var(--color-neutral-soft);
+  --color-grid: var(--color-grid);
+  --color-chart-1: var(--color-chart-1);
+  --color-chart-2: var(--color-chart-2);
+  --color-chart-3: var(--color-chart-3);
+  --color-chart-4: var(--color-chart-4);
+  --color-chart-5: var(--color-chart-5);
+  --color-chart-6: var(--color-chart-6);
+  --color-chart-7: var(--color-chart-7);
+  --color-chart-8: var(--color-chart-8);
+  --color-chart-9: var(--color-chart-9);
+  --color-chart-10: var(--color-chart-10);
 
-  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --text-display: var(--text-display);
@@ -43,7 +60,10 @@
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
   --shadow-card: var(--shadow-card);
+  --shadow-elevated: var(--shadow-elevated);
+  --shadow-primary: var(--shadow-primary);
   --spacing-tap: var(--tap);
 }
 
@@ -52,7 +72,10 @@ html {
 }
 
 body {
-  background: var(--color-background);
+  background-color: var(--color-background);
+  /* Halo azul difuso arriba a la derecha; no fijo para no costar en móviles */
+  background-image: radial-gradient(56rem 28rem at 92% -6rem, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 70%);
+  background-repeat: no-repeat;
   color: var(--color-foreground);
   font-family: var(--font-sans);
   font-size: var(--text-body);
@@ -97,6 +120,30 @@ body {
   max-width: 36rem;
 }
 
+/* Select nativo con chevron (el color #626c7e se lee en claro y oscuro) */
+.q-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23626c7e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 1rem;
+}
+
+/* Cifras grandes: porcentajes, conteos, cuentas regresivas */
+.q-num {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Eyebrow: etiqueta corta en mayúsculas sobre un título o cifra */
+.q-eyebrow {
+  font-size: var(--text-small);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
 .q-mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -116,6 +163,31 @@ body {
   border: 2px solid var(--color-border);
   border-top-color: var(--color-primary);
   animation: q-spin 0.9s linear infinite;
+}
+
+/* Captura facial: flechas que empujan hacia el giro y check que aparece */
+@keyframes q-nudge {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(-6px);
+  }
+}
+.q-nudge {
+  animation: q-nudge 1s ease-in-out infinite;
+}
+@keyframes q-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+.q-pop {
+  animation: q-pop 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Skeleton */

@@ -15,7 +15,7 @@ export function StepIndicator({ current, total = 2 }: { current: number; total?:
       </p>
       <div className="mt-1 flex gap-1.5" aria-hidden="true">
         {Array.from({ length: total }, (_, i) => (
-          <span key={i} className={cn("h-1.5 flex-1 rounded-full", i < current ? "bg-success" : "bg-border")} />
+          <span key={i} className={cn("h-1.5 flex-1 rounded-full", i < current ? "bg-primary" : "bg-primary-muted/50")} />
         ))}
       </div>
     </div>

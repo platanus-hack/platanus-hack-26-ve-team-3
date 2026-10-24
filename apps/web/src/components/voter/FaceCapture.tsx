@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CameraOff, UserX } from "lucide-react";
+import { CameraOff, Check, ChevronLeft, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiClientError, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { CAPTURES, clientLog, DESCRIPTOR_DIMS, formatMB, humanSelfTest, humanTimings, LivenessTracker, loadHuman, onDownloadProgress, yawProxy, type DownloadProgress, type HumanInstance } from "@/lib/client/human";
+import { CAPTURES, clientLog, DESCRIPTOR_DIMS, formatMB, humanSelfTest, humanTimings, LivenessTracker, loadHuman, onDownloadProgress, TURN_DELTA, yawProxy, type DownloadProgress, type HumanInstance } from "@/lib/client/human";
 import { cn } from "@/lib/client/cn";
 
 /** Umbrales mínimos de antispoof (`face.real`) y liveness (`face.live`) de Human (threat model M5). Siguen siendo demo. */
@@ -22,25 +22,35 @@ const E2E_FAKE_FACE = process.env.NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE === "1";
 type Phase = "loading" | "slow" | "look" | "spoof" | "action" | "back" | "checking" | "error";
 type ErrorKind = "camera-denied" | "no-camera" | "duplicate" | "other";
 
-function instruction(phase: Phase): string {
+/** Instrucción principal + pista corta. El giro pedido es a la izquierda (el tracker acepta ambos lados). */
+function instruction(phase: Phase, faceOk: boolean): { title: string; hint?: string } {
   switch (phase) {
     case "loading":
-      return "Preparando la cámara…";
+      return { title: "Preparando la cámara…" };
     case "slow":
-      return "Cargando el reconocimiento facial… con datos móviles puede tardar un poco";
+      return { title: "Cargando reconocimiento facial…", hint: "Con datos móviles puede tardar" };
     case "look":
-      return "Mira a la cámara";
+      return { title: "Mira a la cámara", hint: faceOk ? "Mantente dentro del círculo" : "Centra tu rostro en el círculo" };
     case "spoof":
-      return "Mira a la cámara, con buena luz";
+      return { title: "Busca mejor luz", hint: "Mira de frente a la cámara" };
     case "action":
-      return "Gira un poco la cabeza";
+      return { title: "Gira la cabeza a la izquierda", hint: "Despacio, hasta que el círculo avance" };
     case "back":
-      return "Vuelve a mirar a la cámara";
+      return { title: "Vuelve al centro", hint: "Mira de frente otra vez" };
     case "checking":
-      return "Comprobando…";
+      return { title: "Comprobando…" };
     default:
-      return "";
+      return { title: "" };
   }
+}
+
+/** Avance del anillo (0..1): capturas de frente → giro → regreso → comprobación. */
+function ringProgress(phase: Phase, captured: number, turn: number): number {
+  if (phase === "look" || phase === "spoof") return (captured / CAPTURES) * 0.5;
+  if (phase === "action") return 0.5 + turn * 0.35;
+  if (phase === "back") return 0.85;
+  if (phase === "checking") return 1;
+  return 0;
 }
 
 function classifyCameraError(e: unknown): ErrorKind {
@@ -87,6 +97,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
   const [captured, setCaptured] = useState(0);
   const [download, setDownload] = useState<DownloadProgress | null>(null);
   const [faceOk, setFaceOk] = useState(false);
+  const [turn, setTurn] = useState(0);
   const [error, setError] = useState<{ kind: ErrorKind; message: string } | null>(null);
 
   const stopAll = useCallback(() => {
@@ -132,6 +143,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
     const stale = () => run !== runRef.current;
     setError(null);
     setCaptured(0);
+    setTurn(0);
     setFaceOk(false);
     setPhase("loading");
     try {
@@ -193,8 +205,10 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
         const seen = Boolean(face && face.score > 0.5);
         // Antispoof/liveness por debajo del umbral: no se avanza ni se captura (M5).
         const present = Boolean(seen && (face!.real ?? 0) >= REAL_MIN && (face!.live ?? 0) >= LIVE_MIN);
-        const stage = tracker.feed({ t: performance.now(), face: seen, present, yaw: face ? yawProxy(face) : null, embedding: face?.embedding && face.embedding.length >= 64 ? Array.from(face.embedding) : null });
+        const yaw = face ? yawProxy(face) : null;
+        const stage = tracker.feed({ t: performance.now(), face: seen, present, yaw, embedding: face?.embedding && face.embedding.length >= 64 ? Array.from(face.embedding) : null });
         setFaceOk(present);
+        if (stage === "turn" && yaw !== null) setTurn(Math.min(1, Math.abs(yaw - tracker.baselineYaw) / TURN_DELTA));
         setCaptured(tracker.captures.length);
         setPhase(stage === "turn" ? "action" : stage === "back" ? "back" : stage === "spoof" ? "spoof" : "look");
         // Primera vez en cada etapa (sin inundar el log si oscila entre «look» y «spoof»).
@@ -238,20 +252,16 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const text = instruction(phase);
-  const ovalTone = phase === "checking" || phase === "back" ? "border-success" : faceOk ? "border-white" : "border-white/60";
+  const { title, hint } = instruction(phase, faceOk);
+  const progress = ringProgress(phase, captured, turn);
+  const done = phase === "checking";
+  const busy = phase === "loading" || phase === "slow" || phase === "checking";
   const downloading = (phase === "loading" || phase === "slow") && download && !download.done && download.loaded < download.total;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black text-white" data-testid="face-capture" role="dialog" aria-modal="true" aria-label="Comprobación con la cámara">
-      <video ref={videoRef} playsInline muted autoPlay className="absolute inset-0 size-full object-cover [transform:scaleX(-1)]" aria-label="Vista de la cámara (no se graba)" />
-      {/* Óvalo guía: oscurece todo lo de fuera. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className={cn("aspect-[3/4] w-[68vw] max-w-[320px] rounded-[50%] border-4 shadow-[0_0_0_200vmax_rgba(0,0,0,0.55)] transition-colors", ovalTone)} />
-      </div>
-
-      <div className="relative flex items-center justify-between gap-2 px-4 pt-4">
-        <p className="text-base font-semibold text-white/90">Paso 2 de 2</p>
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#05070b] text-white" data-testid="face-capture" role="dialog" aria-modal="true" aria-label="Comprobación con la cámara">
+      <div className="flex items-center justify-between gap-2 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+        <p className="rounded-full bg-white/10 px-3 py-1 text-small font-semibold text-white/80">Paso 2 de 2</p>
         {phase !== "checking" ? (
           <button
             type="button"
@@ -259,30 +269,47 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
               stopAll();
               onCancel();
             }}
-            className="min-h-tap rounded-md px-3 text-base font-semibold text-white/90 underline underline-offset-4"
+            className="min-h-tap rounded-full px-4 text-base font-semibold text-white/80 hover:bg-white/10"
           >
             Cancelar
           </button>
         ) : null}
       </div>
 
-      <div className="relative mt-auto flex flex-col items-center gap-3 px-4 pb-8 text-center">
+      <div className="flex flex-1 items-center justify-center px-6">
+        <div className="relative size-[min(80vw,340px)]">
+          <FaceRing progress={progress} done={done} />
+          <div className={cn("absolute inset-[9%] overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10 transition-transform duration-300", done && "scale-95")}>
+            <video ref={videoRef} playsInline muted autoPlay className="size-full object-cover [transform:scaleX(-1)]" aria-label="Vista de la cámara (no se graba)" />
+            {done ? (
+              <div className="absolute inset-0 grid place-items-center bg-black/45" aria-hidden="true">
+                <span className="q-pop grid size-20 place-items-center rounded-full bg-[#34d399] text-[#05070b]">
+                  <Check className="size-11" strokeWidth={3} />
+                </span>
+              </div>
+            ) : null}
+          </div>
+          {phase === "action" ? <TurnCue /> : null}
+          {phase === "back" ? <span aria-hidden="true" className="absolute left-1/2 top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-white/80" /> : null}
+        </div>
+      </div>
+
+      <div className="flex min-h-40 flex-col items-center gap-2 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] text-center">
         {phase !== "error" ? (
           <>
-            <p role="status" aria-live="assertive" className="rounded-lg bg-black/60 px-4 py-2 text-title font-bold" data-testid="face-instruction">
-              {phase === "loading" || phase === "slow" || phase === "checking" ? <span className="q-spinner mr-2 align-middle" aria-hidden="true" /> : null}
-              {text}
+            <p role="status" aria-live="assertive" className="text-title font-semibold tracking-tight" data-testid="face-instruction">
+              {busy && !done ? <span className="q-spinner mr-2 align-middle" aria-hidden="true" /> : null}
+              {title}
             </p>
+            {hint ? <p className="text-body text-white/65">{hint}</p> : null}
             {downloading ? (
-              <p className="rounded-md bg-black/60 px-3 py-1 text-base font-semibold tabular-nums text-white/90" data-testid="face-download">
-                Descargando {formatMB(download.loaded)} de {formatMB(download.total)} MB
-              </p>
-            ) : null}
-            {phase === "look" || phase === "action" || phase === "back" ? (
-              <div className="flex gap-2" aria-hidden="true">
-                {Array.from({ length: CAPTURES + 1 }, (_, i) => (
-                  <span key={i} className={cn("size-3 rounded-full", i < captured ? "bg-success" : "bg-white/40")} />
-                ))}
+              <div className="mt-2 w-full max-w-60" data-testid="face-download">
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/15">
+                  <div className="h-full rounded-full bg-white transition-[width]" style={{ width: `${(download.loaded / download.total) * 100}%` }} />
+                </div>
+                <p className="q-num mt-2 text-small text-white/65">
+                  {formatMB(download.loaded)} / {formatMB(download.total)} MB
+                </p>
               </div>
             ) : null}
           </>
@@ -294,10 +321,48 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
   );
 }
 
+const TICKS = 72;
+
+/** Anillo de marcas tipo Face ID: se encienden en sentido horario según el avance; verde al terminar. */
+function FaceRing({ progress, done }: { progress: number; done: boolean }) {
+  const lit = Math.round(progress * TICKS);
+  return (
+    <svg viewBox="0 0 100 100" className="absolute inset-0 size-full" aria-hidden="true">
+      {Array.from({ length: TICKS }, (_, i) => {
+        const a = (i / TICKS) * 2 * Math.PI - Math.PI / 2;
+        const on = i < lit;
+        return (
+          <line
+            key={i}
+            x1={50 + 44 * Math.cos(a)}
+            y1={50 + 44 * Math.sin(a)}
+            x2={50 + (on ? 49 : 47.5) * Math.cos(a)}
+            y2={50 + (on ? 49 : 47.5) * Math.sin(a)}
+            strokeWidth={1.4}
+            strokeLinecap="round"
+            className={cn("transition-colors duration-200", on ? (done ? "stroke-[#34d399]" : "stroke-[#5b8cff]") : "stroke-white/20")}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Flechas animadas en el borde izquierdo (la vista está en espejo: izquierda del votante = izquierda de la pantalla). */
+function TurnCue() {
+  return (
+    <div aria-hidden="true" className="absolute left-[11%] top-1/2 flex -translate-y-1/2 items-center text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]">
+      {[0, 1, 2].map((i) => (
+        <ChevronLeft key={i} className="q-nudge -mx-2.5 size-9" strokeWidth={2.5} style={{ animationDelay: `${(2 - i) * 160}ms` }} />
+      ))}
+    </div>
+  );
+}
+
 function FaceError({ error, onRetry, onObserve }: { error: { kind: ErrorKind; message: string }; onRetry: () => void; onObserve: () => void }) {
   const os = platform();
   return (
-    <div className="absolute inset-x-0 bottom-0 max-h-full overflow-y-auto rounded-t-2xl bg-card p-5 text-card-foreground" role="alert" data-testid="face-error">
+    <div className="absolute inset-x-0 bottom-0 max-h-full overflow-y-auto rounded-t-[1.75rem] bg-card p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-card-foreground" role="alert" data-testid="face-error">
       <div className="flex items-center gap-2 [&_svg]:size-6 [&_svg]:shrink-0">
         {error.kind === "duplicate" ? <UserX aria-hidden="true" className="text-danger" /> : <CameraOff aria-hidden="true" className="text-danger" />}
         <h2 className="text-title font-bold">

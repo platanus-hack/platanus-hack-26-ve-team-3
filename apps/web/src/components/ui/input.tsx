@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/client/cn";
 
 const base =
-  "w-full min-h-tap rounded-md border border-input bg-card px-3 py-2 text-body text-foreground placeholder:text-subtle disabled:opacity-50 aria-invalid:border-danger";
+  "w-full min-h-tap rounded-md border border-input bg-card px-3.5 py-2 text-body text-foreground transition-[border-color,box-shadow] duration-150 placeholder:text-subtle hover:border-subtle/50 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/20 disabled:opacity-50 aria-invalid:border-danger aria-invalid:focus-visible:ring-danger/20";
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...props }, ref) {
   return <input ref={ref} className={cn(base, className)} {...props} />;
@@ -13,11 +13,11 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
 });
 
 export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(function Select({ className, ...props }, ref) {
-  return <select ref={ref} className={cn(base, "appearance-none pr-8", className)} {...props} />;
+  return <select ref={ref} className={cn(base, "q-select appearance-none pr-10", className)} {...props} />;
 });
 
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
-  return <label className={cn("block text-small font-semibold text-foreground", className)} {...props} />;
+  return <label className={cn("block text-small font-medium text-muted-foreground", className)} {...props} />;
 }
 
 export function Field({ label, htmlFor, hint, error, children }: { label: string; htmlFor: string; hint?: string; error?: string | null; children: React.ReactNode }) {

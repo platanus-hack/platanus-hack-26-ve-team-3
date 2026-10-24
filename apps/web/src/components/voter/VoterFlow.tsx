@@ -320,7 +320,7 @@ export function VoterFlow({ token }: { token: string }) {
         <VoterShell>
           <h1 className="text-title font-bold leading-tight">La votación terminó</h1>
           <p className="text-muted-foreground">{title}</p>
-          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className="inline-flex min-h-14 items-center justify-center rounded-md bg-primary px-4 text-title font-semibold text-primary-foreground hover:bg-primary-hover">
+          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className="inline-flex min-h-14 items-center justify-center rounded-full bg-primary px-4 text-title font-semibold text-primary-foreground shadow-primary hover:bg-primary-hover">
             Ver resultados
           </Link>
           <Link href={`/e/${encodeURIComponent(electionId)}`} className="inline-flex min-h-tap items-center justify-center font-semibold underline underline-offset-4">

@@ -18,7 +18,7 @@ export function Stepper({ steps, current, className }: { steps: Step[]; current:
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center rounded-full border text-small font-bold",
                   state === "done" && "border-success bg-success text-white",
-                  state === "current" && "border-primary bg-primary text-primary-foreground",
+                  state === "current" && "border-primary bg-primary text-primary-foreground shadow-primary ring-4 ring-ring/15",
                   state === "todo" && "border-border bg-card text-subtle",
                 )}
               >
