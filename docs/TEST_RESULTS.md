@@ -235,3 +235,53 @@ Corrida final tras mejorar el texto de `chain_integrity` (2026-10-24T14:37:18Z; 
 - `pnpm -r typecheck` y `pnpm -r test` fallan en `apps/web` por causas ajenas a este carril (`LayoutProps` no definido en `src/app/layout.tsx`; `vitest` no instalado en `apps/web`). No se tocó `apps/web`.
 - Lectura de `attestationUid` (EAS) en el verificador CLI: no implementada; se reporta `no evaluado`.
 - `ranking`/`budget`: el `message` es un índice de opción; esas modalidades necesitan otra codificación (no hecha).
+
+---
+
+## 2026-10-24 · Fase 2 — motor Contrato v1 (quorum-backend + quorum-crypto, rama `feat/phase2-engine`)
+
+Entorno: macOS (Darwin 25.5), Node 22, `pnpm@10.18.0`, Next.js 16.4.3 (Turbopack). Sin red para cadena: ancla y RPC simulados por inyección en tests; **ninguna transacción real enviada**.
+
+### Comandos ejecutados (2026-10-24 12:12:32 -0400) · **todos verdes**
+```
+$ pnpm typecheck                      → exit 0 (contracts, protocol-adapter, verifier, demo-fixtures, web)
+$ pnpm lint                           → exit 0
+$ pnpm test                           → exit 0
+packages/contracts        ✓ src/__tests__/schemas.test.ts (63 tests) 14ms
+packages/protocol-adapter ✓ test/draw.test.ts (5) · ✓ test/adversarial.test.ts (3) 511ms · ✓ test/adapter.test.ts (12) 1088ms   → 20 passed
+packages/demo-fixtures    ✓ src/__tests__/fixtures.test.ts (28 tests)
+apps/verifier             ✓ test/adversarial.test.ts (3) 575ms · ✓ test/verifier.test.ts (10) 1105ms · ✓ test/draw.test.ts (6) 1316ms → 19 passed
+apps/web                  ✓ units.test.ts (11) · ✓ flow.test.ts (14) 3800ms → 25 passed
+Total: 155 tests, 0 fallos
+$ pnpm --filter @quorum/web build     → exit 0 ("✓ Compiled successfully", 26 rutas /api incluidas las nuevas)
+```
+
+### Qué cubren los tests nuevos (todo con pruebas Semaphore Groth16 reales, no simuladas)
+- **Flujo completo Los Samanes** (`flow.test.ts`): 6 inscritos (rostro → firma EIP-712 `FaceBinding` → commitment) → `open` (groupRoot) → 5 votos → tally con umbral de 5 → recibo por nullifier → doble voto 409 → `close` (`auditable`, `verifyPackage` real, ancla "no evaluado") → paquete sin PII con `ETag`/304 → `draw` (N=3, `draw_matches` PASS) → `/api/audit/verify` válido; copia con tally alterado → `tally_matches` FAIL; basura → `package_schema` FAIL.
+- **Inscripción:** dedupe 1:N → 409 `duplicate_identity` sin guardar nada; misma cara en otra elección sí; face/verify exige `inviteToken` y no devuelve similitud (A3); wallet exige rostro, firma propia y sobre su `faceBindingHash`; `kernel` sin RPC → 503; `kernel` con verificador ERC-1271/6492 inyectado → OK; identidad una vez, commitment único, no canónico → 400; nada se admite tras `open`; plantillas faciales borradas al abrir (A2).
+- **Voto:** en `registration` → 409; nullifier `"0"+n` → 400 (C1); `message` hex → 400 (A1); scope de otra elección → 403; prueba alterada → 403 "no verifica"; opción fuera de rango → 400 sin consumir el nullifier; tras cerrar → 409. `GET /ledger` sin entradas mientras está `open` (C3). `onchain.txHash` ignorado por defecto (C2).
+- **Cierre:** ancla con transporte simulado → `anchor_matches` PASS y calldata = `(finalHash, groupRoot, tallyHash, electionId)`; ledger alterado en la base → estado `failed` con `chain_integrity`/`proofs_valid` FAIL publicados.
+- **Auth (C4/A7):** sin token, con token de otra elección o `Basic` → 401 en publish/voters/invites/open/close/draw; GET /voters público solo agregados; el token no aparece en GET /elections ni se guarda en claro.
+- **Protocolo:** sorteo determinista e independiente del orden; empate → N menor (`tieBreak: "lowest"`); verificador detecta ganadores cambiados, N inflado, semilla falsa, sorteo sin regla, regla cambiada tras publicar (manifest_hash), sin `tieBreak`; C1 en el verificador (paquete con nullifier `"0"+n` → `package_schema` FAIL); M3 (`commitments_unique` FAIL "commitment #2 duplica #0").
+
+### `seed:demo` real (store en directorio temporal, 2026-10-24 ~12:08 -0400)
+```
+$ DATA_DIR=<tmp> pnpm --filter @quorum/web seed:demo -- --simulate 6 --full
+✔ el_demo_los_samanes · estado registration · manifestHash 0xede8c1b59ab928b1dba0156728fc6555b7a870b661cad4166243815fe3843437
+  · inscrito vt_… (simulado) ×6
+✔ open · groupRoot 9031565953714164753025204305915415947152527370743909802554256206822167163514
+  · boleta #0..#5 incluida
+✔ close → auditable · verificador valid=true · ancla: ancla deshabilitada: faltan ORGANIZER_PRIVATE_KEY y/o BASE_SEPOLIA_RPC; el verificador la declara no evaluada
+    PASS package_schema · manifest_hash · group_root · commitments_unique · chain_integrity · proofs_valid (6/6) · nullifiers_unique
+    PASS tally_matches: recuento reproducido: [1,1,3,1,0] (6 boletas, 0 inválidas)
+    PASS anchor_matches: no evaluado: el paquete no declara ancla on-chain
+    PASS draw_matches: no evaluado: el manifiesto declara sorteo pero aún no se ha realizado
+✔ draw → drawn · N=3 · ganadores p-02, p-01, p-06 · seed 0xf4ea2144ed786ac78943d789963ffb13b68bdda732c14334bf41b2b931e9e9cf
+```
+### Humo HTTP contra `next start` (build de producción, mismo store)
+`GET /artifacts` → 200 con `etag`; `POST /api/audit/verify` con ese paquete → `valid: true`, 10/10 checks (incluye `draw_matches` recomputado) y `inputArtifactDigest: sha256:…`; `GET /voters` público → solo `counts`; `POST /draw` sin token → 401. Confirma que `verifyProof` (snarkjs) funciona dentro del bundle de Turbopack.
+
+### Límites conocidos (no ocultos)
+- Ancla real en Base Sepolia **no ejecutada** (requiere decisión humana; el script la bloquea salvo `--anchor`).
+- La firma Kernel real (ERC-6492) no se probó contra RPC: solo con verificador inyectado.
+- Correlación por tiempo: `POST /voters/:id/voted` (autodeclarado) y el tally en vivo con ≥5 votos permiten inferencias de tiempo; ver informe.

@@ -94,3 +94,17 @@ Decisiones D-09..D-12 en `docs/DECISIONS.md`. Cambios sobre v0:
 
 ## Env nuevas
 `NEXT_PUBLIC_ZERODEV_PROJECT_ID`, `NEXT_PUBLIC_REGISTRY_ADDRESS`, `ORGANIZER_PRIVATE_KEY`, `FACE_DEDUPE_THRESHOLD=0.75`, `NEXT_PUBLIC_DEMO_ELECTION_ID`.
+
+## Contrato v1 — implementado (feat/phase2-engine, 2026-10-24) · diferencias que la UI debe conocer
+- `POST /api/elections` acepta además `candidates[]`, `winnersCountFromResult`, `optionValues[]` (un valor por opción) o `winnersCount`; responde `Election` + **`organizerToken`** (una sola vez; el servidor guarda solo su sha256).
+- **Auth del organizador** (`Authorization: Bearer <organizerToken>`, 401 si falta): `publish`, `POST/GET voters`, `invites`, `open`, `close`, `POST draw`. `GET /voters` sin token → `{ counts: { total, invited, registered, withIdentity, voted } }`; con token → `{ voters: [{id, displayName, state, walletAddress, hasIdentity}], counts }`.
+- `publish` → `registration` (ya no `open`). `manifestHash` = SHA-256 (hex con `0x`) del `ElectionManifest` del adaptador, que incluye `drawRule { candidates, winnersCount, tieBreak:"lowest" }`.
+- `POST /api/face/enroll` → `{ ok, faceBindingHash, voteNonce }` o `409 {code:"duplicate_identity"}`; solo en `registration`. `POST /api/face/verify` exige `inviteToken` y responde `{ ok, voteNonce, mode }` (sin similitud).
+- `POST /api/voters/:id/wallet` `{ inviteToken, walletAddress, kind, bindingSignature }`: firma EIP-712 `FaceBinding` con dominio `{name:"Quorum", version:"1", chainId:84532, verifyingContract:0x0…0}` (igual a `@quorum/wallet`). Con `BASE_SEPOLIA_RPC` usa `publicClient.verifyTypedData` (EOA/1271/6492); sin RPC solo `eoa-demo` (kernel → 503).
+- `POST /api/voters/:id/identity` `{ inviteToken, commitment }` (tras la wallet) → `201 { ok, registeredCount }`.
+- `POST /api/elections/:id/open` (organizador) congela el padrón y **borra las plantillas faciales**. `GET /api/elections/:id/roll` → `{ frozen, groupRoot, scope, merkleTreeDepth, commitments }`.
+- `POST /api/elections/:id/vote` `{ proof }` → `201 Receipt { inclusionId = nullifier, nullifier, index, hash, state:"incluido" }`. Errores: 400 codificación no canónica/opción fuera de rango; 403 `not_eligible` (raíz/scope/prueba); 409 `already_voted` / `closed`. `onchain.txHash` se ignora salvo `QUORUM_ONCHAIN_CAST=true`.
+- `POST /api/voters/:id/voted { inviteToken }` (nuevo, opcional): autodeclaración para el estado "voted"; enviarlo en una petición separada del voto.
+- `GET /api/elections/:id/ledger` → mientras `open` **sin entradas** (`count`, `finalHash`, `proofsPublished:false`); desde `closed` entradas completas. El votante comprueba su inclusión con `GET /receipt/:nullifier`.
+- `POST /close` → `auditable` o **`failed`** (si el verificador rechaza; el `AuditResult` se publica igual). `GET /api/elections/:id/audit` → `{ auditResult, packageDigest, anchorStatus }`. `GET /artifacts` devuelve los bytes exactos con `ETag` = digest.
+- `POST /draw` (organizador, solo `auditable`) → `drawn`; `GET /draw` → `{ seed, n, winners, method, finalHash, candidates, tieBreak }`. El paquete pasa a incluir `draw` y el verificador añade `draw_matches`; nuevo check `commitments_unique`.
