@@ -18,7 +18,7 @@ describe("fixtures de packages/demo-fixtures/protocol", () => {
     expect(AuditResultSchema.safeParse(r).success).toBe(true);
     expect(r.valid).toBe(true);
     expect(r.protocol).toBe("semaphore-ledger");
-    expect(r.checks.map((c) => c.name)).toEqual(["package_schema", "manifest_hash", "group_root", "chain_integrity", "proofs_valid", "nullifiers_unique", "tally_matches", "anchor_matches"]);
+    expect(r.checks.map((c) => c.name)).toEqual(["package_schema", "manifest_hash", "group_root", "commitments_unique", "chain_integrity", "proofs_valid", "nullifiers_unique", "tally_matches", "anchor_matches"]);
     expect(reasonOf(r, "anchor_matches")).toMatch(/no evaluado/);
     expect(r.unsupportedGuarantees.join("\n")).toMatch(/secreto-del-contenido/);
     expect(r.unsupportedGuarantees.join("\n")).toMatch(/resistencia-a-coaccion/);

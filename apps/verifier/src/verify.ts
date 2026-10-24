@@ -16,7 +16,13 @@ export const BASE_SEPOLIA_CHAIN_ID = 84532;
 
 // ---------- esquema del paquete (quorum-audit/1) ----------
 const Hex32 = z.string().regex(/^0x[0-9a-f]{64}$/, "hex de 32 bytes");
-const Decimal = z.string().regex(/^\d+$/, "string decimal");
+/** Módulo del campo escalar de BN254. */
+const SNARK_SCALAR_FIELD = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+/** Decimal canónico (sin ceros a la izquierda ni hex) y < r: evita dos codificaciones del mismo nullifier (C1). */
+const Decimal = z
+  .string()
+  .regex(/^(0|[1-9]\d{0,77})$/, "decimal canónico (sin ceros a la izquierda ni hex)")
+  .refine((v) => BigInt(v) < SNARK_SCALAR_FIELD, "fuera del campo BN254");
 const ProofSchema = z.object({
   merkleTreeDepth: z.number().int().min(1).max(32),
   merkleTreeRoot: Decimal,
@@ -195,6 +201,19 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     checks.push({ name: "group_root", passed: rootOk, reason: rootOk ? `raíz del padrón recomputada y coincide (${pkg.commitments.length} commitments)` : `padrón alterado: ${problems.join("; ")}` });
   }
 
+  // 2b. commitments_unique (M3): un commitment repetido daría dos hojas a la misma credencial en el padrón.
+  {
+    const seen = new Map<bigint, number>();
+    const dups: string[] = [];
+    pkg.commitments.forEach((c, i) => {
+      const k = BigInt(c);
+      const first = seen.get(k);
+      if (first !== undefined) dups.push(`commitment #${i} duplica #${first}`);
+      else seen.set(k, i);
+    });
+    checks.push({ name: "commitments_unique", passed: dups.length === 0, reason: dups.length ? `padrón con duplicados: ${dups.join("; ")}` : `${seen.size} commitments únicos` });
+  }
+
   // 3. chain_integrity
   const scope = expectedScope(pkg.electionId);
   {
@@ -245,12 +264,14 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
 
   // 5. nullifiers_unique
   {
-    const seen = new Map<string, number>();
+    // Se compara el VALOR (BigInt), no el texto: "0"+n y n son el mismo nullifier.
+    const seen = new Map<bigint, number>();
     const dups: string[] = [];
     pkg.ledger.forEach((e, i) => {
-      const first = seen.get(e.proof.nullifier);
+      const key = BigInt(e.proof.nullifier);
+      const first = seen.get(key);
       if (first !== undefined) dups.push(`#${i} repite el nullifier de #${first}`);
-      else seen.set(e.proof.nullifier, i);
+      else seen.set(key, i);
     });
     checks.push({ name: "nullifiers_unique", passed: dups.length === 0, reason: dups.length ? `doble voto: ${dups.join("; ")}` : `${seen.size} nullifiers únicos` });
   }

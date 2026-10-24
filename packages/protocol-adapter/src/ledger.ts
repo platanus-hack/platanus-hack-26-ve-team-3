@@ -22,7 +22,19 @@ export type Ledger = {
   entries: LedgerEntry[];
 };
 
-export type LedgerRejectionCode = "WRONG_ROOT" | "DOUBLE_VOTE" | "INVALID_PROOF" | "WRONG_SCOPE" | "WRONG_DEPTH";
+export type LedgerRejectionCode = "WRONG_ROOT" | "DOUBLE_VOTE" | "INVALID_PROOF" | "WRONG_SCOPE" | "WRONG_DEPTH" | "INVALID_ENCODING";
+
+/** Módulo del campo escalar de BN254 (r). Todo valor de la prueba debe ser < r. */
+export const SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+/**
+ * Decimal canónico: sin ceros a la izquierda, sin signo, sin hex, y < r.
+ * Semaphore/snarkjs aceptan "0"+n o "0x…" como el mismo número; sin esta regla una misma credencial
+ * podría votar dos veces con dos codificaciones del mismo nullifier (hallazgo C1) o sabotear el recuento (A1).
+ */
+export function isCanonicalField(value: unknown): value is string {
+  return typeof value === "string" && /^(0|[1-9]\d{0,77})$/.test(value) && BigInt(value) < SNARK_SCALAR_FIELD;
+}
 
 export class LedgerRejection extends Error {
   constructor(public readonly code: LedgerRejectionCode, message: string) {
@@ -55,12 +67,17 @@ export function finalHash(ledger: Ledger): Hex32 {
  * nullifier no repetido (DOUBLE_VOTE) y prueba Groth16 válida (INVALID_PROOF). Lanza `LedgerRejection`.
  * Semántica de doble voto en Quórum: se RECHAZA la segunda boleta (no hay reemplazo de voto).
  */
-export async function appendBallot(ledger: Ledger, proof: SemaphoreProof, groupRoot: string): Promise<LedgerEntry> {
+export async function appendBallot(ledger: Ledger, proof: SemaphoreProof, groupRoot: string, opts: { optionCount?: number } = {}): Promise<LedgerEntry> {
+  const fields: [string, unknown][] = [["merkleTreeRoot", proof.merkleTreeRoot], ["message", proof.message], ["nullifier", proof.nullifier], ["scope", proof.scope], ...proof.points.map((p, i) => [`points[${i}]`, p] as [string, unknown])];
+  for (const [name, v] of fields) if (!isCanonicalField(v)) throw new LedgerRejection("INVALID_ENCODING", `${name} must be a canonical decimal < BN254 field`);
+  if (proof.points.length !== 8) throw new LedgerRejection("INVALID_ENCODING", "points must have 8 elements");
+  if (opts.optionCount !== undefined && BigInt(proof.message) >= BigInt(opts.optionCount)) throw new LedgerRejection("INVALID_ENCODING", `message ${proof.message} is not an option index < ${opts.optionCount}`);
   if (groupRoot !== ledger.groupRoot) throw new LedgerRejection("WRONG_ROOT", `ledger root ${ledger.groupRoot} != supplied ${groupRoot}`);
   if (proof.merkleTreeRoot !== ledger.groupRoot) throw new LedgerRejection("WRONG_ROOT", `proof root ${proof.merkleTreeRoot} != ledger root ${ledger.groupRoot}`);
   if (proof.scope !== ledger.scope) throw new LedgerRejection("WRONG_SCOPE", `proof scope ${proof.scope} != election scope ${ledger.scope}`);
   if (proof.merkleTreeDepth !== MERKLE_TREE_DEPTH) throw new LedgerRejection("WRONG_DEPTH", `proof depth ${proof.merkleTreeDepth} != ${MERKLE_TREE_DEPTH}`);
-  if (ledger.entries.some((e) => e.proof.nullifier === proof.nullifier)) throw new LedgerRejection("DOUBLE_VOTE", `nullifier ${proof.nullifier} already in ledger`);
+  const n = BigInt(proof.nullifier);
+  if (ledger.entries.some((e) => BigInt(e.proof.nullifier) === n)) throw new LedgerRejection("DOUBLE_VOTE", `nullifier ${proof.nullifier} already in ledger`);
   if (!(await verifyProof(proof))) throw new LedgerRejection("INVALID_PROOF", "Semaphore Groth16 proof does not verify");
   const idx = ledger.entries.length;
   const prevHash = finalHash(ledger);
