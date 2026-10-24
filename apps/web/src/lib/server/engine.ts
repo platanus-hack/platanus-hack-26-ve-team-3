@@ -37,8 +37,9 @@ import { requireElection, requireEngine, requireVoter } from "./elections";
 import { env } from "./env";
 import { HttpError, type ApiCode } from "./errors";
 import { withLock } from "./lock";
+import { freezeReviews } from "./reviews";
 import { freezeRoomPolicy, rollPolicyNote } from "./rooms";
-import { getStore, type EngineState, type RollPolicy } from "./store";
+import { getStore, type EngineState, type ManualApprovals, type RollPolicy } from "./store";
 
 type ReceiptT = z.infer<typeof Receipt>;
 
@@ -87,8 +88,9 @@ export async function registerIdentity(voterId: string, input: { inviteToken: st
  * nada y devuelve la elección tal cual (idempotente).
  */
 export async function openElection(id: string, opts: { auto?: boolean } = {}): Promise<Election> {
-  // engine → room (las entradas a la sala toman solo `room:`): la sala no admite a nadie mientras se congela el padrón.
-  return withLock(`engine:${id}`, () => withLock(`room:${id}`, async () => {
+  // engine → room → enroll (las entradas a la sala toman solo `room:`, el rostro solo `enroll:`): nadie entra ni se
+  // inscribe mientras se congela el padrón, y ninguna revisión manual (D-21) queda a medio crear.
+  return withLock(`engine:${id}`, () => withLock(`room:${id}`, () => withLock(`enroll:${id}`, async () => {
     const e = await requireElection(id);
     if (opts.auto && !scheduleDue(e, now().getTime())) return e;
     if (e.status !== "registration") throw new HttpError("closed", `Solo se abre desde inscripción (estado ${e.status})`, 409);
@@ -98,7 +100,9 @@ export async function openElection(id: string, opts: { auto?: boolean } = {}): P
     const root = computeGroupRoot(commitments);
     // Sala abierta: se cierra sola al abrir la votación y su política queda fijada para el paquete de auditoría.
     const rollPolicy = await freezeRoomPolicy(id);
-    const next: EngineState = { ...engine, roll: [], commitments, ledger: createLedger(id, root), rollPolicy };
+    // D-21: las revisiones manuales pendientes se rechazan solas; se fija cuántas se aprobaron (sin ids).
+    const { manualApprovals } = await freezeReviews(id, e.eligibility?.method);
+    const next: EngineState = { ...engine, roll: [], commitments, ledger: createLedger(id, root), rollPolicy, manualApprovals };
     const store = await getStore();
     await store.putEngine(next);
     // A2: con el padrón congelado ya no hace falta el dedupe facial → se borran las plantillas (descriptores cifrados).
@@ -107,7 +111,7 @@ export async function openElection(id: string, opts: { auto?: boolean } = {}): P
     const opened: Election = { ...e, status: "open", groupRoot: root, votingStartsAt: now().toISOString() };
     await saveElection(opened);
     return opened;
-  }));
+  })));
 }
 
 /** ¿Toca abrir sola? Fase `registration` con hora programada ya alcanzada. */
@@ -277,8 +281,21 @@ export async function getLedger(id: string) {
 export type PublishedRollPolicy = RollPolicy & { note: string };
 export { OPEN_ROOM_NOTE } from "./rooms"; // D-19: las notas viven junto a la política del censo
 
-function withRollPolicy(pkg: AuditPackage, policy: RollPolicy | null | undefined): AuditPackage & { rollPolicy?: PublishedRollPolicy } {
-  return policy ? { ...pkg, rollPolicy: { ...policy, note: rollPolicyNote(policy) } } : pkg;
+/** D-21: texto que acompaña a `manualApprovals` en el paquete. */
+export const MANUAL_APPROVALS_NOTE =
+  "inscripciones aprobadas manualmente por el organizador, en persona, tras una coincidencia facial con alguien ya inscrito " +
+  "(p. ej. gemelos idénticos con credenciales distintas). Se decide durante la inscripción, después de publicar el manifiesto: " +
+  "va fuera de manifestHash/checksums y el verificador no puede comprobarlo";
+export type PublishedManualApprovals = ManualApprovals & { note: string };
+
+function withRollPolicy(pkg: AuditPackage, engine: Pick<EngineState, "rollPolicy" | "manualApprovals">): AuditPackage & { rollPolicy?: PublishedRollPolicy; manualApprovals?: PublishedManualApprovals } {
+  const policy = engine.rollPolicy;
+  const manual = engine.manualApprovals;
+  return {
+    ...pkg,
+    ...(policy ? { rollPolicy: { ...policy, note: rollPolicyNote(policy) } } : {}),
+    ...(manual ? { manualApprovals: { ...manual, note: MANUAL_APPROVALS_NOTE } } : {}),
+  };
 }
 
 function serialize(pkg: AuditPackage) {
@@ -343,7 +360,7 @@ export async function closeElection(id: string): Promise<Election> {
       }
     }
 
-    const pkg = withRollPolicy(buildAuditPackage({ electionId: id, manifest: engine.manifest, commitments: engine.commitments, ledger: engine.ledger, tally: t, anchor, generatedAt: now().toISOString() }), engine.rollPolicy);
+    const pkg = withRollPolicy(buildAuditPackage({ electionId: id, manifest: engine.manifest, commitments: engine.commitments, ledger: engine.ledger, tally: t, anchor, generatedAt: now().toISOString() }), engine);
     if (pkg.manifestHash !== e.manifestHash) throw new HttpError("unavailable", "El manifiesto guardado no coincide con el publicado");
     const { json, digest } = serialize(pkg);
     const auditResult = await verifyStored(json, digest);
@@ -388,7 +405,7 @@ export async function drawElection(id: string): Promise<Election> {
       throw new HttpError("closed", err instanceof Error && err.message.startsWith("NO_VOTES") ? "No hay votos válidos: N no está definido" : "No se pudo sortear", 409);
     }
     const prev = JSON.parse(engine.packageJson) as AuditPackage;
-    const pkg = withRollPolicy(buildAuditPackage({ electionId: id, manifest: engine.manifest, commitments: engine.commitments, ledger: engine.ledger, tally: engine.tally, anchor: prev.anchor, generatedAt: now().toISOString(), draw }), engine.rollPolicy);
+    const pkg = withRollPolicy(buildAuditPackage({ electionId: id, manifest: engine.manifest, commitments: engine.commitments, ledger: engine.ledger, tally: engine.tally, anchor: prev.anchor, generatedAt: now().toISOString(), draw }), engine);
     const { json, digest } = serialize(pkg);
     const auditResult = await verifyStored(json, digest);
     await (await getStore()).putEngine({ ...engine, packageJson: json, packageDigest: digest, auditResult });

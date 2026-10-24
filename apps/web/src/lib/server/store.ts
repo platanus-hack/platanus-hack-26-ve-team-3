@@ -41,6 +41,32 @@ export interface EngineState {
    * paquete de auditoría para declarar honestamente que la elegibilidad dependió de la deduplicación facial demo.
    */
   rollPolicy?: RollPolicy | null;
+  /**
+   * D-21: inscripciones aprobadas a mano por el organizador tras coincidencia facial, fijado al congelar el padrón
+   * (`open`). Solo conteo y método: sin ids. Va al paquete de auditoría fuera de `manifestHash`/`checksums`.
+   */
+  manualApprovals?: ManualApprovals | null;
+}
+
+export interface ManualApprovals {
+  count: number;
+  method: "organizer-in-person";
+}
+
+/**
+ * D-21: revisión manual de un posible duplicado facial. NUNCA guarda con quién coincidió ni la similitud (A3):
+ * solo que coincidió con "alguien ya inscrito". La plantilla del votante en revisión vive cifrada en `faceTemplates`
+ * con `pending: true` (y se borra al rechazar o al congelar el padrón, como todas).
+ */
+export interface FaceReview {
+  reviewId: string;
+  electionId: string;
+  voterId: string;
+  createdAt: string;
+  reason: "face_match";
+  status: "pending" | "approved" | "rejected";
+  decidedAt: string | null;
+  decidedBy: "organizer" | "auto-open" | null;
 }
 
 /** Declaración del censo abierto en sala (va al paquete de auditoría; sin ids ni alias). */
@@ -106,6 +132,8 @@ export interface FaceTemplate {
   dims: number;
   sealed: SealedBlob;
   createdAt: string;
+  /** D-21: en revisión manual (aún no habilitado). Igual cuenta para el dedupe de los que lleguen después. */
+  pending?: boolean;
 }
 
 export interface Store {
@@ -131,6 +159,13 @@ export interface Store {
   listFaceTemplates(electionId: string): Promise<FaceTemplate[]>;
   /** A2: al congelar el padrón se borran todas las plantillas faciales de la elección. Devuelve cuántas. */
   deleteFaceTemplates(electionId: string): Promise<number>;
+  /** D-21: borra la plantilla de un votante (revisión rechazada). */
+  deleteFaceTemplate(voterId: string): Promise<void>;
+  // revisiones manuales (D-21)
+  getReview(reviewId: string): Promise<FaceReview | null>;
+  getReviewByVoter(voterId: string): Promise<FaceReview | null>;
+  listReviews(electionId: string): Promise<FaceReview[]>;
+  putReview(review: FaceReview): Promise<void>;
   // token del organizador (solo su sha256)
   getOrganizerTokenHash(electionId: string): Promise<string | null>;
   putOrganizerTokenHash(electionId: string, tokenHash: string): Promise<void>;
@@ -160,6 +195,7 @@ type Collections = {
   rooms: Map<string, Room>; // key code
   badgeUses: Map<string, BadgeUse>; // key `${electionId}:${badgeHash}`
   badgeAllowlists: Map<string, { hashes: string[] }>; // key electionId
+  reviews: Map<string, FaceReview>; // key reviewId
 };
 
 type CollectionName = keyof Collections;
@@ -175,6 +211,7 @@ export class MemoryStore implements Store {
     rooms: new Map(),
     badgeUses: new Map(),
     badgeAllowlists: new Map(),
+    reviews: new Map(),
   };
 
   /** Hook para persistir una colección tras una mutación (no-op en memoria). */
@@ -252,6 +289,27 @@ export class MemoryStore implements Store {
     await this.persist("faceTemplates");
     return n;
   }
+  async deleteFaceTemplate(voterId: string) {
+    if (this.data.faceTemplates.delete(voterId)) await this.persist("faceTemplates");
+  }
+  async getReview(reviewId: string) {
+    const r = this.data.reviews.get(reviewId);
+    return r ? structuredClone(r) : null;
+  }
+  async getReviewByVoter(voterId: string) {
+    for (const r of this.data.reviews.values()) if (r.voterId === voterId) return structuredClone(r);
+    return null;
+  }
+  async listReviews(electionId: string) {
+    return [...this.data.reviews.values()]
+      .filter((r) => r.electionId === electionId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map((r) => structuredClone(r));
+  }
+  async putReview(review: FaceReview) {
+    this.data.reviews.set(review.reviewId, structuredClone(review));
+    await this.persist("reviews");
+  }
   async getOrganizerTokenHash(electionId: string) {
     return this.data.organizerTokens.get(electionId)?.tokenHash ?? null;
   }
@@ -306,6 +364,7 @@ export class MemoryStore implements Store {
     for (const [k, v] of this.data.rooms) if (v.electionId === electionId) this.data.rooms.delete(k);
     for (const [k, v] of this.data.badgeUses) if (v.electionId === electionId) this.data.badgeUses.delete(k);
     this.data.badgeAllowlists.delete(electionId);
+    for (const [k, v] of this.data.reviews) if (v.electionId === electionId) this.data.reviews.delete(k);
     for (const name of Object.keys(this.data) as CollectionName[]) await this.persist(name);
   }
 

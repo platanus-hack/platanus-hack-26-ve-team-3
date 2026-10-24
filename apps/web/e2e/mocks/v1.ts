@@ -85,6 +85,11 @@ export class MockV1 {
   anchorTx: string | null = null;
   /** `POST /face/enroll` responde 409 `duplicate_identity` (rostro ya inscrito). */
   faceDuplicate = false;
+  /** D-21: `POST /face/enroll` responde 202 `pending_review` (coincidencia facial con credencial propia). */
+  facePending = false;
+  /** D-21: estado de la revisión manual del votante del mock (`null` = sin revisión). */
+  review: null | "pending" | "approved" | "rejected" = null;
+  reviewDecisions: unknown[] = [];
   /**
    * Inicio programado (`votingStartsAt`). Como el servidor real: la primera petición después de esa hora pasa la
    * fase de `registration` a `open` (y cierra la sala). `null` = la abre el organizador a mano.
@@ -186,11 +191,40 @@ export class MockV1 {
     if (p === `/api/invite/${E2E.token}`)
       return this.json(route, {
         election: { id: E2E.electionId, title: E2E.title, kind: "multiple", options: E2E.options, status: this.phase, endsAt: "2026-10-24T22:00:00.000Z", votingStartsAt: this.votingStartsAt },
-        voter: { id: E2E.voterId, displayName: "Vecina Ana (ficticia)", walletAddress: this.wallet?.walletAddress ?? null, livenessPassedAt: null, votedAt: null },
+        voter: {
+          id: E2E.voterId,
+          displayName: "Vecina Ana (ficticia)",
+          walletAddress: this.wallet?.walletAddress ?? null,
+          livenessPassedAt: this.review === "approved" ? "2026-10-24T14:00:00.000Z" : null,
+          votedAt: null,
+          review: this.review === "pending" || this.review === "rejected" ? this.review : null,
+        },
         serverNow: new Date().toISOString(),
       });
     if (p.startsWith("/api/invite/")) return this.json(route, { error: "invitación no existe", code: "not_found" }, 404);
     if (p === "/api/face/enroll" && m === "POST" && this.faceDuplicate) return this.json(route, { error: "Este rostro ya está inscrito en esta votación", code: "duplicate_identity" }, 409);
+    if (p === "/api/face/enroll" && m === "POST" && (this.facePending || this.review === "pending")) {
+      this.review = "pending";
+      return this.json(route, { status: "pending_review" }, 202);
+    }
+    if (p === "/api/face/review" && m === "POST") {
+      const st = this.review === "pending" ? { status: "pending_review" } : this.review === "approved" ? { status: "approved", faceBindingHash: `0x${"5a".repeat(32)}` } : this.review === "rejected" ? { status: "rejected" } : { status: "none" };
+      return this.json(route, st);
+    }
+    if (p === `${E}/reviews` && m === "GET") {
+      if (!this.isOrg(route)) return this.json(route, { error: "falta token", code: "forbidden" }, 401);
+      const reviews = this.review
+        ? [{ reviewId: "rv-fixture-1", createdAt: "2026-10-24T14:05:00.000Z", displayName: "Participante", method: "event-badge", reason: "face_match", status: this.review, decidedAt: this.review === "pending" ? null : "2026-10-24T14:06:00.000Z", decidedBy: this.review === "pending" ? null : "organizer" }]
+        : [];
+      return this.json(route, { reviews, pending: this.review === "pending" ? 1 : 0, approved: this.review === "approved" ? 1 : 0, maxPending: 10 });
+    }
+    if (p === `${E}/reviews/rv-fixture-1` && m === "POST") {
+      if (!this.isOrg(route)) return this.json(route, { error: "falta token", code: "forbidden" }, 401);
+      if (this.review !== "pending") return this.json(route, { error: "Esta revisión ya se decidió", code: "closed" }, 409);
+      this.reviewDecisions.push(body);
+      this.review = body.decision === "approve" ? "approved" : "rejected";
+      return this.json(route, { reviewId: "rv-fixture-1", createdAt: "2026-10-24T14:05:00.000Z", displayName: "Participante", method: "event-badge", reason: "face_match", status: this.review, decidedAt: "2026-10-24T14:06:00.000Z", decidedBy: "organizer" });
+    }
     if (p === "/api/face/enroll" && m === "POST") return this.json(route, { ok: true, faceBindingHash: `0x${"5a".repeat(32)}`, voteNonce: `0x${"01".repeat(32)}` });
     if (p === `/api/voters/${E2E.voterId}/wallet` && m === "POST") {
       if (this.delays.wallet) await new Promise((r) => setTimeout(r, this.delays.wallet));
@@ -318,6 +352,7 @@ export class MockV1 {
       if (this.phase !== from) return this.json(route, { error: `fase ${this.phase}`, code: "closed" }, 409);
       this.phase = to;
       if (to === "open") this.votingStartsAt = new Date().toISOString();
+      if (to === "open" && this.review === "pending") this.review = "rejected"; // D-21: se rechaza sola al abrir
       if (to === "open" && this.room) this.room = { ...this.room, open: false, closedReason: this.room.closedReason ?? "election-opened" };
       return this.json(route, this.election());
     }

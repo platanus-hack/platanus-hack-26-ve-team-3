@@ -292,17 +292,17 @@ describe("PUT /api/elections/:id/eligibility", () => {
 });
 
 describe("Credencial + rostro obligatorio → paquete de auditoría", () => {
-  it("dos credenciales de la misma persona: el rostro la frena; rollPolicy event-badge verificado", async () => {
+  it("dos credenciales de la misma persona: el rostro la frena (revisión manual D-21, se rechaza sola al abrir); rollPolicy event-badge verificado", async () => {
     const org = await setup({ method: "event-badge", badgeCheck: "list", badgeAllowlist: ["ana", "beto", "ana-otra"] });
     const a = (await scan(org.code, `${P}ana`)).json;
     const b = (await scan(org.code, `${P}beto`)).json;
     const c = (await scan(org.code, `${P}ana-otra`)).json;
     const ra = await register(org, a, 901);
     await register(org, b, 902);
-    // Misma persona con otra credencial → dedupe facial 409.
+    // Misma persona con otra credencial → el dedupe facial la frena: queda en revisión manual (D-21), no inscrita.
     const rc = await register(org, c, 901);
-    expect(rc.enroll.status).toBe(409);
-    expect(rc.enroll.json.code).toBe("duplicate_identity");
+    expect(rc.enroll.status).toBe(202);
+    expect(rc.enroll.json).toEqual({ status: "pending_review" });
 
     const vs = await call(listVoters, { params: { id: org.id }, headers: org.auth });
     expect((vs.json.voters as { source: string; displayName: string }[]).every((v) => v.source === "badge" && v.displayName === "Participante")).toBe(true);
@@ -315,6 +315,7 @@ describe("Credencial + rostro obligatorio → paquete de auditoría", () => {
 
     const art = await call(artifacts, { params: { id: org.id } });
     expect(art.json.rollPolicy).toMatchObject({ kind: "event-badge", maxSeats: 60, check: "list", face: "full", joined: 3, enrolled: 2, eligibility: "badge-once+face-dedupe-demo" });
+    expect(art.json.manualApprovals).toMatchObject({ count: 0, method: "organizer-in-person" });
     expect(art.json.rollPolicy.note).toMatch(/la credencial demuestra que es participante del evento y se usa una sola vez; el rostro impide que una misma persona use varias credenciales/);
     const raw = JSON.stringify(art.json);
     for (const s of ["ana", "beto", badgeHash(org.id, "ana"), a.voterId]) expect(raw).not.toContain(s);

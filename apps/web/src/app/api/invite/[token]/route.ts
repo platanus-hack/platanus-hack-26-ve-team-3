@@ -1,9 +1,11 @@
 import { HttpError, json, route } from "@/lib/server/errors";
 import { getStore } from "@/lib/server/store";
+import { reviewStateOf } from "@/lib/server/reviews";
 import { syncScheduleForToken } from "@/lib/server/schedule";
 
 /**
- * GET /api/invite/:token → { election: {id,title,kind,options,status,endsAt,votingStartsAt}, serverNow, voter: {id,displayName,walletAddress,livenessPassedAt,votedAt} }
+ * GET /api/invite/:token → { election: {id,title,kind,options,status,endsAt,votingStartsAt}, serverNow, voter: {id,displayName,walletAddress,livenessPassedAt,votedAt,review} }
+ * `review` (D-21): "pending" | "rejected" | null — revisión manual tras coincidencia facial.
  * 404 si no existe. Nunca devuelve el teléfono.
  */
 export const GET = route<{ token: string }>(async (_req, { token }) => {
@@ -15,7 +17,7 @@ export const GET = route<{ token: string }>(async (_req, { token }) => {
   if (!election) throw new HttpError("not_found", "Elección no encontrada");
   return json({
     election: { id: election.id, title: election.title, kind: election.kind, options: election.options, status: election.status, endsAt: election.endsAt, votingStartsAt: election.votingStartsAt ?? null },
-    voter: { id: voter.id, displayName: voter.displayName, walletAddress: voter.walletAddress, livenessPassedAt: voter.livenessPassedAt, votedAt: voter.votedAt },
+    voter: { id: voter.id, displayName: voter.displayName, walletAddress: voter.walletAddress, livenessPassedAt: voter.livenessPassedAt, votedAt: voter.votedAt, review: await reviewStateOf(voter.id, election.status) },
     serverNow: new Date().toISOString(),
   });
 });

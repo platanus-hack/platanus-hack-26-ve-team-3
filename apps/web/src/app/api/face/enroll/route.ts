@@ -4,10 +4,15 @@ import { enrollFace } from "@/lib/server/face";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { syncScheduleForVoter } from "@/lib/server/schedule";
 
-/** POST /api/face/enroll → { ok, voteNonce }. Descriptor cifrado ligado a voterId; nunca imágenes. */
+/**
+ * POST /api/face/enroll → 201 { ok, faceBindingHash, voteNonce } | 202 { status: "pending_review" } (D-21).
+ * Descriptor cifrado ligado a voterId; nunca imágenes. El 202 solo aplica a quien entró con credencial del evento.
+ */
 export const POST = route(async (req) => {
   rateLimit(req, "face:enroll", 20);
   const input = await parseBody(req, FaceEnrollInput);
   await syncScheduleForVoter(input.voterId);
-  return json(await enrollFace(input), { status: 201 });
+  // D-21: crear revisiones manuales tiene su propio tope por IP (3 cada 10 min), además del tope por elección.
+  const res = await enrollFace(input, { onNewReview: () => rateLimit(req, "face:review-new", 3, 10 * 60_000) });
+  return json(res, { status: "status" in res ? 202 : 201 });
 });

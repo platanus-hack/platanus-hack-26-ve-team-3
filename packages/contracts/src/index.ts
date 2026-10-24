@@ -186,6 +186,43 @@ export const InviteRequest = z.object({ electionId: z.string(), voterIds: z.arra
 /** Respuesta de enrolamiento v1: incluye el `faceBindingHash` que la wallet debe firmar. */
 export const FaceEnrollResult = z.object({ ok: z.literal(true), faceBindingHash: z.string().regex(/^0x[0-9a-f]{64}$/), voteNonce: z.string() });
 export const FaceEnrollInput = z.object({ voterId: z.string(), inviteToken: z.string(), descriptor: z.array(z.number()).min(64).max(2048), consent: z.literal(true) });
+/**
+ * D-21 (revisión manual de duplicados): `POST /api/face/enroll` → 202 cuando el rostro coincide con alguien ya inscrito
+ * pero el votante entró con una credencial del evento distinta y no usada. No revela con quién coincidió ni la similitud.
+ */
+export const FaceEnrollPending = z.object({ status: z.literal("pending_review") });
+export const FaceEnrollResponse = z.union([FaceEnrollResult, FaceEnrollPending]);
+export type FaceEnrollResponse = z.infer<typeof FaceEnrollResponse>;
+/** `POST /api/face/review` (votante, polling): estado de su revisión. `faceBindingHash` solo al aprobar. */
+export const FaceReviewStatusInput = z.object({ voterId: z.string().min(1), inviteToken: z.string().min(1) });
+export const FaceReviewStatus = z.object({
+  status: z.enum(["none", "pending_review", "approved", "rejected"]),
+  faceBindingHash: z.string().regex(/^0x[0-9a-f]{64}$/).optional(),
+});
+export type FaceReviewStatus = z.infer<typeof FaceReviewStatus>;
+/** Organizador: decisión sobre una revisión pendiente (`POST /api/elections/:id/reviews/:reviewId`). */
+export const ReviewDecisionInput = z.object({ decision: z.enum(["approve", "reject"]) });
+export type ReviewDecisionInput = z.infer<typeof ReviewDecisionInput>;
+/** Una revisión tal como la ve el organizador: sin datos biométricos, sin con quién coincidió ni la similitud. */
+export const ReviewSummary = z.object({
+  reviewId: z.string(),
+  createdAt: z.string().datetime(),
+  displayName: z.string(),
+  method: z.enum(["event-badge"]),
+  reason: z.literal("face_match"),
+  status: z.enum(["pending", "approved", "rejected"]),
+  decidedAt: z.string().datetime().nullable(),
+  decidedBy: z.enum(["organizer", "auto-open"]).nullable(),
+});
+export type ReviewSummary = z.infer<typeof ReviewSummary>;
+/** `GET /api/elections/:id/reviews`: lista + conteos; `maxPending` es el tope de pendientes por elección. */
+export const ReviewsListResponse = z.object({
+  reviews: z.array(ReviewSummary),
+  pending: z.number().int().min(0),
+  approved: z.number().int().min(0),
+  maxPending: z.number().int().min(1),
+});
+export type ReviewsListResponse = z.infer<typeof ReviewsListResponse>;
 /** v1 (hallazgo A3): exige `inviteToken` y la respuesta NO revela similitud ni umbral (evita usarla como oráculo). */
 export const FaceVerifyInput = z.object({ voterId: z.string(), inviteToken: z.string().min(1), descriptor: z.array(z.number()).min(64).max(2048) });
 export const FaceVerifyResult = z.object({ ok: z.boolean(), voteNonce: z.string().nullable(), mode: z.literal("demo-liveness") });
@@ -321,6 +358,8 @@ export const InviteResponse = z.object({
     walletAddress: z.string().nullable(),
     livenessPassedAt: z.string().nullable(),
     votedAt: z.string().nullable(),
+    /** D-21: revisión manual en curso o rechazada (null/ausente = sin revisión o aprobada). */
+    review: z.enum(["pending", "rejected"]).nullable().optional(),
   }),
 });
 export type InviteResponse = z.infer<typeof InviteResponse>;

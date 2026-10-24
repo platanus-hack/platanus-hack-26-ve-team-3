@@ -98,6 +98,12 @@ const EventBadgePolicySchema = z.object({
   note: z.string().optional(),
 }).strict();
 const RollPolicySchema = z.discriminatedUnion("kind", [OpenRoomPolicySchema, EventBadgePolicySchema]);
+/** D-21: inscripciones aprobadas a mano por el organizador tras coincidencia facial (solo conteo, sin ids). */
+const ManualApprovalsSchema = z.object({
+  count: z.number().int().min(0),
+  method: z.literal("organizer-in-person"),
+  note: z.string().optional(),
+}).strict();
 const TallySchema = z.object({ counts: z.array(z.number().int().min(0)), invalid: z.number().int().min(0), total: z.number().int().min(0) }).strict();
 export const AuditPackageSchema = z.object({
   version: z.literal("quorum-audit/1"),
@@ -129,6 +135,7 @@ export const AuditPackageSchema = z.object({
   generatedAt: z.string().optional(),
   draw: DrawSchema.optional(),
   rollPolicy: RollPolicySchema.optional(),
+  manualApprovals: ManualApprovalsSchema.optional(),
 }).strict();
 export type AuditPackage = z.infer<typeof AuditPackageSchema>;
 
@@ -565,6 +572,18 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
           `declarado por el organizador fuera de manifestHash/checksums, el verificador no puede comprobarlo)`,
       );
     }
+  }
+
+  // 10. Aprobaciones manuales (D-21, declarativa). Se deciden durante la inscripción, después de publicar el manifiesto:
+  // no pueden entrar en manifestHash y nada criptográfico las respalda. Se muestran para que cualquiera las vea.
+  if (pkg.manualApprovals && pkg.manualApprovals.count > 0) {
+    const n = pkg.manualApprovals.count;
+    unsupported.push(
+      `aprobacion-manual: ${n} ${n === 1 ? "inscripción aprobada" : "inscripciones aprobadas"} manualmente por el organizador tras coincidencia facial ` +
+        `(método organizer-in-person: el organizador vio a la persona y su credencial; p. ej. gemelos idénticos). ` +
+        `Declarado por el organizador fuera de manifestHash/checksums, el verificador no puede comprobarlo; ` +
+        `un organizador malicioso podría aprobar duplicados, por eso el número es público`,
+    );
   }
 
   return finish({ electionId: pkg.electionId, protocol: "semaphore-ledger" });
