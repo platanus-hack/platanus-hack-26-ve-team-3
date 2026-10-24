@@ -134,7 +134,7 @@ test("modo continuo real · casos límite: recargas, dos pestañas, cierre a med
   await ana.p.getByRole("button", { name: "Verificar ahora" }).click();
   await expect(ana.p.getByTestId("audit-verdict")).toContainText("verificado", { timeout: 120_000 });
   const mine = ana.p.locator("#mi-voto");
-  await expect(mine.getByText("Tomado del comprobante guardado en este navegador.")).toBeVisible({ timeout: 15_000 });
+  await expect(mine.getByText("Tomado del comprobante de este teléfono.")).toBeVisible({ timeout: 15_000 });
   await mine.getByRole("button", { name: "Comprobar" }).click();
   await expect(ana.p.getByTestId("my-vote-result")).toContainText("Tu boleta está en el paquete que verificaste", { timeout: 30_000 });
 
