@@ -37,10 +37,6 @@ export const env = {
     const v = str("ORGANIZER_PRIVATE_KEY");
     return v && /^0x[0-9a-fA-F]{64}$/.test(v) ? (v as `0x${string}`) : undefined;
   },
-  /** C2: el txHash on-chain del voto (Cast desde la wallet del votante) permite correlacionar wallet ↔ voto por tiempo. Apagado por defecto. */
-  get onchainCastEnabled(): boolean {
-    return str("QUORUM_ONCHAIN_CAST") === "true";
-  },
   get registryAddress(): string | undefined {
     const v = str("NEXT_PUBLIC_REGISTRY_ADDRESS");
     return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? v : undefined;

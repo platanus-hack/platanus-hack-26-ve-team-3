@@ -321,8 +321,9 @@ describe("AT-10 privacidad de datos públicos y de la DB (public_data_privacy)",
     for (const i of order) {
       const v = voters[i];
       const proof = await ballot(org.id, v.identity.privateKey, choiceOf.get(v.id)!);
-      // C2: el body solo admite {proof, onchain?}; campos que ligarían persona ↔ boleta se descartan y no se guardan.
-      const res = await call(vote, { params: { id: org.id }, body: { proof, onchain: { txHash: `0x${"ab".repeat(32)}` }, voterId: v.id, inviteToken: v.inviteToken, walletAddress: v.account.address, commitment: v.identity.commitment } });
+      // C2: el body solo admite {proof}; campos que ligarían persona ↔ boleta se descartan y no se guardan
+      // (y `onchain` se rechaza con 400: ver flow.test "solo ancla on-chain").
+      const res = await call(vote, { params: { id: org.id }, body: { proof, voterId: v.id, inviteToken: v.inviteToken, walletAddress: v.account.address, commitment: v.identity.commitment } });
       expect(res.status).toBe(201);
       expect(res.json).not.toHaveProperty("txHash");
       expect((await call(voted, { params: { id: v.id }, body: { inviteToken: v.inviteToken } })).status).toBe(200);

@@ -45,8 +45,7 @@ type ReceiptT = z.infer<typeof Receipt>;
 // ---------------------------------------------------------------------------
 // Hooks de prueba (sin red): transporte del ancla, lector del ancla y lector de tx on-chain.
 // ---------------------------------------------------------------------------
-type OnchainReader = (txHash: Hex) => Promise<{ status: "success" | "reverted"; logAddresses: string[] }>;
-const hooks: { anchorTransport?: AnchorTransport; anchorReader?: AnchorReader; onchainReader?: OnchainReader; now?: () => Date } = {};
+const hooks: { anchorTransport?: AnchorTransport; anchorReader?: AnchorReader; now?: () => Date } = {};
 export function setEngineHooksForTests(h: typeof hooks) {
   for (const k of Object.keys(hooks) as (keyof typeof hooks)[]) delete hooks[k];
   Object.assign(hooks, h);
@@ -136,34 +135,15 @@ const REJECTION_MESSAGE: Record<string, string> = {
   INVALID_ENCODING: "Prueba con codificación no canónica o mensaje fuera de las opciones",
 };
 
-async function checkOnchain(e: Election, txHash: Hex): Promise<"verificado" | "no verificable" | "fallo detectado"> {
-  const registry = e.registryAddress ?? env.registryAddress;
-  let reader = hooks.onchainReader;
-  if (!reader && env.rpcUrl) {
-    const client = createPublicClient({ chain: baseSepolia, transport: http(env.rpcUrl) });
-    reader = async (h) => {
-      const r = await client.getTransactionReceipt({ hash: h });
-      return { status: r.status, logAddresses: r.logs.map((l) => l.address) };
-    };
-  }
-  if (!reader || !registry) return "no verificable";
-  try {
-    const r = await reader(txHash);
-    const fromRegistry = r.logAddresses.some((a) => isAddressEqual(a as Address, registry as Address));
-    return r.status === "success" && fromRegistry ? "verificado" : "fallo detectado";
-  } catch {
-    return "no verificable";
-  }
-}
-
 export async function castVote(id: string, input: CastVoteInput): Promise<ReceiptT> {
   const e0 = await requireElection(id);
   if (e0.status !== "open") throw new HttpError("closed", "La elección no está abierta para votar");
   const proof = input.proof as unknown as SemaphoreProof;
-  // C2: el txHash de un Cast enviado desde la wallet del votante liga wallet ↔ boleta por tiempo. Apagado por defecto
-  // (QUORUM_ONCHAIN_CAST=false): se ignora y no se guarda. Decisión pendiente de José.
-  const onchain = env.onchainCastEnabled ? input.onchain : undefined;
-  const onchainStatus = onchain ? await checkOnchain(e0, onchain.txHash as Hex) : undefined;
+  // C2 + decisión de José ("solo ancla on-chain"): el único registro on-chain es el ancla del organizador al cierre.
+  // Un `Cast` desde la wallet del votante ligaría wallet ↔ boleta por tiempo, así que `onchain` se RECHAZA (400).
+  if (input.onchain !== undefined) {
+    throw new HttpError("onchain_not_supported", "Solo ancla on-chain: el voto no admite registro on-chain desde la wallet del votante (campo `onchain`)");
+  }
   return withLock(`engine:${id}`, async () => {
     const e = await requireElection(id);
     if (e.status !== "open") throw new HttpError("closed", "La elección no está abierta para votar");
@@ -177,7 +157,7 @@ export async function castVote(id: string, input: CastVoteInput): Promise<Receip
       throw err;
     }
     const includedAt = now().toISOString();
-    engine.receipts[proof.nullifier] = { includedAt, ...(onchain ? { txHash: onchain.txHash, onchainStatus } : {}) };
+    engine.receipts[proof.nullifier] = { includedAt };
     await (await getStore()).putEngine(engine);
     return Receipt.parse({
       electionId: id,
@@ -188,7 +168,6 @@ export async function castVote(id: string, input: CastVoteInput): Promise<Receip
       receivedAt: includedAt,
       includedAt,
       state: "incluido",
-      ...(onchain ? { txHash: onchain.txHash, onchainStatus } : {}),
     });
   });
 }

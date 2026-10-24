@@ -424,20 +424,21 @@ describe("voto: rechazos", () => {
     expect(late.json.code).toBe("closed");
   }, 60_000);
 
-  it("C2: onchain.txHash se ignora por defecto; con QUORUM_ONCHAIN_CAST=true se comprueba contra el registro", async () => {
+  it("solo ancla on-chain (decisión de José): POST /vote con `onchain` responde 400 onchain_not_supported y no incluye la boleta", async () => {
     vi.stubEnv("NEXT_PUBLIC_REGISTRY_ADDRESS", "0x00000000000000000000000000000000000000aa");
+    vi.stubEnv("QUORUM_ONCHAIN_CAST", "true"); // ni siquiera con el flag antiguo
     const org = await setupRegistration();
     const v1 = await register(org, 61);
-    const v2 = await register(org, 62);
     await openIt(org);
-    const tx = `0x${"ab".repeat(32)}`;
-    const r1 = await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v1.identity.privateKey, 0), onchain: { txHash: tx } } });
-    expect(r1.status).toBe(201);
-    expect(r1.json).not.toHaveProperty("txHash");
-    vi.stubEnv("QUORUM_ONCHAIN_CAST", "true");
-    setEngineHooksForTests({ onchainReader: async () => ({ status: "success", logAddresses: ["0x00000000000000000000000000000000000000AA"] }) });
-    const r2 = await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v2.identity.privateKey, 0), onchain: { txHash: tx } } });
-    expect(r2.json).toMatchObject({ txHash: tx, onchainStatus: "verificado" });
+    const proof = await ballot(org.id, v1.identity.privateKey, 0);
+    const r1 = await call(vote, { params: { id: org.id }, body: { proof, onchain: { txHash: `0x${"ab".repeat(32)}` } } });
+    expect(r1.status).toBe(400);
+    expect(r1.json).toMatchObject({ code: "onchain_not_supported" });
+    expect((await call(ledger, { params: { id: org.id } })).json).toMatchObject({ count: 0 });
+    // La misma prueba sin `onchain` sí entra (el rechazo no consumió el nullifier).
+    const r2 = await call(vote, { params: { id: org.id }, body: { proof } });
+    expect(r2.status).toBe(201);
+    expect(r2.json).not.toHaveProperty("txHash");
   }, 60_000);
 });
 

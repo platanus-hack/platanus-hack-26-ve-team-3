@@ -235,7 +235,7 @@ export const AuditResult = z.object({
 });
 export type AuditResult = z.infer<typeof AuditResult>;
 
-export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity"]) });
+export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity", "onchain_not_supported"]) });
 
 // ---------------------------------------------------------------------------
 // Respuestas HTTP del Contrato v1 tal como las implementa el backend (apps/web/src/lib/server/engine.ts).
