@@ -47,21 +47,21 @@ export const Election = z.object({
   eligibilityIssuerId: z.string(),
   organizerId: z.string(),
   layout: z.unknown().nullable().default(null), // layout generativo validado aparte (LiveLayout)
-  // --- Contrato v1 (aditivo; todos con default para no romper datos v0) ---
+  // --- Contrato v1 (aditivo; opcionales: no rompen datos ni fixtures v0; el servidor siempre los rellena) ---
   /** Raíz del padrón Semaphore congelada en `POST /open`. */
-  groupRoot: z.string().regex(/^\d+$/).nullable().default(null),
+  groupRoot: z.string().regex(/^\d+$/).nullable().optional(),
   /** Si true, N ganadores del sorteo = valor numérico de la opción ganadora (`optionValues`). */
-  winnersCountFromResult: z.boolean().default(false),
+  winnersCountFromResult: z.boolean().optional(),
   /** N fijo de ganadores (si `winnersCountFromResult` es false). */
-  winnersCount: z.number().int().min(1).nullable().default(null),
+  winnersCount: z.number().int().min(1).nullable().optional(),
   /** Valor numérico de cada opción (mismo orden que `options`), p. ej. [1,2,3,4,5]. */
-  optionValues: z.array(z.number().int().min(0)).nullable().default(null),
-  candidates: z.array(Candidate).max(50).default([]),
-  draw: Draw.nullable().default(null),
-  anchor: AnchorInfo.nullable().default(null),
-  registryAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/).nullable().default(null),
+  optionValues: z.array(z.number().int().min(0)).nullable().optional(),
+  candidates: z.array(Candidate).max(50).optional(),
+  draw: Draw.nullable().optional(),
+  anchor: AnchorInfo.nullable().optional(),
+  registryAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/).nullable().optional(),
   /** sha256 (hex con 0x) de los bytes exactos del paquete de auditoría publicado. */
-  packageDigest: z.string().nullable().default(null),
+  packageDigest: z.string().nullable().optional(),
 });
 export type Election = z.infer<typeof Election>;
 
@@ -112,8 +112,12 @@ export const InviteRequest = z.object({ electionId: z.string(), voterIds: z.arra
 /** Respuesta de enrolamiento v1: incluye el `faceBindingHash` que la wallet debe firmar. */
 export const FaceEnrollResult = z.object({ ok: z.literal(true), faceBindingHash: z.string().regex(/^0x[0-9a-f]{64}$/), voteNonce: z.string() });
 export const FaceEnrollInput = z.object({ voterId: z.string(), inviteToken: z.string(), descriptor: z.array(z.number()).min(64).max(2048), consent: z.literal(true) });
-export const FaceVerifyInput = z.object({ voterId: z.string(), descriptor: z.array(z.number()).min(64).max(2048) });
-export const FaceVerifyResult = z.object({ ok: z.boolean(), similarity: z.number(), threshold: z.number(), voteNonce: z.string().nullable(), mode: z.literal("demo-liveness") });
+/** v1 (hallazgo A3): exige `inviteToken` y la respuesta NO revela similitud ni umbral (evita usarla como oráculo). */
+export const FaceVerifyInput = z.object({ voterId: z.string(), inviteToken: z.string().min(1), descriptor: z.array(z.number()).min(64).max(2048) });
+export const FaceVerifyResult = z.object({ ok: z.boolean(), voteNonce: z.string().nullable(), mode: z.literal("demo-liveness") });
+
+/** Respuesta de POST /api/elections (C4/A7): el token del organizador se devuelve UNA sola vez; el servidor guarda solo su hash. */
+export const CreateElectionResult = Election.extend({ organizerToken: z.string().min(32) });
 
 /** Voto firmado (EIP-712). `choice` nunca se guarda junto a `voter` en nuestra DB cuando el protocolo promete privacidad. */
 export const VoteTypedDataDomain = { name: "Quorum", version: "1" } as const;
@@ -133,9 +137,10 @@ export const SignedVote = z.object({
 
 /**
  * Enlace rostro ↔ wallet (D-10). La wallet firma EIP-712 `FaceBinding`; el servidor la verifica
- * (ecrecover para `eoa-demo`; ERC-1271/6492 por RPC para `kernel`). Dominio sin verifyingContract.
+ * (`publicClient.verifyTypedData` por RPC: EOA, ERC-1271 y ERC-6492; sin RPC solo EOA).
+ * Copia EXACTA de los tipos de `@quorum/wallet` (feat/phase2-wallet) para que el backend no dependa de ese paquete.
  */
-export const FaceBindingDomain = { name: "Quorum", version: "1", chainId: 84532 } as const;
+export const FaceBindingDomain = { name: "Quorum", version: "1", chainId: 84532, verifyingContract: "0x0000000000000000000000000000000000000000" } as const;
 export const FaceBindingTypes = {
   FaceBinding: [
     { name: "electionId", type: "string" },
@@ -156,13 +161,17 @@ export const LinkWalletInput = z.object({
 export const SNARK_SCALAR_FIELD = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
 export const SemaphoreCommitment = z
   .string()
-  .regex(/^\d{1,78}$/, "commitment decimal")
+  .regex(/^[1-9]\d{0,77}$/, "commitment decimal canónico")
   .refine((c) => BigInt(c) > BigInt(0) && BigInt(c) < SNARK_SCALAR_FIELD, "commitment fuera del campo BN254");
 export const IdentityInput = z.object({ inviteToken: z.string().min(1), commitment: SemaphoreCommitment });
 export const IdentityResult = z.object({ ok: z.literal(true), registeredCount: z.number().int().min(0) });
 
 /** Prueba Semaphore v4 tal cual la produce `@semaphore-protocol/core` (`message` = índice de opción). */
-const Decimal = z.string().regex(/^\d{1,78}$/);
+/** Decimal canónico (sin ceros a la izquierda ni hex) y < campo BN254 (hallazgos C1/A1). */
+const Decimal = z
+  .string()
+  .regex(/^(0|[1-9]\d{0,77})$/, "decimal canónico")
+  .refine((v) => BigInt(v) < SNARK_SCALAR_FIELD, "fuera del campo BN254");
 export const SemaphoreProofSchema = z.object({
   merkleTreeDepth: z.number().int().min(1).max(32),
   merkleTreeRoot: Decimal,

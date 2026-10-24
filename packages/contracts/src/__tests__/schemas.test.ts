@@ -385,8 +385,10 @@ describe("Contrato v1 (aditivo)", () => {
   it("ElectionStatus acepta las fases v1 y Election v0 sigue parseando con defaults", async () => {
     const { ElectionStatus } = await import("../index");
     for (const s of ["draft", "registration", "open", "closed", "tallying", "auditable", "drawn", "failed"]) expect(ElectionStatus.safeParse(s).success).toBe(true);
-    const e = Election.parse(validElection);
-    expect(e).toMatchObject({ groupRoot: null, candidates: [], draw: null, anchor: null, winnersCountFromResult: false, packageDigest: null });
+    expect(Election.safeParse(validElection).success).toBe(true);
+    const e = Election.parse({ ...validElection, groupRoot: "123", candidates: [{ id: "p1", label: "P1" }], draw: null, anchor: null, winnersCountFromResult: true, optionValues: [1, 2, 3], packageDigest: null });
+    expect(e.candidates).toHaveLength(1);
+    expect(Election.safeParse({ ...validElection, groupRoot: "0xabc" }).success).toBe(false);
   });
 
   it("ApiError acepta duplicate_identity", () => {
@@ -417,5 +419,29 @@ describe("Contrato v1 (aditivo)", () => {
     const r = { electionId: "e", inclusionId: "1", receivedAt: ISO_START, includedAt: ISO_START, state: "incluido" };
     expect(Receipt.safeParse(r).success).toBe(true);
     expect(Receipt.safeParse({ ...r, nullifier: "1", index: 0 }).success).toBe(true);
+  });
+});
+
+describe("Contrato v1 — hallazgos de seguridad", () => {
+  it("A3: FaceVerifyInput exige inviteToken; FaceVerifyResult no transporta similitud", async () => {
+    const { FaceVerifyInput } = await import("../index");
+    const d = Array.from({ length: 64 }, () => 0.1);
+    expect(FaceVerifyInput.safeParse({ voterId: "v", descriptor: d }).success).toBe(false);
+    expect(FaceVerifyInput.safeParse({ voterId: "v", inviteToken: "t", descriptor: d }).success).toBe(true);
+    expect(FaceVerifyResult.parse({ ok: true, similarity: 0.9, voteNonce: null, mode: "demo-liveness" })).not.toHaveProperty("similarity");
+  });
+
+  it("C1: la prueba exige decimales canónicos (rechaza '0'+n y hex)", async () => {
+    const { CastVoteInput } = await import("../index");
+    const proof = { merkleTreeDepth: 10, merkleTreeRoot: "1", message: "0", nullifier: "3", scope: "4", points: ["1", "2", "3", "4", "5", "6", "7", "8"] };
+    expect(CastVoteInput.safeParse({ proof }).success).toBe(true);
+    expect(CastVoteInput.safeParse({ proof: { ...proof, nullifier: "03" } }).success).toBe(false);
+    expect(CastVoteInput.safeParse({ proof: { ...proof, message: "0x0" } }).success).toBe(false);
+  });
+
+  it("C4: CreateElectionResult incluye organizerToken", async () => {
+    const { CreateElectionResult } = await import("../index");
+    expect(CreateElectionResult.safeParse({ ...validElection, organizerToken: "x".repeat(43) }).success).toBe(true);
+    expect(CreateElectionResult.safeParse(validElection).success).toBe(false);
   });
 });
