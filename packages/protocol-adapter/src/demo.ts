@@ -1,8 +1,8 @@
-import { buildAuditPackage, type AuditPackage, type ElectionManifest } from "./audit-package.js";
-import { defaultArtifacts, type SnarkArtifactPaths } from "./artifacts.js";
-import { castBallot } from "./ballot.js";
-import { createVoterIdentity, groupRoot, MERKLE_TREE_DEPTH } from "./identity.js";
-import { appendBallot, createLedger, tally, type Ledger } from "./ledger.js";
+import { buildAuditPackage, type AuditPackage, type ElectionManifest } from "./audit-package";
+import { defaultArtifacts, type SnarkArtifactPaths } from "./artifacts";
+import { castBallot } from "./ballot";
+import { createVoterIdentity, groupRoot, MERKLE_TREE_DEPTH } from "./identity";
+import { appendBallot, createLedger, tally, type Ledger } from "./ledger";
 
 /** Manifiesto de demo: elección ficticia de un condominio, opciones neutrales. Etiquetado como fixture. */
 export function demoManifest(electionId = "fixture-condominio-2026"): ElectionManifest {

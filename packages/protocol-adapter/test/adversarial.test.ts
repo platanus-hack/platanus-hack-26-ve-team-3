@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { appendBallot, buildDemoElection, createLedger, isCanonicalField, LedgerRejection, SNARK_SCALAR_FIELD, type DemoElection } from "../src/index.js";
+import { appendBallot, buildDemoElection, createLedger, isCanonicalField, LedgerRejection, SNARK_SCALAR_FIELD, type DemoElection } from "../src/index";
 
 let demo: DemoElection;
 beforeAll(async () => {

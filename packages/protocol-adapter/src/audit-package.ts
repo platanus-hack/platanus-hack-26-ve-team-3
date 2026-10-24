@@ -1,7 +1,7 @@
-import { hashCanonical } from "./hash.js";
-import { electionScope, groupRoot as computeRoot, MERKLE_TREE_DEPTH, SEMAPHORE_VERSION } from "./identity.js";
-import { finalHash, type Hex32, type Ledger, type LedgerEntry, type Tally } from "./ledger.js";
-import type { DrawResult, DrawRule } from "./draw.js";
+import { hashCanonical } from "./hash";
+import { electionScope, groupRoot as computeRoot, MERKLE_TREE_DEPTH, SEMAPHORE_VERSION } from "./identity";
+import { finalHash, type Hex32, type Ledger, type LedgerEntry, type Tally } from "./ledger";
+import type { DrawResult, DrawRule } from "./draw";
 
 export const AUDIT_PACKAGE_VERSION = "quorum-audit/1";
 export const ADAPTER_VERSION = "0.1.0";

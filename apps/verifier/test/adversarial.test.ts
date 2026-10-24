@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { verifyPackage } from "../src/index.js";
+import { verifyPackage } from "../src/index";
 import { buildDemoElection, groupRoot, genesisHash, hashCanonical, rechain, type AuditPackage } from "@quorum/protocol-adapter";
 
 const failing = (r: Awaited<ReturnType<typeof verifyPackage>>) => r.checks.filter((c) => !c.passed).map((c) => c.name);

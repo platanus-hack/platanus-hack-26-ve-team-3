@@ -1,6 +1,6 @@
 import { verifyProof, type SemaphoreProof } from "@semaphore-protocol/core";
-import { hashCanonical } from "./hash.js";
-import { electionScope, MERKLE_TREE_DEPTH } from "./identity.js";
+import { hashCanonical } from "./hash";
+import { electionScope, MERKLE_TREE_DEPTH } from "./identity";
 
 export type Hex32 = `0x${string}`;
 

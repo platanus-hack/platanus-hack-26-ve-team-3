@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { concat, keccak256, toHex } from "viem";
-import { DRAW_METHOD, drawSeed, drawWinners, runDraw, sortCandidates, winnersCountFor, winningOptionIndex, type DrawRule } from "../src/index.js";
+import { DRAW_METHOD, drawSeed, drawWinners, runDraw, sortCandidates, winnersCountFor, winningOptionIndex, type DrawRule } from "../src/index";
 
 const FINAL = "0x122281d0c1470dcd0000000000000000000000000000000000000000000000ab" as const;
 const candidates = [

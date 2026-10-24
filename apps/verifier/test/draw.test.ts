@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { verifyPackage, recomputeDraw } from "../src/index.js";
+import { verifyPackage, recomputeDraw } from "../src/index";
 // Solo en tests: el adaptador fabrica un paquete real (pruebas Groth16 de verdad) y el sorteo de referencia.
 import { buildAuditPackage, buildDemoElection, runDraw, type AuditPackage, type DrawRule } from "@quorum/protocol-adapter";
 

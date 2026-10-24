@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AuditResult as AuditResultSchema } from "@quorum/contracts";
-import { verifyPackage, type AnchorReader } from "../src/index.js";
+import { verifyPackage, type AnchorReader } from "../src/index";
 // Solo en tests: el adaptador genera un paquete real al vuelo y codifica el calldata del ancla simulada.
 import { buildDemoElection, encodeAnchorCalldata, rechain, tally as recount, tallyHash, hashCanonical } from "@quorum/protocol-adapter";
 

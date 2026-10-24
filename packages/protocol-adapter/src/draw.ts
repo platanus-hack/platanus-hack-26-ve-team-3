@@ -1,5 +1,5 @@
 import { concat, keccak256, toHex } from "viem";
-import type { Hex32, Tally } from "./ledger.js";
+import type { Hex32, Tally } from "./ledger";
 
 /**
  * Sorteo verificable (D-12). No es una primitiva criptográfica nueva: es un barajado determinista

@@ -29,9 +29,9 @@ import {
   demoManifest,
   type AnchorTransport,
   type SemaphoreProof,
-} from "../src/index.js";
+} from "../src/index";
 import { encodeAbiParameters, getAbiItem, padHex, toEventSelector, type Address, type Hex } from "viem";
-import { EAS_ABI } from "../src/anchor.js";
+import { EAS_ABI } from "../src/anchor";
 
 const artifacts = defaultArtifacts();
 const electionId = "test-election-1";

@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildDemoElection, createVoterIdentity, hashCanonical, rechain, tally as recount, tallyHash, type AuditPackage, type SemaphoreProof } from "../src/index.js";
+import { buildDemoElection, createVoterIdentity, hashCanonical, rechain, tally as recount, tallyHash, type AuditPackage, type SemaphoreProof } from "../src/index";
 
 const outDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../demo-fixtures/protocol");
 mkdirSync(outDir, { recursive: true });

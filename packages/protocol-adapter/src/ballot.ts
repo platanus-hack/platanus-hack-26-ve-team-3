@@ -1,6 +1,6 @@
 import { generateProof, verifyProof, type SemaphoreProof } from "@semaphore-protocol/core";
-import { buildGroup, electionScope, importIdentity, MERKLE_TREE_DEPTH } from "./identity.js";
-import type { SnarkArtifactPaths } from "./artifacts.js";
+import { buildGroup, electionScope, importIdentity, MERKLE_TREE_DEPTH } from "./identity";
+import type { SnarkArtifactPaths } from "./artifacts";
 
 export type { SemaphoreProof };
 
