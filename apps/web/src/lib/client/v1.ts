@@ -155,7 +155,9 @@ export type LedgerPublic = z.infer<typeof LedgerPublic>;
 
 /* ---------- Auditoría y sorteo ---------- */
 
-export const StoredAudit = z.object({ auditResult: AuditResult, packageDigest: z.string(), anchorStatus: z.string().optional() });
+/** `anchorStatus` real del servidor: `{ mode: "disabled" | "anchored" | "error", reason }` (antes se documentó como string). */
+export const AnchorStatus = z.union([z.string(), z.object({ mode: z.string(), reason: z.string().optional() }).passthrough()]);
+export const StoredAudit = z.object({ auditResult: AuditResult, packageDigest: z.string(), anchorStatus: AnchorStatus.nullable().optional() });
 export type StoredAudit = z.infer<typeof StoredAudit>;
 
 export const DrawInfo = z.object({

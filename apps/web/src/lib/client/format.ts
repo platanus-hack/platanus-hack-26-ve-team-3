@@ -9,6 +9,14 @@ export function formatDateTime(iso: string | null | undefined): string {
   return new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short", timeZone: TZ }).format(d);
 }
 
+/** Sólo la fecha (sin hora): se usa con `votedAt` para no exponer la hora del voto (correlación hora ↔ boleta). */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat(LOCALE, { dateStyle: "long", timeZone: TZ }).format(d);
+}
+
 export function formatPercent(v: number | null | undefined, digits = 0): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return new Intl.NumberFormat(LOCALE, { style: "percent", maximumFractionDigits: digits }).format(v);

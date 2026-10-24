@@ -48,6 +48,10 @@ export function describeError(err: unknown): string {
         return `El servicio no está disponible en este momento (${err.message}). Inténtalo más tarde.`;
       case "invalid_input":
         return `Datos inválidos: ${err.message}`;
+      case "room_full":
+        return `La sala está llena. ${err.message}`;
+      case "room_closed":
+        return err.message || "La sala está cerrada.";
       case "duplicate_identity":
         return "Este rostro ya está inscrito en esta votación. Una persona solo puede inscribirse una vez.";
       case "bad_response":
