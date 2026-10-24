@@ -45,7 +45,7 @@ export function HeroStory({ copy, visual }: { copy: React.ReactNode; visual: Rea
 
   return (
     <div ref={outer} className="relative lg:h-[700vh]">
-      <section className="q-page-in grid grid-cols-1 items-center gap-12 pt-4 lg:sticky lg:top-16 lg:h-[calc(100svh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,27rem)] lg:gap-14 lg:pt-0">
+      <section className="q-page-in grid grid-cols-1 items-center gap-12 pt-4 lg:sticky lg:top-[calc(4rem+1px)] lg:h-[calc(100svh-4rem-1px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,27rem)] lg:gap-14 lg:pt-0">
         <div>
           {copy}
           <ol className="mt-10 hidden gap-2 lg:flex" aria-label="Cómo funciona">
