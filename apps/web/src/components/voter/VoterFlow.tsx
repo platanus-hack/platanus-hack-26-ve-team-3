@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock, UserCheck } from "lucide-react";
+import { Clock, UserCheck } from "lucide-react";
 import type { InviteResponse as InviteV1, Receipt } from "@quorum/contracts";
 import type { z } from "zod";
 import { ObserverPanel } from "@/components/room/ObserverPanel";
@@ -14,13 +14,16 @@ import { voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { countdownText, formatStartTime, spokenCountdown, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { formatDate } from "@/lib/client/format";
-import { clearPendingFace, isRegistered, loadPendingFace, loadReceipt, peekIdentity, savePendingFace, type StoredReceipt, type VaultInfo } from "@/lib/client/identityVault";
+import { clearPendingFace, savePendingFace } from "@/lib/client/identityVault";
 import { linkThisPhone, type LinkProgress, type LinkResult } from "@/lib/client/linkPhone";
 import { prefetchHeavyAssets, roomJoinForToken } from "@/lib/client/room";
 import { BallotScreen } from "./BallotScreen";
 import { Consent } from "./Consent";
 import { VoteReceiptCard, type ReceiptView } from "./VoteReceiptCard";
 import { StepIndicator, VoterShell } from "./VoterUi";
+import { SuccessMark } from "@/components/ui/success-mark";
+import { rememberVoterLink } from "@/lib/client/myElections";
+import { readLocal, type Local } from "@/lib/client/voterAccess";
 
 type ReceiptV1 = z.infer<typeof Receipt>;
 
@@ -45,13 +48,6 @@ const FAST_WINDOW_MS = 10_000;
 const LATE_MS = 60_000;
 
 export type View = "intro" | "face" | "review" | "review-rejected" | "linking" | "waiting" | "ballot" | "receipt" | "voted" | "closed" | "not-linked" | "other-device" | "observer" | "draft";
-type Local = { identity: VaultInfo | null; registered: boolean; receipt: StoredReceipt | null; pendingFace: `0x${string}` | null };
-
-function readLocal(electionId: string, voterId: string): Local {
-  const identity = peekIdentity(electionId);
-  const mine = identity && identity.voterId === voterId ? identity : null;
-  return { identity: mine, registered: mine ? isRegistered(electionId) : false, receipt: loadReceipt(electionId), pendingFace: loadPendingFace(voterId) };
-}
 
 /** Qué pantalla corresponde según la fase y lo guardado en este teléfono. Exportado para tests. */
 export function autoView(invite: InviteV1, local: Local, roomConsent: boolean): View {
@@ -129,6 +125,7 @@ export function VoterFlow({ token }: { token: string }) {
         const l = readLocal(data.election.id, data.voter.id);
         const auto = autoView(data, l, Boolean(roomJoinForToken(token)?.consentAt));
         setInvite(data);
+        rememberVoterLink(data.election.id, `/v/${token}`, data.election.title);
         setLocal(l);
         setLoadError(null);
         const prev = viewRef.current;
@@ -293,10 +290,10 @@ export function VoterFlow({ token }: { token: string }) {
     case "waiting":
       return (
         <VoterShell className="items-center text-center">
-          <CheckCircle2 className="size-20 text-success" aria-hidden="true" strokeWidth={1.75} />
+          <SuccessMark />
           <h1 className="text-display font-bold tracking-tight">¡Listo! Ya estás inscrito.</h1>
           <WaitingCountdown startsAt={startsAt} left={left} />
-          <p className="text-heading">Deja esta página abierta: la boleta aparecerá aquí sola cuando empiece la votación.</p>
+          <p className="text-body text-muted-foreground">Deja esta página abierta: la boleta aparecerá aquí sola.</p>
         </VoterShell>
       );
 
@@ -331,7 +328,7 @@ export function VoterFlow({ token }: { token: string }) {
           : null;
       return (
         <VoterShell>
-          <VoteReceiptCard electionId={electionId} receipt={r} votedAt={invite.voter.votedAt ? formatDate(invite.voter.votedAt) : null} />
+          <VoteReceiptCard electionId={electionId} receipt={r} title={title} votedAt={invite.voter.votedAt ? formatDate(invite.voter.votedAt) : null} />
         </VoterShell>
       );
     }
@@ -366,7 +363,7 @@ export function VoterFlow({ token }: { token: string }) {
         <VoterShell>
           <h1 className="text-title font-bold leading-tight">{title}</h1>
           <Alert tone="info" title="La inscripción aún no abre">
-            Deja esta página abierta: se actualizará sola cuando el organizador abra la inscripción.
+            Deja esta página abierta: se actualiza sola.
           </Alert>
         </VoterShell>
       );
@@ -502,7 +499,7 @@ function Linking({ electionId, voterId, inviteToken, faceBindingHash, linkedAddr
         <div className="flex flex-col gap-4" role="status" aria-live="polite" data-testid="linking">
           <h1 className="text-title font-bold">Vinculando este teléfono…</h1>
           <div className="h-3 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Progreso">
-            <div className="h-full rounded-full bg-success transition-[width] duration-500" style={{ width: `${pct}%` }} />
+            <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${pct}%` }} />
           </div>
           <p className="text-muted-foreground">{LINK_STEPS[progress.step - 1]}…</p>
         </div>

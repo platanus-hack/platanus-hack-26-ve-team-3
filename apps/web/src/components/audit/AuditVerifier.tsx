@@ -7,7 +7,7 @@ import { ShieldCheck } from "lucide-react";
 import { AuditChecklist } from "@/components/AuditChecklist";
 import { EmptyState, LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
-import { Badge, FixtureTag } from "@/components/ui/badge";
+import { FixtureTag } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { describeError } from "@/lib/client/api";
@@ -21,6 +21,7 @@ import { publicAnchorRpc, sha256Bytes, verifyPackageInBrowser, type BrowserVerif
 import { statusOf } from "./AttackLab";
 import { PackageLoader } from "./PackageLoader";
 import { VerdictBanner } from "./VerdictBanner";
+import { PageHeader } from "@/components/ui/page-header";
 
 /** Lo que se va a verificar: bytes exactos + opciones del verificador + contexto honesto. */
 type Target = {
@@ -109,19 +110,12 @@ export function AuditVerifier() {
   const drawUnchecked = !!result && hasDraw(target?.bytes) && !result.checks.some((c) => c.name === "draw_matches");
 
   return (
-    <div className="q-container flex max-w-4xl flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-2">
-        <Badge tone="neutral" className="w-fit">
-          Auditor independiente
-        </Badge>
-        <h1 className="text-title font-bold tracking-tight md:text-display">{jury ? "Verificar la copia del jurado" : "Verificar escrutinio"}</h1>
-        <p className="max-w-prose text-body text-muted-foreground">
-          El verificador independiente (<span className="q-mono">@quorum/verifier</span>) corre <strong>en este navegador</strong> sobre el paquete público: recalcula padrón, cadena, pruebas, nullifiers, recuento y ancla. El veredicto sale de él, no de nuestro servidor.
-        </p>
-        <Link href="/audit/lab" className="w-fit text-small underline underline-offset-4">
-          Laboratorio del jurado: altera una copia y mira qué falla
+    <div className="q-fade-in q-container flex max-w-4xl flex-col gap-6 py-6 md:py-10">
+      <PageHeader title={jury ? "Verificar la copia del jurado" : "Verificar escrutinio"} description="El verificador corre en este navegador sobre el paquete público. El veredicto sale de él, no de nuestro servidor.">
+        <Link href="/audit/lab" className="w-fit text-small font-semibold text-primary-ink underline underline-offset-4">
+          Probar alterando una copia
         </Link>
-      </header>
+      </PageHeader>
 
       {jury ? (
         <Alert tone="warning" title="Esto es una copia alterada a propósito">

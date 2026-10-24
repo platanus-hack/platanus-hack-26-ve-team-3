@@ -148,13 +148,10 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
       <Shell>
         <Card data-testid="room-resume">
           <CardHeader>
-            <Badge tone="success" className="w-fit">
-              Ya entraste desde este teléfono
-            </Badge>
             <CardTitle as="h1" className="text-title">
               Hola, {stored.displayName}
             </CardTitle>
-            <CardDescription>Tu lugar quedó guardado en este teléfono. Sigue con tu inscripción o tu voto.</CardDescription>
+            <CardDescription>Tu lugar quedó guardado en este teléfono.</CardDescription>
           </CardHeader>
           <CardFooter>
             <Button full size="lg" onClick={() => go(stored.invitePath)} loading={redirecting}>
@@ -272,5 +269,5 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="q-container q-narrow flex flex-col gap-5 py-5 text-heading md:py-10">{children}</div>;
+  return <div className="q-fade-in q-container q-narrow flex flex-col gap-5 py-5 text-heading md:py-10">{children}</div>;
 }

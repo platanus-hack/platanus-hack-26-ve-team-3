@@ -33,20 +33,20 @@ export const isAtLeast = (p: ElectionPhase, target: Exclude<ElectionPhase, "draf
 /** Hay paquete de auditoría que verificar (auditable, drawn o failed: el resultado se publica aunque falle). */
 export const hasAuditPackage = (p: ElectionPhase) => p === "auditable" || p === "drawn" || p === "failed";
 
-export type OrganizerAction = { id: "publish" | "open" | "close" | "draw"; label: string; confirm: string; irreversible: boolean };
+export type OrganizerAction = { id: "publish" | "open" | "close" | "draw"; label: string; hint: string; confirm: string; irreversible: boolean };
 
 /** La única acción de avance que el organizador puede tomar en cada fase (botones por fase del panel). */
 export function nextOrganizerAction(p: ElectionPhase, opts: { candidates: number }): OrganizerAction | null {
   switch (p) {
     case "draft":
-      return { id: "publish", label: "Abrir inscripción", confirm: "Se fija el manifiesto (título, opciones y fechas). Después no se puede editar.", irreversible: true };
+      return { id: "publish", label: "Abrir inscripción", hint: "Abre la inscripción para que la gente entre con el QR.", confirm: "Después no se pueden editar pregunta, opciones ni fechas.", irreversible: true };
     case "registration":
-      return { id: "open", label: "Congelar padrón y abrir votación", confirm: "Se congela el padrón con los inscritos actuales. Nadie más podrá inscribirse.", irreversible: true };
+      return { id: "open", label: "Abrir votación", hint: "Cuando estén todos inscritos, abre la votación.", confirm: "Nadie más podrá inscribirse.", irreversible: true };
     case "open":
-      return { id: "close", label: "Cerrar votación", confirm: "Cerrar es irreversible: se genera el paquete de auditoría y se corre el verificador.", irreversible: true };
+      return { id: "close", label: "Cerrar votación", hint: "Están votando. Ciérrala cuando terminen.", confirm: "No se aceptarán más votos y se publica el resultado verificable.", irreversible: true };
     case "auditable":
       return opts.candidates > 0
-        ? { id: "draw", label: "Realizar sorteo verificable", confirm: "La semilla sale del hash final del ledger; cualquiera podrá recomputar el resultado.", irreversible: true }
+        ? { id: "draw", label: "Hacer el sorteo", hint: "La votación cerró. Sortea los proyectos ganadores.", confirm: "Cualquiera podrá recomputar el resultado.", irreversible: true }
         : null;
     default:
       return null;

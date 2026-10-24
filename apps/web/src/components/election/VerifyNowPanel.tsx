@@ -92,7 +92,7 @@ export function VerifyNowPanel({ source, serverAudit, onVerified }: { source: Pa
           </p>
           {run?.inputDigest ? (
             <p className="text-small">
-              Hash de entrada (SHA-256 de los bytes descargados): <span className="q-mono break-all font-semibold">{run.inputDigest}</span>
+              Huella del paquete: <span className="q-mono font-semibold" title={run.inputDigest}>{shortHash(run.inputDigest, 14, 8)}</span>
             </p>
           ) : null}
           {error ? (

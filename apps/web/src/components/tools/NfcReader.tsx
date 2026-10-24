@@ -6,6 +6,8 @@
  * Lo leído se queda en esta pantalla y en la consola del navegador: no se envía ni se guarda en el servidor.
  */
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 
 type NdefRecord = { recordType: string; mediaType?: string; id?: string; encoding?: string; lang?: string; data?: DataView };
 type NdefReadingEvent = Event & { serialNumber: string; message: { records: NdefRecord[] } };
@@ -60,18 +62,17 @@ export function NfcReader() {
   }
 
   return (
-    <div className="q-container max-w-xl py-8">
-      <h1 className="text-2xl font-bold">Lector NFC (diagnóstico)</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Muestra qué datos guarda una credencial NFC. Lo leído solo se ve aquí: no se envía ni se guarda.</p>
+    <div className="q-fade-in q-container max-w-xl py-8">
+      <PageHeader title="Lector NFC" description="Muestra qué guarda una credencial NFC. No se envía ni se guarda." />
       {!supported ? (
         <div className="mt-6 rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm" role="alert">
           Este navegador no puede leer NFC. Web NFC solo funciona en <strong>Chrome para Android</strong>. En iPhone, Safari no lo permite: usa una app como «NFC Tools» para ver el contenido.
         </div>
       ) : (
         <>
-          <button type="button" onClick={start} disabled={scanning} className="mt-6 h-14 w-full rounded-full bg-primary text-lg font-semibold text-primary-foreground shadow-primary disabled:opacity-60">
+          <Button size="lg" full onClick={start} disabled={scanning} className="mt-6 min-h-14">
             {scanning ? "Leyendo…" : "Empezar a leer"}
-          </button>
+          </Button>
           <p className="mt-3 text-base" role="status" aria-live="polite">{status}</p>
         </>
       )}

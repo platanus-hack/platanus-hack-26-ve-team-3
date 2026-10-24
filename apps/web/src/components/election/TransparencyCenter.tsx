@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AuditChecklist } from "@/components/AuditChecklist";
 import { Alert } from "@/components/ui/alert";
-import { Badge, FixtureTag } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/states";
@@ -18,6 +18,10 @@ import type { Aggregates as AggregatesV1, AuditResponse as StoredAudit, Election
 import { MyVoteCheck } from "./MyVoteCheck";
 import { PhaseTimeline } from "./PhaseTimeline";
 import { VerifyNowPanel, type PackageSource, type VerifiedPackage } from "./VerifyNowPanel";
+import { ActionBar, PageHeader } from "@/components/ui/page-header";
+import { ProgressRow } from "@/components/ui/progress-row";
+import { Stat, StatGrid } from "@/components/ui/stat";
+import { CheckList } from "@/components/ui/check-list";
 
 
 type Fixture = { election: ElectionV1; tally: AggregatesV1 };
@@ -119,27 +123,21 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
   const source: PackageSource = isFixture ? { kind: "fixture", url: FIXTURE_PACKAGE_URL, label: "fixture · simulación" } : { kind: "api", electionId };
 
   return (
-    <div className="q-container flex flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">Centro de transparencia</Badge>
-          <Badge tone={election.status === "failed" ? "danger" : "neutral"}>{phaseLabel[election.status]}</Badge>
-          {isFixture ? <FixtureTag>fixture · API sin respuesta</FixtureTag> : null}
-        </div>
-        <h1 className="text-title font-bold tracking-tight md:text-display">{election.title}</h1>
-        {election.description ? <p className="max-w-prose text-body text-muted-foreground">{election.description}</p> : null}
+    <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
+      <PageHeader title={election.title} description={election.description || undefined}>
+        {isFixture ? <Badge tone="warning" className="self-start">Datos de ejemplo: el servidor no respondió</Badge> : null}
         <PhaseTimeline phase={election.status} />
-        <div className="flex flex-wrap gap-2">
-          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "secondary" }))}>
-            Resultados en vivo
+        <ActionBar>
+          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "soft" }))}>
+            En vivo
           </Link>
           {election.status === "drawn" || (election.candidates?.length ?? 0) > 0 ? (
-            <Link href={`/e/${encodeURIComponent(electionId)}/draw`} className={cn(buttonVariants({ variant: "secondary" }))}>
-              Sorteo verificable
+            <Link href={`/e/${encodeURIComponent(electionId)}/draw`} className={cn(buttonVariants({ variant: "soft" }))}>
+              Sorteo
             </Link>
           ) : null}
-        </div>
-      </header>
+        </ActionBar>
+      </PageHeader>
 
       {election.status === "failed" ? (
         serverAudit ? (
@@ -172,35 +170,23 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
           </CardHeader>
           <CardContent>
             {tally ? (
-              <dl className="grid grid-cols-2 gap-3 text-small">
-                <div>
-                  <dt className="text-muted-foreground">Participación</dt>
-                  <dd className="text-heading font-bold">{formatPercent(tally.turnout)}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Boletas en el registro</dt>
-                  <dd className="text-heading font-bold">
-                    {formatInt(tally.totalVotes)} <span className="text-small font-normal text-muted-foreground">de {formatInt(tally.eligible)}</span>
-                  </dd>
-                </div>
-                <div className="col-span-2">
-                  <dt className="text-muted-foreground">Por opción</dt>
-                  <dd>
-                    {hidden ? (
-                      <p className="text-body">Desglose oculto hasta 5 votos.</p>
-                    ) : (
-                      <ul className="mt-1 flex flex-col gap-1">
-                        {tally.options.map((o) => (
-                          <li key={o.id} className="flex justify-between gap-2 border-b border-border py-1 last:border-0">
-                            <span>{o.label}</span>
-                            <span className="q-mono font-semibold">{formatInt(o.count)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </dd>
-                </div>
-              </dl>
+              <div className="flex flex-col gap-6">
+                <StatGrid>
+                  <Stat label="Participación" value={formatPercent(tally.turnout)} />
+                  <Stat label="Boletas" value={formatInt(tally.totalVotes)} hint={`de ${formatInt(tally.eligible)}`} />
+                </StatGrid>
+                {hidden ? (
+                  <p className="text-body">Desglose oculto hasta 5 votos.</p>
+                ) : (
+                  <ul className="flex flex-col gap-4">
+                    {tally.options.map((o, i) => (
+                      <li key={o.id}>
+                        <ProgressRow label={o.label} value={<span className="font-semibold text-foreground">{formatInt(o.count)}</span>} share={tally.totalVotes ? (o.count ?? 0) / tally.totalVotes : 0} delay={i * 80} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ) : (
               <p className="text-small text-muted-foreground">Aún no hay agregados publicados.</p>
             )}
@@ -267,25 +253,28 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 text-small md:grid-cols-2">
             <div>
-              <p className="mb-1 font-semibold">Se puede comprobar</p>
-              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>Cada boleta prueba que viene de alguien del padrón, sin decir de quién.</li>
-                <li>Un inscrito, un voto.</li>
-                <li>Cualquiera reproduce el recuento.</li>
-                <li>Tu comprobante confirma que tu boleta está en el registro.</li>
-              </ul>
+              <p className="mb-3 font-semibold">Se puede comprobar</p>
+              <CheckList
+                items={[
+                  "Cada boleta prueba que viene de alguien del padrón, sin decir de quién.",
+                  "Un inscrito, un voto.",
+                  "Cualquiera reproduce el recuento.",
+                  "Tu comprobante confirma que tu boleta está en el registro.",
+                ]}
+              />
             </div>
             <div>
-              <p className="mb-1 font-semibold">No se garantiza</p>
-              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>Que el servidor no vea la opción de cada boleta.</li>
-                <li>Que el padrón sea correcto: lo define el organizador. La cámara no impide todos los duplicados.</li>
-                <li>Que no falten boletas, si no hay ancla on-chain.</li>
-                <li data-testid="link-mode-limit">
-                  La clave del votante vive solo en su navegador (wallet en Base Sepolia testnet); si se borra, no puede votar.
-                </li>
-                <li>«Verificado» sólo lo muestra el verificador, nunca el servidor.</li>
-              </ul>
+              <p className="mb-3 font-semibold">No se garantiza</p>
+              <CheckList
+                tone="no"
+                items={[
+                  "Que el servidor no vea la opción de cada boleta.",
+                  "Que el padrón sea correcto: lo define el organizador. La cámara no impide todos los duplicados.",
+                  "Que no falten boletas, si no hay ancla on-chain.",
+                  "La clave del votante vive solo en su navegador (wallet en Base Sepolia testnet); si se borra, no puede votar.",
+                  "«Verificado» sólo lo muestra el verificador, nunca el servidor.",
+                ]}
+              />
             </div>
           </CardContent>
         </Card>

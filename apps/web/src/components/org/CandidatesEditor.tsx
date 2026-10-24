@@ -33,10 +33,7 @@ export function CandidatesList({ candidates, onRemove }: { candidates: Candidate
         <li key={c.id} className="flex items-center gap-2 rounded-md border border-border p-3">
           <div className="min-w-0 flex-1">
             <p className="font-semibold">{c.label}</p>
-            <p className="text-small text-muted-foreground">
-              <span className="q-mono">{c.id}</span>
-              {typeof c.amount === "number" ? ` · monto ${formatInt(c.amount)}` : ""}
-            </p>
+            {typeof c.amount === "number" ? <p className="q-num text-small text-muted-foreground">Monto {formatInt(c.amount)}</p> : null}
           </div>
           {onRemove ? (
             <Button variant="ghost" size="sm" aria-label={`Quitar ${c.label}`} onClick={() => onRemove(c.id)}>

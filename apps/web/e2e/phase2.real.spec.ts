@@ -67,11 +67,13 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   await org.getByLabel("Título de la votación").fill(TITLE);
   await org.locator("#opt-0").fill("1");
   await org.locator("#opt-1").fill("2");
+  await org.getByText("Más ajustes").click();
   for (const p of PROJECTS) {
     await org.getByLabel("Proyecto").fill(p);
     await org.getByRole("button", { name: /agregar proyecto/i }).click();
   }
   await org.getByRole("button", { name: "Continuar" }).click();
+  await org.getByText(/Invitar por enlace/).click();
   await org.getByLabel("Pegar lista (una por línea: Nombre, +58412…)").fill(VOTERS.join("\n"));
   await org.getByRole("button", { name: "Importar lista" }).click();
   await expect(org.getByText(`${VOTERS.length} participantes listos.`)).toBeVisible();
@@ -113,7 +115,7 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   // ---------- Organizador: congelar padrón y abrir ----------
   await org.reload();
   await expect(org.getByTestId("voters-list")).toContainText("Inscrito");
-  await confirmPhase(org, electionId, "Congelar padrón y abrir votación", "open");
+  await confirmPhase(org, electionId, "Abrir votación", "open");
 
   // ---------- Voto con prueba real (ambos eligen 2) ----------
   const voteBodies: string[] = [];
@@ -178,7 +180,7 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   await expect(vp.getByTestId("my-vote-result")).toContainText("paquete que verificaste");
 
   // ---------- Sorteo verificable + Recomputar aquí ----------
-  await confirmPhase(org, electionId, "Realizar sorteo verificable", "drawn");
+  await confirmPhase(org, electionId, "Hacer el sorteo", "drawn");
   const draw = await (await request.get(`/api/elections/${electionId}/draw`)).json();
   expect(draw.n).toBe(2); // ganó la opción "2" → 2 proyectos
   await vp.goto(`/e/${encodeURIComponent(electionId)}/draw`);

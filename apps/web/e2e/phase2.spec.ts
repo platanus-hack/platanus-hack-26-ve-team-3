@@ -157,9 +157,9 @@ test.describe("fase 2 · organizador", () => {
 
     for (const [label, next] of [
       ["Abrir inscripción", "Inscripción abierta"],
-      ["Congelar padrón y abrir votación", "Votación abierta"],
+      ["Abrir votación", "Votación abierta"],
       ["Cerrar votación", "Auditable"],
-      ["Realizar sorteo verificable", "Sorteo realizado"],
+      ["Hacer el sorteo", "Sorteo realizado"],
     ] as const) {
       await page.getByTestId("phase-action").filter({ hasText: label }).click();
       await page.getByRole("button", { name: new RegExp(`^Sí, ${label}`, "i") }).click();

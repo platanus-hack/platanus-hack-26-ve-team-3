@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AuditResult } from "@quorum/contracts";
-import { FlaskConical, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { AuditChecklist, notEvaluated, overallStatus } from "@/components/AuditChecklist";
 import { LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
-import { Badge, FixtureTag } from "@/components/ui/badge";
+import { FixtureTag } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { describeError } from "@/lib/client/api";
@@ -24,6 +24,7 @@ import { AlterationDiff } from "./AlterationDiff";
 import { PackageLoader } from "./PackageLoader";
 import { ShareAlteration } from "./ShareAlteration";
 import { VerdictBanner } from "./VerdictBanner";
+import { PageHeader } from "@/components/ui/page-header";
 
 type Run = {
   alteration: AlterationId;
@@ -133,22 +134,13 @@ export function AttackLab() {
   const base = baseline[anchor];
 
   return (
-    <div className="q-container flex max-w-5xl flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral" className="w-fit">
-            <FlaskConical className="mr-1 size-3.5" aria-hidden="true" /> Laboratorio del jurado
-          </Badge>
-          {loaded?.isFixture ? <FixtureTag /> : null}
-        </div>
-        <h1 className="text-title font-bold tracking-tight md:text-display">Altera una copia. Mira qué falla.</h1>
-        <p className="max-w-prose text-body text-muted-foreground">
-          Cada botón cambia algo en una <strong>copia</strong> del paquete de auditoría y corre el verificador independiente en este navegador. El paquete original no se toca.
-        </p>
-        <Link href="/audit" className="w-fit text-small underline underline-offset-4">
-          Ir al auditor independiente
+    <div className="q-fade-in q-container flex max-w-5xl flex-col gap-6 py-6 md:py-10">
+      <PageHeader title="Altera una copia. Mira qué falla." description="Cada botón cambia una copia del paquete y corre el verificador aquí. El original no se toca.">
+        {loaded?.isFixture ? <FixtureTag /> : null}
+        <Link href="/audit" className="w-fit text-small font-semibold text-primary-ink underline underline-offset-4">
+          Ir al auditor
         </Link>
-      </header>
+      </PageHeader>
 
       <Card>
         <CardHeader>
@@ -230,7 +222,7 @@ export function AttackLab() {
         <Card>
           <CardHeader>
             <CardTitle>3. Elige una alteración</CardTitle>
-            <CardDescription>Un toque: se altera la copia y se verifica. Cada tarjeta dice qué check debería fallar.</CardDescription>
+            <CardDescription>Un toque altera la copia y la verifica.</CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Alteraciones disponibles">
@@ -248,7 +240,7 @@ export function AttackLab() {
                       aria-describedby={`alt-${a.id}-desc`}
                       onClick={() => tamper(a.id)}
                       className={cn(
-                        "flex h-full min-h-tap w-full cursor-pointer flex-col items-start gap-1 rounded-md border-2 p-3 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60",
+                        "flex h-full min-h-tap w-full cursor-pointer flex-col items-start gap-1 rounded-md border p-3 text-left transition-[background-color,border-color] duration-150 hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60",
                         active ? "border-danger bg-danger-soft" : "border-border bg-card",
                       )}
                     >
@@ -256,11 +248,11 @@ export function AttackLab() {
                         {a.title}
                         {busy === a.id ? <span className="q-spinner" aria-label="verificando" /> : null}
                       </span>
-                      <span id={`alt-${a.id}-desc`} className="text-small text-muted-foreground">
+                      <span id={`alt-${a.id}-desc`} className="line-clamp-2 text-small text-muted-foreground">
                         {why ?? a.body}
                       </span>
-                      <span className="text-small">
-                        Debería fallar:{" "}
+                      <span className="text-[0.75rem] text-subtle">
+                        Falla:{" "}
                         {exp.length ? exp.map((n) => <code key={n} className="q-mono mr-1 rounded bg-muted px-1">{n}</code>) : <strong className="text-warning-strong">nada (no detectable sin ancla)</strong>}
                       </span>
                     </button>

@@ -9,9 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export function ObserverPanel({ electionId }: { electionId: string }) {
   const id = encodeURIComponent(electionId);
   const items = [
-    { href: `/e/${id}/live`, icon: <Radio aria-hidden="true" />, title: "Ver en vivo", body: "Participación y, por lotes de 5 boletas, el conteo por opción." },
-    { href: `/e/${id}#verificar`, icon: <ShieldQuestion aria-hidden="true" />, title: "Verificar el escrutinio", body: "Al cierre, tu teléfono descarga el paquete y corre el verificador." },
-    { href: `/e/${id}/draw`, icon: <Shuffle aria-hidden="true" />, title: "Recomputar el sorteo", body: "Recalcula los ganadores desde la semilla pública." },
+    { href: `/e/${id}/live`, icon: <Radio aria-hidden="true" />, title: "Ver en vivo", body: "Participación y conteo por opción." },
+    { href: `/e/${id}#verificar`, icon: <ShieldQuestion aria-hidden="true" />, title: "Verificar el escrutinio", body: "Al cierre, compruébalo desde tu teléfono." },
+    { href: `/e/${id}/draw`, icon: <Shuffle aria-hidden="true" />, title: "Recomputar el sorteo", body: "Recalcula los ganadores." },
   ];
   return (
     <Card data-testid="observer-mode">

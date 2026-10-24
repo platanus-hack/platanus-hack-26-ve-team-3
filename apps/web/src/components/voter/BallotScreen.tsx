@@ -117,7 +117,7 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
                 {detail}
               </p>
             ) : null}
-            <Button size="lg" full variant="success" className="min-h-14 text-title" onClick={send} loading={sending} data-testid="vote-button">
+            <Button size="lg" full className="min-h-14 text-title" onClick={send} loading={sending} data-testid="vote-button">
               {sending ? "Enviando tu voto…" : phase === "error" ? `Intentar de nuevo: ${chosen.label}` : `Votar: ${chosen.label}`}
             </Button>
           </div>

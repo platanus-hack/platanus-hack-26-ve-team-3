@@ -13,19 +13,19 @@ const styles: Record<HonestStatus, { cls: string; icon: React.ReactNode }> = {
   "fallo detectado": { cls: "bg-danger-soft text-danger-strong border-danger/50", icon: <XCircle aria-hidden="true" /> },
 };
 
-export function StatusPill({ status, className, size = "md" }: { status: HonestStatus; className?: string; size?: "md" | "lg" }) {
+export function StatusPill({ status, className, size = "md" }: { status: HonestStatus; className?: string; size?: "sm" | "md" | "lg" }) {
   const s = styles[status];
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border font-semibold capitalize",
-        size === "lg" ? "px-3 py-1.5 text-body [&_svg]:size-5" : "px-2.5 py-0.5 text-small [&_svg]:size-4",
+        "inline-flex items-center gap-1.5 rounded-full border font-semibold",
+        size === "lg" ? "px-3 py-1.5 text-body [&_svg]:size-5" : size === "sm" ? "gap-1 px-2 py-0.5 text-[0.6875rem] [&_svg]:size-3.5" : "px-2.5 py-0.5 text-small [&_svg]:size-4",
         s.cls,
         className,
       )}
     >
       {s.icon}
-      {status}
+      <span className="inline-block first-letter:uppercase">{status}</span>
     </span>
   );
 }

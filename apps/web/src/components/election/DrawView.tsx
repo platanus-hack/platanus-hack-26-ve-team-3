@@ -13,9 +13,11 @@ import { apiV1, fetchAuditPackageBytes } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
 import { compareDraw, recomputeDraw, type DrawComparison, type Recomputed } from "@/lib/client/draw";
 import { formatInt, shortHash } from "@/lib/client/format";
-import { phaseLabel } from "@/lib/client/phases";
 import type { DrawResponse as DrawInfo, Election as ElectionV1 } from "@quorum/contracts";
 import { PhaseTimeline } from "./PhaseTimeline";
+import { Disclosure } from "@/components/ui/disclosure";
+import { PageHeader } from "@/components/ui/page-header";
+import { Stat, StatGrid } from "@/components/ui/stat";
 
 const comparisonStyle: Record<DrawComparison, { tone: "success" | "danger" | "warning"; text: string }> = {
   coincide: { tone: "success", text: "Coincide: recomputado en tu navegador" },
@@ -129,41 +131,24 @@ export function DrawView({ electionId }: { electionId: string }) {
   const finalHashOk = packageFinalHash && packageFinalHash !== "error" && draw ? packageFinalHash.toLowerCase() === draw.finalHash.toLowerCase() : null;
 
   return (
-    <div className="q-container flex flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">Sorteo verificable</Badge>
-          <Badge tone="neutral">{phaseLabel[election.status]}</Badge>
-        </div>
-        <h1 className="text-title font-bold tracking-tight md:text-display">{election.title}</h1>
+    <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
+      <PageHeader title={election.title} meta="Sorteo verificable">
         <PhaseTimeline phase={election.status} />
-      </header>
+      </PageHeader>
 
       {!draw ? (
         <EmptyState title="El sorteo aún no se ha realizado" action={<Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "secondary" }))}>Centro de transparencia</Link>}>
-          Se hace cuando la votación es auditable. La semilla sale del hash final del registro de boletas, así que nadie la conoce antes del cierre.
+          Se hace al cerrar. La semilla sale del registro final: nadie la conoce antes.
         </EmptyState>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle as="h2" className="text-body text-muted-foreground">
-                  Proyectos a financiar (N)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-display font-bold">{formatInt(draw.n)}</p>
-                <p className="text-small text-muted-foreground">{election.winnersCountFromResult ? "Fijado por la opción ganadora de la votación." : "Fijado por el organizador."}</p>
-              </CardContent>
-            </Card>
-            <Card className="md:col-span-2">
-              <CardHeader className="pb-2">
-                <CardTitle as="h2" className="text-body text-muted-foreground">
-                  Semilla
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-1 text-small">
+          <Card>
+            <CardContent className="flex flex-col gap-4 pt-5 md:pt-6">
+              <StatGrid>
+                <Stat label="Proyectos a financiar" value={formatInt(draw.n)} hint={election.winnersCountFromResult ? "Por la opción ganadora" : "Fijado por el organizador"} />
+                <Stat label="Semilla" value={<span className="q-mono text-body" title={draw.seed}>{shortHash(draw.seed, 8, 6)}</span>} hint="Del registro final" />
+              </StatGrid>
+              <Disclosure title="Detalles técnicos" bodyClassName="flex flex-col gap-1">
                 <p>
                   <span className="text-muted-foreground">Hash final del registro:</span> <span className="q-mono break-all">{draw.finalHash}</span>
                 </p>
@@ -171,14 +156,14 @@ export function DrawView({ electionId }: { electionId: string }) {
                   <span className="text-muted-foreground">seed = keccak256(finalHash):</span> <span className="q-mono break-all">{draw.seed}</span>
                 </p>
                 <p className="text-muted-foreground">Método: {draw.method ?? "keccak256(finalHash) · Fisher–Yates"}</p>
-              </CardContent>
-            </Card>
-          </div>
+              </Disclosure>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
               <CardTitle>Proyectos postulados ({draw.candidates.length})</CardTitle>
-              <CardDescription>Ganadores marcados con trofeo. Ordenados por id, como los recibe el algoritmo.</CardDescription>
+              <CardDescription>En el orden en que los recibe el algoritmo.</CardDescription>
             </CardHeader>
             <CardContent>
               <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-live="polite">
@@ -203,7 +188,7 @@ export function DrawView({ electionId }: { electionId: string }) {
           <Card>
             <CardHeader>
               <CardTitle>Recomputar aquí</CardTitle>
-              <CardDescription>Tu navegador repite el sorteo con la misma semilla y compara. No depende del servidor más que para leer los datos públicos.</CardDescription>
+              <CardDescription>Tu navegador repite el sorteo y lo compara con el publicado.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <Button onClick={recompute} loading={recomputing} className="w-full sm:w-fit">
@@ -219,7 +204,6 @@ export function DrawView({ electionId }: { electionId: string }) {
                   <Badge tone={comparisonStyle[comparison].tone} className="w-fit">
                     {comparisonStyle[comparison].text}
                   </Badge>
-                  <p>Implementación: drawWinners de @quorum/protocol-adapter (la misma que usan el servidor y el verificador).</p>
                   <p>
                     Recomputado: <span className="font-semibold">{recomputed.winners.map(label).join(" · ") || "—"}</span>
                   </p>

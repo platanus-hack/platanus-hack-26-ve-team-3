@@ -16,12 +16,14 @@ import { cn } from "@/lib/client/cn";
 import { copyText } from "@/lib/client/download";
 import { formatDateTime, formatInt, formatPercent } from "@/lib/client/format";
 import { appendVoters, consumeTokenReveal, loadOrgToken, loadVoters, rememberElection, saveOrgToken, type StoredVoter } from "@/lib/client/orgStore";
-import { hasAuditPackage, nextOrganizerAction, phaseLabel } from "@/lib/client/phases";
+import { hasAuditPackage, nextOrganizerAction } from "@/lib/client/phases";
 import type { Aggregates as AggregatesV1, Election as ElectionV1, ReviewSummary, VotersListResponse as VotersListV1 } from "@quorum/contracts";
 import { casesLabel, openWarnings, readinessLine, type Readiness } from "@/lib/client/reviews";
 import { CandidatesList } from "./CandidatesEditor";
 import { ReviewsCard } from "./ReviewsCard";
 import { RoomCard, openProjector } from "@/components/room/RoomCard";
+import { ActionBar, PageHeader } from "@/components/ui/page-header";
+import { Stat, StatGrid } from "@/components/ui/stat";
 
 type Channel = "dry-run" | "wame";
 const stateLabel = { invited: "Invitado", registered: "Inscrito", voted: "Votó" } as const;
@@ -223,33 +225,25 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const inviteLinkFor = (id: string) => inviteResults?.find((r) => r.voterId === id)?.link ?? localVoters.find((v) => v.id === id)?.inviteUrl ?? null;
 
   return (
-    <div className="q-container flex flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">Panel del organizador</Badge>
-          <Badge tone={phase === "failed" ? "danger" : "neutral"}>{phaseLabel[phase]}</Badge>
-        </div>
-        <h1 className="text-title font-bold tracking-tight md:text-display">{election.title}</h1>
-        <p className="text-small text-muted-foreground">
-          Cierra {formatDateTime(election.endsAt)} · manifiesto <span className="q-mono">{election.manifestHash ? `${election.manifestHash.slice(0, 14)}…` : "sin publicar"}</span>
-        </p>
+    <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
+      <PageHeader title={election.title} meta={<>Cierra {formatDateTime(election.endsAt)}</>}>
         <PhaseTimeline phase={phase} />
-        <div className="flex flex-wrap gap-2">
-          <Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
-            Centro de transparencia
+        <ActionBar>
+          <Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "soft", size: "sm" }))}>
+            Transparencia
           </Link>
-          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
-            Resultados en vivo
+          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "soft", size: "sm" }))}>
+            En vivo
           </Link>
-          <Button variant="secondary" size="sm" onClick={() => openProjector(electionId)}>
+          <Button variant="soft" size="sm" onClick={() => openProjector(electionId)}>
             Proyectar
           </Button>
-        </div>
-      </header>
+        </ActionBar>
+      </PageHeader>
 
       {reveal ? (
         <Alert tone="warning" title="Tu token de organizador: guárdalo">
-          <p>Se muestra una sola vez. Sin él no podrás abrir, cerrar ni sortear desde otro navegador. Se guarda sólo en esta pestaña.</p>
+          <p>Se muestra una sola vez. Lo necesitas para abrir, cerrar y sortear.</p>
           <p className="q-mono mt-2 break-all rounded-md border border-border bg-card p-2 text-foreground" data-testid="org-token">
             {reveal}
           </p>
@@ -268,7 +262,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         <Card>
           <CardHeader>
             <CardTitle>Token del organizador</CardTitle>
-            <CardDescription>Las acciones del organizador exigen el token que recibiste al crear la votación. Sólo se guarda en esta pestaña.</CardDescription>
+            <CardDescription>El que recibiste al crear la votación.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <Field label="Token" htmlFor="org-token-input">
@@ -281,112 +275,91 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle as="h2" className="text-body text-muted-foreground">
-              Participación
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-display font-bold">{tally ? formatPercent(tally.turnout) : "—"}</p>
-            <p className="text-small text-muted-foreground">{tally ? `${formatInt(tally.totalVotes)} boletas de ${formatInt(tally.eligible)} en el padrón` : "Sin agregados todavía"}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle as="h2" className="text-body text-muted-foreground">
-              Inscripción
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {shownCounts ? (
-              <dl className="grid grid-cols-3 gap-2 text-center text-small">
-                {(["invited", "registered", "voted"] as const).map((k) => (
-                  <div key={k}>
-                    <dt className="text-muted-foreground">{stateLabel[k]}</dt>
-                    <dd className="text-heading font-bold">{formatInt(shownCounts[k])}</dd>
-                  </div>
+      <Card className="border-transparent shadow-elevated">
+        <CardContent className="flex flex-col gap-4 pt-5 md:pt-6">
+          <div>
+            <p className="q-eyebrow">Siguiente paso</p>
+            {action ? <p className="mt-1 text-heading font-semibold">{action.hint}</p> : null}
+          </div>
+          {action ? (
+            !confirming ? (
+              <>
+                <Button size="lg" full onClick={() => setConfirming(true)} disabled={!token} data-testid="phase-action">
+                  {action.label}
+                </Button>
+                {action.id === "open" && readiness ? (
+                  <p className="text-small text-muted-foreground" data-testid="open-readiness">
+                    {readinessLine(readiness)}
+                    {readiness.pending > 0 ? (
+                      <>
+                        {" · "}
+                        <strong className="text-warning-strong">{casesLabel(readiness.pending)}</strong>
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <div className="q-fade-in flex flex-col gap-3 rounded-md bg-muted p-4">
+                {warnings.map((w) => (
+                  <p key={w} className="text-small font-semibold text-warning-strong" data-testid="open-warning">
+                    {w}
+                  </p>
                 ))}
-              </dl>
-            ) : (
-              <p className="text-small text-muted-foreground">{token ? "No se pudo leer la lista de participantes." : "Requiere el token del organizador."}</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle as="h2" className="text-body text-muted-foreground">
-              Siguiente paso
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {action ? (
-              !confirming ? (
-                <>
-                  <Button onClick={() => setConfirming(true)} disabled={!token} data-testid="phase-action">
-                    {action.label}
+                <p className="text-body">{action.confirm} ¿Seguimos?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="secondary" onClick={() => setConfirming(false)} disabled={acting}>
+                    Cancelar
                   </Button>
-                  {action.id === "open" && readiness ? (
-                    <p className="text-small text-muted-foreground" data-testid="open-readiness">
-                      {readinessLine(readiness)}
-                      {readiness.pending > 0 ? (
-                        <>
-                          {" · "}
-                          <strong className="text-warning-strong">{casesLabel(readiness.pending)}</strong>
-                        </>
-                      ) : null}
-                    </p>
-                  ) : null}
-                </>
-              ) : (
-                <div className="flex flex-col gap-2 rounded-md border border-danger/50 p-2">
-                  {warnings.map((w) => (
-                    <p key={w} className="text-small font-semibold" data-testid="open-warning">
-                      {w}
-                    </p>
-                  ))}
-                  <p className="text-small">{action.confirm} ¿Confirmas?</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="danger" size="sm" onClick={act} loading={acting}>
-                      Sí, {action.label.toLowerCase()}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirming(false)} disabled={acting}>
-                      Cancelar
-                    </Button>
-                  </div>
+                  <Button onClick={act} loading={acting}>
+                    Sí, {action.label.toLowerCase()}
+                  </Button>
                 </div>
-              )
-            ) : (
-              <p className="text-small text-muted-foreground">
-                {phase === "auditable" && (election.candidates?.length ?? 0) === 0
-                  ? "Auditable. No hay proyectos postulados: no hay sorteo."
-                  : phase === "drawn"
-                    ? "Sorteo realizado."
-                    : phase === "failed"
-                      ? "La verificación del paquete falló: el resultado se publica con el error."
-                      : `Fase ${phaseLabel[phase].toLowerCase()}: no hay acción pendiente.`}
-              </p>
-            )}
-            {!token && action ? <p className="text-small text-muted-foreground">Necesitas el token del organizador.</p> : null}
-            {hasAuditPackage(phase) ? (
-              <div className="flex flex-col gap-1 text-small">
-                <a href={`/api/elections/${encodeURIComponent(electionId)}/artifacts`} download className="inline-flex min-h-tap items-center gap-2 font-semibold underline underline-offset-4">
-                  <Download className="size-4" aria-hidden="true" /> Exportar paquete de auditoría
-                </a>
-                <Link href={`/e/${encodeURIComponent(electionId)}#verificar`} className="inline-flex min-h-tap items-center underline underline-offset-4">
-                  Verificar en el navegador
-                </Link>
               </div>
-            ) : null}
-            {phase === "drawn" ? (
-              <Link href={`/e/${encodeURIComponent(electionId)}/draw`} className="inline-flex min-h-tap items-center text-small underline underline-offset-4">
-                Ver sorteo y recomputarlo
+            )
+          ) : (
+            <p className="text-small text-muted-foreground">
+              {phase === "auditable" && (election.candidates?.length ?? 0) === 0
+                ? "Votación cerrada. El resultado ya es verificable."
+                : phase === "drawn"
+                  ? "Sorteo realizado."
+                  : phase === "failed"
+                    ? "La verificación falló: el resultado se publica con el error."
+                    : "No hay nada pendiente."}
+            </p>
+          )}
+          {!token && action ? <p className="text-small text-muted-foreground">Necesitas el token del organizador.</p> : null}
+          {hasAuditPackage(phase) ? (
+            <div className="flex flex-col gap-1 text-small">
+              <a href={`/api/elections/${encodeURIComponent(electionId)}/artifacts`} download className="inline-flex min-h-tap items-center gap-2 font-semibold underline underline-offset-4">
+                <Download className="size-4" aria-hidden="true" /> Exportar paquete de auditoría
+              </a>
+              <Link href={`/e/${encodeURIComponent(electionId)}#verificar`} className="inline-flex min-h-tap items-center underline underline-offset-4">
+                Verificar en el navegador
               </Link>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          ) : null}
+          {phase === "drawn" ? (
+            <Link href={`/e/${encodeURIComponent(electionId)}/draw`} className="inline-flex min-h-tap items-center text-small underline underline-offset-4">
+              Ver sorteo y recomputarlo
+            </Link>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-5 md:pt-6">
+          <StatGrid className="md:grid-cols-4">
+            <Stat label="Participación" value={tally ? formatPercent(tally.turnout) : "—"} hint={tally ? `${formatInt(tally.totalVotes)} de ${formatInt(tally.eligible)}` : undefined} />
+            {shownCounts ? (
+              (["invited", "registered", "voted"] as const).map((k) => <Stat key={k} label={stateLabel[k]} value={formatInt(shownCounts[k])} />)
+            ) : (
+              <p className="col-span-2 self-center text-small text-muted-foreground md:col-span-3">{token ? "No se pudo leer la lista de participantes." : "Requiere el token del organizador."}</p>
+            )}
+          </StatGrid>
+        </CardContent>
+      </Card>
+
       {actionError ? (
         <Alert tone="danger" title="La acción falló">
           {actionError}
@@ -399,24 +372,25 @@ export function OrgPanel({ electionId }: { electionId: string }) {
 
       {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} onPhaseChange={reload} eligibility={election.eligibility} onElectionChange={setElection} readiness={readiness} /> : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Proyectos postulados al sorteo</CardTitle>
-          <CardDescription>
-            Fijados en el manifiesto al crear la votación (no se pueden editar).{" "}
-            {election.winnersCountFromResult ? "La opción ganadora fija cuántos se financian; el sorteo verificable elige cuáles." : "El sorteo verificable elige los ganadores."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CandidatesList candidates={election.candidates ?? []} />
-        </CardContent>
-      </Card>
+      {(election.candidates?.length ?? 0) > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Proyectos postulados al sorteo</CardTitle>
+            <CardDescription>
+              {election.winnersCountFromResult ? "La opción ganadora define cuántos; el sorteo, cuáles." : "El sorteo elige los ganadores."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CandidatesList candidates={election.candidates ?? []} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle>Participantes e invitaciones</CardTitle>
           <CardDescription>
-            Sólo tú ves esta lista (requiere token). La vista pública muestra sólo agregados. El envío real por WhatsApp requiere aprobación; aquí usa <span className="q-mono">dry-run</span> o <span className="q-mono">wa.me</span>.
+            Sólo tú ves esta lista.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

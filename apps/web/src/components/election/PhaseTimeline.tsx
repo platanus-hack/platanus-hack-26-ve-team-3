@@ -14,8 +14,9 @@ export function PhaseTimeline({ phase, className }: { phase: ElectionPhase; clas
     <nav aria-label="Fases de la votación" className={cn("w-full", className)} data-testid="phase-timeline">
       <p className="mb-2 text-small text-muted-foreground">
         Fase actual: <span className="font-semibold text-foreground">{phaseLabel[phase]}</span>
+        {current >= 0 ? <span className="md:hidden"> · {current + 1} de {PHASE_LINE.length}</span> : null}
       </p>
-      <ol className="grid grid-cols-3 gap-2 md:grid-cols-6">
+      <ol className="flex gap-1.5 md:grid md:grid-cols-6 md:gap-2">
         {PHASE_LINE.map((p, i) => {
           const state = failed && i === current ? "failed" : i < current ? "done" : i === current ? "current" : "todo";
           return (
@@ -23,14 +24,14 @@ export function PhaseTimeline({ phase, className }: { phase: ElectionPhase; clas
               key={p.id}
               aria-current={state === "current" || state === "failed" ? "step" : undefined}
               className={cn(
-                "flex min-h-tap flex-col justify-center rounded-md border px-3 py-2 text-small",
-                state === "done" && "border-transparent bg-success-soft text-success-strong",
-                state === "current" && "border-primary bg-primary-soft font-semibold text-primary-soft-foreground ring-4 ring-ring/15",
-                state === "failed" && "border-danger/60 bg-danger-soft font-semibold text-danger-strong",
-                state === "todo" && "border-dashed border-input bg-card/60 text-subtle",
+                "h-1.5 flex-1 rounded-full md:flex md:h-auto md:min-h-tap md:flex-col md:justify-center md:rounded-md md:border md:px-3 md:py-2 md:text-small",
+                state === "done" && "bg-success md:border-transparent md:bg-success-soft md:text-success-strong",
+                state === "current" && "bg-primary md:border-primary md:bg-primary-soft md:font-semibold md:text-primary-soft-foreground md:ring-4 md:ring-ring/15",
+                state === "failed" && "bg-danger md:border-danger/60 md:bg-danger-soft md:font-semibold md:text-danger-strong",
+                state === "todo" && "bg-border md:border-dashed md:border-input md:bg-card/60 md:text-subtle",
               )}
             >
-              <span className="flex items-center gap-1">
+              <span className="sr-only md:not-sr-only md:flex md:items-center md:gap-1">
                 {state === "done" ? <Check className="size-3.5" aria-hidden="true" /> : state === "failed" ? <AlertTriangle className="size-3.5" aria-hidden="true" /> : <span className="q-mono">{i + 1}</span>}
                 {p.label}
               </span>
