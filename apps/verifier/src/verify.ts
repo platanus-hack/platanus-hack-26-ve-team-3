@@ -8,7 +8,7 @@
  */
 import { Group, verifyProof } from "@semaphore-protocol/core";
 import { AuditResult as AuditResultSchema, type AuditResult } from "@quorum/contracts";
-import { concat, createPublicClient, decodeAbiParameters, http, keccak256, sha256, stringToBytes, toHex, type Hex } from "viem";
+import { concat, createPublicClient, decodeAbiParameters, decodeEventLog, getAddress, http, isAddress, keccak256, parseAbi, sha256, stringToBytes, toHex, type Hex } from "viem";
 import { z } from "zod";
 
 export const VERIFIER_VERSION = "quorum-verifier/0.1.0 (semaphore-core 4.14.5)";
@@ -60,6 +60,14 @@ const ManifestSchema = z.object({
   merkleTreeDepth: z.number().int(),
   label: z.string().optional(),
   drawRule: DrawRuleSchema.optional(),
+  anchorPolicy: z
+    .object({
+      kind: z.enum(["quorum-registry", "calldata"]),
+      chainId: z.number().int(),
+      registryAddress: z.string().refine((v) => isAddress(v, { strict: false }), "dirección EVM").optional(),
+      organizer: z.string().refine((v) => isAddress(v, { strict: false }), "dirección EVM"),
+    })
+    .optional(),
 });
 const TallySchema = z.object({ counts: z.array(z.number().int().min(0)), invalid: z.number().int().min(0), total: z.number().int().min(0) });
 export const AuditPackageSchema = z.object({
@@ -77,7 +85,14 @@ export const AuditPackageSchema = z.object({
   tally: TallySchema,
   tallyHash: Hex32,
   finalHash: Hex32,
-  anchor: z.object({ chainId: z.number().int(), txHash: Hex32.optional(), attestationUid: Hex32.optional() }).nullable(),
+  anchor: z
+    .object({
+      chainId: z.number().int(),
+      txHash: Hex32.optional(),
+      attestationUid: Hex32.optional(),
+      registryAddress: z.string().refine((v) => isAddress(v, { strict: false }), "dirección EVM").optional(),
+    })
+    .nullable(),
   checksums: z.object({ manifest: Hex32, commitments: Hex32, ledger: Hex32, tally: Hex32 }),
   versions: z.object({ adapter: z.string(), semaphore: z.string(), artifacts: z.string() }).optional(),
   generatedAt: z.string().optional(),
@@ -120,15 +135,54 @@ export function recomputeDraw(candidateIds: readonly string[], n: number, finalH
 }
 
 // ---------- ancla ----------
-export type AnchorRead = { chainId: number; from: string; to: string | null; input: Hex };
+export type AnchorLog = { address: string; data: Hex; topics: Hex[] };
+export type AnchorRead = {
+  chainId: number;
+  from: string;
+  to: string | null;
+  input: Hex;
+  /** Estado del receipt. Necesario para el modo registro. */
+  status?: "success" | "reverted";
+  /** Logs del receipt. Necesarios para el modo registro (evento `Anchored`). */
+  logs?: AnchorLog[];
+};
 export type AnchorReader = (txHash: Hex) => Promise<AnchorRead>;
 
 export function viemAnchorReader(rpcUrl: string): AnchorReader {
   const client = createPublicClient({ transport: http(rpcUrl) });
   return async (hash) => {
-    const [chainId, tx] = await Promise.all([client.getChainId(), client.getTransaction({ hash })]);
-    return { chainId, from: tx.from, to: tx.to ?? null, input: tx.input };
+    const [chainId, tx, receipt] = await Promise.all([client.getChainId(), client.getTransaction({ hash }), client.getTransactionReceipt({ hash })]);
+    return {
+      chainId,
+      from: tx.from,
+      to: tx.to ?? null,
+      input: tx.input,
+      status: receipt.status,
+      logs: receipt.logs.map((l) => ({ address: l.address, data: l.data, topics: [...l.topics] as Hex[] })),
+    };
   };
+}
+
+/**
+ * Evento del QuorumRegistry (contracts/QuorumRegistry.sol). Declarado aquí a propósito (independencia: no se importa
+ * @quorum/wallet): `event Anchored(bytes32 indexed electionId, bytes32 finalHash, uint256 castCount, address indexed organizer)`.
+ */
+export const ANCHORED_EVENT_ABI = parseAbi(["event Anchored(bytes32 indexed electionId, bytes32 finalHash, uint256 castCount, address indexed organizer)"]);
+/** On-chain el id de elección es keccak256(utf8(electionId)). */
+export const electionIdBytes32 = (electionId: string): Hex => keccak256(stringToBytes(electionId));
+
+export function decodeAnchoredEvents(logs: AnchorLog[], registryAddress: string): { electionId: Hex; finalHash: Hex; castCount: bigint; organizer: string }[] {
+  const out: { electionId: Hex; finalHash: Hex; castCount: bigint; organizer: string }[] = [];
+  for (const log of logs) {
+    if (log.address.toLowerCase() !== registryAddress.toLowerCase()) continue;
+    try {
+      const ev = decodeEventLog({ abi: ANCHORED_EVENT_ABI, data: log.data, topics: log.topics as [Hex, ...Hex[]] });
+      out.push({ electionId: ev.args.electionId, finalHash: ev.args.finalHash, castCount: ev.args.castCount, organizer: ev.args.organizer });
+    } catch {
+      /* otro evento del registro (p. ej. Cast) */
+    }
+  }
+  return out;
 }
 
 export function decodeAnchorCalldata(data: Hex): { finalHash: Hex; groupRoot: string; tallyHash: Hex; electionId: string } {
@@ -147,7 +201,9 @@ export type VerifyOptions = {
   now?: () => Date;
 };
 
-type Check = { name: string; passed: boolean; reason?: string };
+/** Estado honesto de cada check: "no evaluado" nunca se presenta como "verificado". */
+export type CheckStatus = "verificado" | "no evaluado" | "fallo detectado";
+type Check = { name: string; passed: boolean; reason?: string; status?: CheckStatus };
 
 const BASE_UNSUPPORTED = [
   "secreto-del-contenido-frente-al-servidor: la opción elegida viaja en claro dentro de la prueba Semaphore (no hay cifrado ElGamal); el servidor ve cada voto, aunque no sabe de quién es",
@@ -297,35 +353,97 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     checks.push({ name: "tally_matches", passed: problems.length === 0, reason: problems.length ? `total publicado ≠ recomputado: ${problems.join("; ")}` : `recuento reproducido: ${JSON.stringify(counts)} (${pkg.ledger.length} boletas, ${invalid} inválidas)` });
   }
 
-  // 7. anchor_matches
+  // 7. anchor_matches — tres estados: verificado / no evaluado / fallo detectado.
   {
     const reader = opts.anchorReader ?? (opts.anchorRpcUrl ? viemAnchorReader(opts.anchorRpcUrl) : undefined);
+    const policy = pkg.manifest.anchorPolicy;
+    const notEvaluated = (reason: string) => checks.push({ name: "anchor_matches", passed: true, status: "no evaluado", reason: `no evaluado: ${reason}` });
+    const policyProblems: string[] = [];
+    if (policy && pkg.anchor) {
+      if (policy.chainId !== pkg.anchor.chainId) policyProblems.push(`ancla en chainId ${pkg.anchor.chainId} ≠ chainId fijado en el manifiesto ${policy.chainId}`);
+      if (policy.kind === "quorum-registry") {
+        if (!policy.registryAddress) policyProblems.push("anchorPolicy quorum-registry sin registryAddress");
+        else if (!pkg.anchor.registryAddress) policyProblems.push("el manifiesto fija un QuorumRegistry pero el ancla no es una llamada al registro");
+        else if (pkg.anchor.registryAddress.toLowerCase() !== policy.registryAddress.toLowerCase()) policyProblems.push(`registro del ancla ${pkg.anchor.registryAddress} ≠ registro fijado en el manifiesto ${policy.registryAddress}`);
+      } else if (pkg.anchor.registryAddress) policyProblems.push("el manifiesto fija ancla por calldata pero el paquete declara un registro");
+    }
     if (!pkg.anchor) {
-      checks.push({ name: "anchor_matches", passed: true, reason: "no evaluado: el paquete no declara ancla on-chain" });
+      notEvaluated("el paquete no declara ancla on-chain");
       unsupported.push("inmutabilidad-on-chain: paquete sin ancla; nada impide que el organizador publique otro paquete distinto más tarde");
       unsupported.push("completitud-del-ledger: sin ancla, una boleta eliminada con la cadena rehecha solo la detecta el votante con su recibo (nullifier)");
+    } else if (policyProblems.length) {
+      // Contradicción entre el paquete y el manifiesto: es fallo aunque no haya RPC.
+      checks.push({ name: "anchor_matches", passed: false, status: "fallo detectado", reason: policyProblems.join("; ") });
     } else if (!pkg.anchor.txHash) {
-      checks.push({ name: "anchor_matches", passed: true, reason: "no evaluado: ancla sin txHash (solo attestationUid); lectura EAS no implementada en este verificador" });
+      notEvaluated("ancla sin txHash (solo attestationUid); lectura EAS no implementada en este verificador");
       unsupported.push("inmutabilidad-on-chain: ancla no evaluada");
     } else if (!reader) {
-      checks.push({ name: "anchor_matches", passed: true, reason: `no evaluado: ancla declarada (chainId ${pkg.anchor.chainId}, tx ${pkg.anchor.txHash.slice(0, 12)}…) pero sin --anchor-rpc` });
+      notEvaluated(`ancla declarada (chainId ${pkg.anchor.chainId}, tx ${pkg.anchor.txHash.slice(0, 12)}…) pero sin --anchor-rpc`);
       unsupported.push("inmutabilidad-on-chain: ancla no evaluada (sin RPC)");
       unsupported.push("completitud-del-ledger: sin comparar con el ancla, una boleta eliminada con la cadena rehecha no se detecta aquí");
     } else {
-      const problems: string[] = [];
+      let tx: AnchorRead | null = null;
       try {
-        const tx = await reader(pkg.anchor.txHash as Hex);
+        tx = await reader(pkg.anchor.txHash as Hex);
+      } catch (e) {
+        const err = e as Error;
+        const notFound = /NotFound/.test(err.name ?? "") || /not found|could not be found/i.test(err.message ?? "");
+        if (notFound) {
+          // La tx declarada no existe en la cadena: el paquete afirma un ancla que no hay.
+          checks.push({ name: "anchor_matches", passed: false, status: "fallo detectado", reason: `la tx de ancla declarada ${pkg.anchor.txHash.slice(0, 12)}… no existe en la cadena (${err.message.split("\n")[0]})` });
+        } else {
+          // Un RPC caído no es evidencia de manipulación, pero tampoco de ancla: no evaluado y el paquete NO se da por válido.
+          checks.push({ name: "anchor_matches", passed: false, status: "no evaluado", reason: `no evaluado: no se pudo leer la tx de ancla ${pkg.anchor.txHash.slice(0, 12)}… (${err.message.split("\n")[0]}); reintentar con otro RPC` });
+          unsupported.push("inmutabilidad-on-chain: ancla declarada pero no evaluada (RPC no disponible)");
+        }
+      }
+      if (tx) {
+        const problems: string[] = [];
+        let organizerUnpinned = false;
+        let okReason = "";
         if (tx.chainId !== pkg.anchor.chainId) problems.push(`chainId del RPC ${tx.chainId} ≠ ${pkg.anchor.chainId}`);
         if (pkg.anchor.chainId !== BASE_SEPOLIA_CHAIN_ID) problems.push(`ancla en chainId ${pkg.anchor.chainId}; este verificador solo acepta Base Sepolia (${BASE_SEPOLIA_CHAIN_ID})`);
-        const a = decodeAnchorCalldata(tx.input);
-        if (a.electionId !== pkg.electionId) problems.push(`electionId anclado "${a.electionId}" ≠ "${pkg.electionId}"`);
-        if (a.finalHash !== pkg.finalHash) problems.push(`hash final ≠ ancla: anclado ${a.finalHash.slice(0, 18)}…, paquete ${pkg.finalHash.slice(0, 18)}…`);
-        if (a.groupRoot !== pkg.groupRoot) problems.push(`groupRoot anclada ≠ paquete`);
-        if (a.tallyHash !== pkg.tallyHash) problems.push(`tallyHash anclado ≠ paquete`);
-      } catch (e) {
-        problems.push(`no se pudo leer/decodificar la tx de ancla: ${(e as Error).message}`);
+        if (pkg.anchor.registryAddress) {
+          // Modo registro: se lee el receipt y el evento Anchored del QuorumRegistry.
+          const registry = pkg.anchor.registryAddress;
+          if (!tx.logs || !tx.status) problems.push("el lector RPC no devolvió el receipt (status/logs) de la tx de ancla");
+          else if (tx.status !== "success") problems.push(`la tx de ancla ${pkg.anchor.txHash.slice(0, 12)}… está revertida`);
+          else {
+            const evs = decodeAnchoredEvents(tx.logs, registry);
+            if (evs.length !== 1) problems.push(`se esperaba exactamente 1 evento Anchored de ${registry} en el receipt; hay ${evs.length}`);
+            else {
+              const ev = evs[0];
+              const wantId = electionIdBytes32(pkg.electionId);
+              if (ev.electionId.toLowerCase() !== wantId.toLowerCase()) problems.push(`Anchored.electionId ${ev.electionId.slice(0, 18)}… ≠ keccak256("${pkg.electionId}") ${wantId.slice(0, 18)}…`);
+              if (ev.finalHash.toLowerCase() !== pkg.finalHash) problems.push(`hash final ≠ ancla: anclado ${ev.finalHash.slice(0, 18)}…, paquete ${pkg.finalHash.slice(0, 18)}…`);
+              if (policy) {
+                if (ev.organizer.toLowerCase() !== policy.organizer.toLowerCase()) problems.push(`ancló ${getAddress(ev.organizer)}, pero el manifiesto fija como organizador a ${getAddress(policy.organizer)}`);
+              } else organizerUnpinned = true;
+              okReason = `evento Anchored del QuorumRegistry ${getAddress(registry)} en Base Sepolia (tx ${pkg.anchor.txHash.slice(0, 12)}…): electionId y finalHash coinciden; organizador ${getAddress(ev.organizer)}${policy ? " = el fijado en el manifiesto" : ""}; castCount ${ev.castCount}`;
+            }
+          }
+        } else {
+          // Modo antiguo (fallback): tx del organizador a sí mismo con el acta en calldata.
+          try {
+            const a = decodeAnchorCalldata(tx.input);
+            if (a.electionId !== pkg.electionId) problems.push(`electionId anclado "${a.electionId}" ≠ "${pkg.electionId}"`);
+            if (a.finalHash !== pkg.finalHash) problems.push(`hash final ≠ ancla: anclado ${a.finalHash.slice(0, 18)}…, paquete ${pkg.finalHash.slice(0, 18)}…`);
+            if (a.groupRoot !== pkg.groupRoot) problems.push(`groupRoot anclada ≠ paquete`);
+            if (a.tallyHash !== pkg.tallyHash) problems.push(`tallyHash anclado ≠ paquete`);
+          } catch (e) {
+            problems.push(`no se pudo decodificar el calldata de la tx de ancla: ${(e as Error).message}`);
+          }
+          if (policy) {
+            if (tx.from.toLowerCase() !== policy.organizer.toLowerCase()) problems.push(`la tx de ancla la envió ${tx.from}, no el organizador fijado en el manifiesto ${policy.organizer}`);
+          } else organizerUnpinned = true;
+          okReason = `ancla en Base Sepolia (tx ${pkg.anchor.txHash.slice(0, 12)}…, calldata) coincide con finalHash, groupRoot y tallyHash`;
+        }
+        if (problems.length) checks.push({ name: "anchor_matches", passed: false, status: "fallo detectado", reason: problems.join("; ") });
+        else if (organizerUnpinned) {
+          notEvaluated(`${okReason}; pero el manifiesto no fija la dirección del organizador, así que no se puede comprobar QUIÉN ancló`);
+          unsupported.push("autoria-del-ancla: el manifiesto no fija el organizador (anchorPolicy); el ancla coincide pero cualquiera pudo emitirla");
+        } else checks.push({ name: "anchor_matches", passed: true, status: "verificado", reason: okReason });
       }
-      checks.push({ name: "anchor_matches", passed: problems.length === 0, reason: problems.length ? problems.join("; ") : `ancla en Base Sepolia (tx ${pkg.anchor.txHash.slice(0, 12)}…) coincide con finalHash, groupRoot y tallyHash` });
     }
   }
 
@@ -336,7 +454,7 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     if (!rule) {
       checks.push({ name: "draw_matches", passed: false, reason: "el paquete trae un sorteo pero el manifiesto no declara regla de sorteo (regla añadida después de publicar)" });
     } else if (!draw) {
-      checks.push({ name: "draw_matches", passed: true, reason: "no evaluado: el manifiesto declara sorteo pero aún no se ha realizado" });
+      checks.push({ name: "draw_matches", passed: true, status: "no evaluado", reason: "no evaluado: el manifiesto declara sorteo pero aún no se ha realizado" });
       unsupported.push("sorteo: aún no realizado; no hay ganadores que comprobar");
     } else {
       const problems: string[] = [];
@@ -387,7 +505,7 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
       inputArtifactDigest,
       checkedAt,
       valid: checks.every((c) => c.passed),
-      checks,
+      checks: checks.map((c) => ({ ...c, status: c.status ?? (!c.passed ? "fallo detectado" : c.reason?.startsWith("no evaluado") ? "no evaluado" : "verificado") })),
       unsupportedGuarantees: unsupported,
     };
     return AuditResultSchema.parse(result);

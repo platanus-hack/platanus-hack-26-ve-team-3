@@ -97,7 +97,8 @@ describe("flujo completo generado en el test + ancla simulada", () => {
 
     const ok = await verifyPackage(anchored, { anchorReader: reader });
     expect(ok.valid).toBe(true);
-    expect(ok.checks.find((c) => c.name === "anchor_matches")).toMatchObject({ passed: true });
+    // El calldata coincide, pero este manifiesto no fija organizador (M1): no se sabe quién ancló → "no evaluado", no "verificado".
+    expect(ok.checks.find((c) => c.name === "anchor_matches")).toMatchObject({ passed: true, status: "no evaluado" });
     expect(ok.unsupportedGuarantees.join("\n")).not.toMatch(/inmutabilidad-on-chain/);
 
     // sin RPC: no evaluado
@@ -118,9 +119,10 @@ describe("flujo completo generado en el test + ancla simulada", () => {
     expect(caught.checks.filter((c) => !c.passed).map((c) => c.name)).toEqual(["anchor_matches"]);
     expect(caught.checks.find((c) => c.name === "anchor_matches")?.reason).toMatch(/hash final ≠ ancla/);
 
-    // RPC caído / tx inexistente ⇒ fallo explícito, nunca éxito
+    // RPC caído ⇒ nunca éxito: valid:false con estado "no evaluado" (no se acusa manipulación sin evidencia)
     const down = await verifyPackage(anchored, { anchorReader: async () => { throw new Error("ECONNREFUSED"); } });
     expect(down.valid).toBe(false);
+    expect(down.checks.find((c) => c.name === "anchor_matches")?.status).toBe("no evaluado");
     expect(down.checks.find((c) => c.name === "anchor_matches")?.reason).toMatch(/no se pudo leer/);
   }, 60_000);
 });
