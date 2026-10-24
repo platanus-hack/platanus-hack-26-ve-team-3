@@ -23,8 +23,12 @@ export function overallStatus(result: AuditResult): HonestStatus {
  * Sin `status` (verificadores anteriores): un check que pasó pero cuya razón empieza por "no evaluado" tampoco es verde.
  */
 export function checkStatus(c: { passed: boolean; reason?: string; status?: "verificado" | "fallo detectado" | "no evaluado" }): HonestStatus {
-  if (c.status === "fallo detectado" || !c.passed) return "fallo detectado";
+  // Con `status` manda el verificador: un check que no pasó por falta de datos (RPC caído, archivo que no es un
+  // paquete) es "no evaluado" → "no verificable", no evidencia de manipulación.
+  if (c.status === "fallo detectado") return "fallo detectado";
   if (c.status === "no evaluado") return "no verificable";
+  if (c.status === "verificado") return c.passed ? "verificado" : "fallo detectado";
+  if (!c.passed) return "fallo detectado";
   if (c.reason && /^no evaluado/i.test(c.reason.trim())) return "no verificable";
   return "verificado";
 }
@@ -33,6 +37,7 @@ const checkName: Record<string, string> = {
   package_schema: "Formato del paquete",
   manifest_hash: "Hash del manifiesto",
   group_root: "Raíz del padrón",
+  commitments_unique: "Padrón sin duplicados",
   chain_integrity: "Cadena del registro",
   proofs_valid: "Pruebas de pertenencia",
   nullifiers_unique: "Un voto por credencial",
@@ -104,7 +109,7 @@ export function AuditChecklist({ result, onDownload, runtime, title = "Resultado
           ) : (
             <ul className="flex flex-col gap-2">
               {result.checks.map((c, i) => (
-                <li key={`${c.name}-${i}`} className="flex flex-col gap-1 rounded-md border border-border p-3 sm:flex-row sm:items-start sm:justify-between">
+                <li key={`${c.name}-${i}`} data-check={c.name} data-status={checkStatus(c)} className="flex flex-col gap-1 rounded-md border border-border p-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="font-semibold">{checkName[c.name] ?? c.name}</p>
                     <p className="q-mono text-small text-subtle">{c.name}</p>

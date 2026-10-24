@@ -59,6 +59,8 @@ describe("AuditChecklist con salidas REALES del verificador", () => {
     expect(checkStatus({ passed: true, status: "verificado" })).toBe("verificado");
     expect(checkStatus({ passed: true, status: "fallo detectado" })).toBe("fallo detectado");
     expect(checkStatus({ passed: false })).toBe("fallo detectado");
+    // RPC caído o archivo que no es un paquete: passed=false pero "no evaluado" → no verificable, no fallo.
+    expect(checkStatus({ passed: false, status: "no evaluado" })).toBe("no verificable");
   });
 
   it("total alterado: 'fallo detectado' con la causa visible", async () => {

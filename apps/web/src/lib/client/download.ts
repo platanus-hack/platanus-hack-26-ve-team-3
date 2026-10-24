@@ -18,3 +18,15 @@ export async function copyText(text: string): Promise<boolean> {
     return false;
   }
 }
+
+/** Descarga bytes exactos (p. ej. la copia alterada tal cual se verificó: misma huella SHA-256). */
+export function downloadBytes(filename: string, bytes: Uint8Array, type = "application/json") {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

@@ -30,30 +30,30 @@ const ProofSchema = z.object({
   nullifier: Decimal,
   scope: Decimal,
   points: z.tuple([Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal]),
-});
-const EntrySchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, proof: ProofSchema });
+}).strict();
+const EntrySchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, proof: ProofSchema }).strict();
 const Hex32Lower = z.string().regex(/^0x[0-9a-f]{64}$/, "hex de 32 bytes");
-const DrawCandidateSchema = z.object({ id: z.string().min(1), label: z.string(), amount: z.number().optional() });
+const DrawCandidateSchema = z.object({ id: z.string().min(1), label: z.string(), amount: z.number().optional() }).strict();
 const DrawRuleSchema = z.object({
   candidates: z.array(DrawCandidateSchema).min(1),
   winnersCount: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("fixed"), n: z.number().int().min(0) }),
-    z.object({ kind: z.literal("from-result"), optionValues: z.array(z.number().int().min(0)) }),
+    z.object({ kind: z.literal("fixed"), n: z.number().int().min(0) }).strict(),
+    z.object({ kind: z.literal("from-result"), optionValues: z.array(z.number().int().min(0)) }).strict(),
   ]),
   tieBreak: z.literal("lowest").optional(),
-});
+}).strict();
 const DrawSchema = z.object({
   seed: Hex32Lower,
   n: z.number().int().min(0),
   winners: z.array(z.string()),
   method: z.literal("keccak256(finalHash)|fisher-yates"),
   finalHash: Hex32Lower,
-});
+}).strict();
 const ManifestSchema = z.object({
   electionId: z.string().min(1),
   title: z.string(),
   kind: z.enum(["yes-no", "multiple", "ranking", "budget"]),
-  options: z.array(z.object({ id: z.string(), label: z.string() })).min(2),
+  options: z.array(z.object({ id: z.string(), label: z.string() }).strict()).min(2),
   startsAt: z.string(),
   endsAt: z.string(),
   protocol: z.literal("semaphore-ledger"),
@@ -67,8 +67,9 @@ const ManifestSchema = z.object({
       registryAddress: z.string().refine((v) => isAddress(v, { strict: false }), "dirección EVM").optional(),
       organizer: z.string().refine((v) => isAddress(v, { strict: false }), "dirección EVM"),
     })
+    .strict()
     .optional(),
-});
+}).strict();
 /**
  * Política del censo declarada por el organizador (opcional). Hoy solo `open-room`: sala abierta en la que el público
  * se inscribió con un alias. No entra en `manifestHash` ni en `checksums` (la sala se abre después de publicar), así que
@@ -81,8 +82,8 @@ const RollPolicySchema = z.object({
   enrolled: z.number().int().min(0),
   eligibility: z.literal("face-dedupe-demo"),
   note: z.string().optional(),
-});
-const TallySchema = z.object({ counts: z.array(z.number().int().min(0)), invalid: z.number().int().min(0), total: z.number().int().min(0) });
+}).strict();
+const TallySchema = z.object({ counts: z.array(z.number().int().min(0)), invalid: z.number().int().min(0), total: z.number().int().min(0) }).strict();
 export const AuditPackageSchema = z.object({
   version: z.literal("quorum-audit/1"),
   protocol: z.literal("semaphore-ledger"),
@@ -105,14 +106,23 @@ export const AuditPackageSchema = z.object({
       attestationUid: Hex32.optional(),
       registryAddress: z.string().refine((v) => isAddress(v, { strict: false }), "dirección EVM").optional(),
     })
+    .strict()
     .nullable(),
-  checksums: z.object({ manifest: Hex32, commitments: Hex32, ledger: Hex32, tally: Hex32 }),
-  versions: z.object({ adapter: z.string(), semaphore: z.string(), artifacts: z.string() }).optional(),
+  checksums: z.object({ manifest: Hex32, commitments: Hex32, ledger: Hex32, tally: Hex32 }).strict(),
+  // Campos opcionales DOCUMENTADOS (fuera de checksums): versiones, fecha de generación, sorteo y política del censo.
+  versions: z.object({ adapter: z.string(), semaphore: z.string(), artifacts: z.string() }).strict().optional(),
   generatedAt: z.string().optional(),
   draw: DrawSchema.optional(),
   rollPolicy: RollPolicySchema.optional(),
-});
+}).strict();
 export type AuditPackage = z.infer<typeof AuditPackageSchema>;
+
+/** ¿Declara ser un paquete quorum-audit/1 de semaphore-ledger? (objeto JSON con version y protocol). */
+function looksLikePackage(input: unknown): boolean {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const o = input as Record<string, unknown>;
+  return o.version === "quorum-audit/1" && o.protocol === "semaphore-ledger";
+}
 
 // ---------- hash canónico (misma definición que el adaptador; reimplementada a propósito) ----------
 export function canonicalJson(value: unknown): string {
@@ -237,8 +247,19 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
   const maybeId = (input as { electionId?: unknown } | null)?.electionId;
   const electionId = typeof maybeId === "string" ? maybeId : "unknown";
   if (!parsed.success) {
+    if (!looksLikePackage(input)) {
+      // Un JSON que ni siquiera declara ser un paquete quorum-audit/1 no es evidencia de manipulación: no se puede
+      // verificar. `valid` queda en false (nunca "verificado"), pero el estado es "no evaluado", no "fallo detectado".
+      checks.push({ name: "package_schema", passed: false, status: "no evaluado", reason: "no evaluado: el archivo no es un paquete de auditoría quorum-audit/1 de semaphore-ledger (falta version/protocol); no hay nada que verificar" });
+      unsupported.push("todas: el archivo recibido no tiene forma de paquete de auditoría");
+      return finish({ electionId, protocol: "semaphore-ledger" });
+    }
+    // Declara ser un paquete pero no cumple el esquema ESTRICTO: campos que faltan, tipos alterados o campos extra no
+    // declarados (que podrían esconder datos fuera de los hashes). Eso sí es fallo detectado.
     const issue = parsed.error.issues[0];
-    checks.push({ name: "package_schema", passed: false, reason: `paquete no válido (${issue?.path.join(".") || "raíz"}: ${issue?.message})` });
+    const where = issue?.path.join(".") || "raíz";
+    const extra = issue?.code === "unrecognized_keys" ? `campos no declarados ${JSON.stringify((issue as { keys?: string[] }).keys ?? [])}` : issue?.message;
+    checks.push({ name: "package_schema", passed: false, status: "fallo detectado", reason: `paquete no válido (${where}: ${extra})` });
     return finish({ electionId, protocol: "semaphore-ledger" });
   }
   const pkg = parsed.data;
@@ -246,7 +267,8 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
 
   // 1. manifest_hash
   {
-    const h = hashCanonical(pkg.manifest);
+    // Sobre el manifiesto TAL COMO LLEGÓ (forma canónica), no sobre la salida del parser: el hash cubre cada campo.
+    const h = hashCanonical((input as { manifest: unknown }).manifest);
     const problems: string[] = [];
     if (h !== pkg.manifestHash) problems.push(`sha256(manifest) ${h} ≠ manifestHash publicado ${pkg.manifestHash}`);
     if (pkg.checksums.manifest !== h) problems.push(`checksums.manifest ≠ sha256(manifest)`);

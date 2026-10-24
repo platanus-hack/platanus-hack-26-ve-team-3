@@ -13,6 +13,11 @@ export const FIXTURE_TAG = "fixture";
 export const FIXTURE_PACKAGE_ID = "fixture-condominio-2026";
 export const FIXTURE_PACKAGE_URL = "/fixtures/protocol/valid.json";
 export const FIXTURE_TAMPERED_URL = "/fixtures/protocol/tampered_total.json";
+/**
+ * Paquete FIXTURE v1 del laboratorio (`/audit/lab` sin `?id=` y `/audit?fixture=1`): pruebas Groth16 reales, regla de
+ * sorteo en el manifiesto y sorteo hecho con el adaptador (fase `drawn`). Lo genera `pnpm --filter @quorum/web fixtures:lab`.
+ */
+export const LAB_FIXTURE_URL = "/fixtures/protocol/lab-drawn.json";
 
 export const fixtureElection = {
   id: "fixture-samanes-2026",
@@ -63,35 +68,3 @@ export function defaultLayout(kind: string): LiveLayout {
       return { columns: "2", tiles: [{ type: "bar-chart", series: "options", orientation: "horizontal" }, { type: "stat", metric: "turnout" }, { type: "stat", metric: "totalVotes" }, { type: "countdown" }, { type: "text", template: "howToRead" }] };
   }
 }
-
-/** Paquete de auditoría FIXTURE para el laboratorio cuando la API no responde. Forma ilustrativa; el verificador real decide. */
-export const fixtureAuditPackage = {
-  _fixture: true,
-  _note: "Paquete de ejemplo (fixture) para el laboratorio de ataques. No corresponde a una elección real.",
-  electionId: fixtureElection.id,
-  protocol: "integrity-demo",
-  versions: { packageFormat: "0.1.0-fixture", verifier: "unknown" },
-  manifest: {
-    title: fixtureElection.title,
-    options: fixtureElection.options,
-    startsAt: fixtureElection.startsAt,
-    endsAt: fixtureElection.endsAt,
-    eligibilityIssuerId: fixtureElection.eligibilityIssuerId,
-  },
-  manifestHash: fixtureElection.manifestHash,
-  commitments: [
-    "0x8f1c2a9b7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b",
-    "0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
-    "0x9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d",
-    "0x5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b",
-    "0x2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e",
-  ],
-  result: {
-    totalVotes: 5,
-    counts: { "opt-sab-07": 3, "opt-dom-15": 1, "opt-sab-21": 1 },
-  },
-  checksums: {
-    commitments: "0x6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c",
-    result: "0x4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a",
-  },
-};

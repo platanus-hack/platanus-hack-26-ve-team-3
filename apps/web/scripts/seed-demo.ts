@@ -10,6 +10,7 @@
  *   … --out <archivo.json>                                  # escribe el paquete de auditoría publicado (bytes exactos) para el verificador CLI
  *   pnpm --filter @quorum/web seed:demo -- --reset --room    # además abre una SALA ABIERTA de prueba (60 asientos, 15 min)
  *   … --room --seats 30 --minutes 10                        # tope y expiración de la sala
+ *   … --room --simulate 6 --full                            # los simulados entran por la sala; el paquete declara rollPolicy
  *
  * Todo es simulación: nombres "Vecino N (simulado)", sin teléfonos, sin WhatsApp, descriptores faciales sintéticos.
  * Por defecto NO ancla aunque existan credenciales (enviar una tx es una acción hacia afuera: requiere `--anchor`).
@@ -88,12 +89,15 @@ async function main() {
   const published = await publishElection(election.id);
   console.log(`✔ ${published.id} · estado ${published.status} · manifestHash ${published.manifestHash}`);
 
+  // Con --room los vecinos simulados entran POR LA SALA (alias, source "room"); con --full, abrir la votación cierra
+  // la sala y el paquete declara `rollPolicy: open-room` (útil para comprobar que el verificador lo acepta).
+  let roomCode: string | null = null;
   if (flag("room")) {
-    if (flag("full")) throw new Error("--room no tiene sentido con --full: abrir la votación cierra la sala");
     const { openRoom } = await import("../src/lib/server/rooms");
     const maxSeats = Number(opt("seats", "60"));
     const expiresInMin = Number(opt("minutes", "15"));
     const { status } = await openRoom(election.id, { maxSeats, expiresInMin });
+    roomCode = status.roomCode;
     console.log(`✔ sala abierta ${status.roomCode} · ${status.maxSeats} asientos · expira ${status.expiresAt}`);
     console.log(`  QR / enlace para el público: ${status.joinUrl}`);
     console.log(`  contador del proyector: GET ${env.appUrl}/api/elections/${election.id}/room`);
@@ -102,8 +106,15 @@ async function main() {
   const simulate = Number(opt("simulate", "0"));
   const identities: { privateKey: string }[] = [];
   for (let i = 0; i < simulate; i++) {
-    const { voters } = await addVoters(election.id, { voters: [{ displayName: `Vecino ${i + 1} (simulado)` }] });
-    const v = voters[0];
+    let v: { id: string; inviteToken: string };
+    if (roomCode) {
+      const { joinRoom } = await import("../src/lib/server/rooms");
+      const j = await joinRoom(roomCode, { displayName: `Vecino ${i + 1} (simulado, sala)` });
+      v = { id: j.voterId, inviteToken: j.inviteToken };
+    } else {
+      const { voters } = await addVoters(election.id, { voters: [{ displayName: `Vecino ${i + 1} (simulado)` }] });
+      v = voters[0];
+    }
     const { faceBindingHash } = await enrollFace({ voterId: v.id, inviteToken: v.inviteToken, descriptor: syntheticDescriptor(1000 + i), consent: true });
     const account = privateKeyToAccount(generatePrivateKey()); // wallet eoa-demo efímera; la clave no se guarda
     const bindingSignature = await account.signTypedData({

@@ -12,7 +12,8 @@
     "test:net": "vitest run --config vitest.net.config.ts",
     "test:e2e": "playwright test",
     "seed:demo": "tsx --tsconfig tsconfig.json scripts/seed-demo.ts",
-    "test:e2e:real": "playwright test -c playwright.real.config.ts"
+    "test:e2e:real": "playwright test -c playwright.real.config.ts",
+    "fixtures:lab": "tsx --tsconfig tsconfig.json scripts/make-lab-fixture.ts"
   },
   "dependencies": {
     "@privy-io/react-auth": "^3.51.0",
@@ -29,6 +30,7 @@
     "lucide-react": "^1.61.0",
     "next": "16.4.3",
     "permissionless": "^0.2.57",
+    "qrcode": "1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "recharts": "^3.10.1",
@@ -42,6 +44,7 @@
     "@testing-library/dom": "10.4.0",
     "@testing-library/react": "16.3.0",
     "@types/node": "^20",
+    "@types/qrcode": "1.5.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
