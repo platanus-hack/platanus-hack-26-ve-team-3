@@ -16,6 +16,7 @@ import type { InviteResponse as InviteV1 } from "@quorum/contracts";
 import type { z } from "zod";
 import type { Receipt } from "@quorum/contracts";
 type ReceiptV1 = z.infer<typeof Receipt>;
+import { roomJoinForToken } from "@/lib/client/room";
 import { CredentialStep } from "./CredentialStep";
 import { IdentityStep } from "./IdentityStep";
 import { InviteStep, type InviteMode } from "./InviteStep";
@@ -32,7 +33,8 @@ type Local = { identity: ReturnType<typeof peekIdentity>; receipt: StoredReceipt
 
 function deriveMode(invite: InviteV1, local: Local): InviteMode {
   const phase = invite.election.status;
-  if (local.receipt) return "already-voted";
+  // `votedAt` (autodeclarado, granularidad de día) también cuenta: otro navegador no ofrece votar de nuevo.
+  if (local.receipt || invite.voter.votedAt) return "already-voted";
   if (phase === "registration") return local.identity && invite.voter.walletAddress !== null ? "registered-waiting" : "register";
   if (phase === "open") return local.identity ? "vote" : "readonly";
   return "readonly";
@@ -132,7 +134,22 @@ export function VoterFlow({ token }: { token: string }) {
             </div>
           );
         }
-        return <InviteStep invite={invite} mode={mode} onNext={() => setStep(mode === "vote" ? "wallet" : "identity")} />;
+        return (
+          <InviteStep
+            invite={invite}
+            mode={mode}
+            onNext={() => {
+              if (mode === "vote") return setStep("wallet");
+              // Entró por la sala abierta: ya eligió alias y aceptó el consentimiento en /j → directo a la prueba de vida.
+              const room = roomJoinForToken(token);
+              if (room?.consentAt) {
+                setDisplayName((n) => n || room.displayName);
+                return setStep("liveness");
+              }
+              setStep("identity");
+            }}
+          />
+        );
       case "identity":
         return (
           <IdentityStep

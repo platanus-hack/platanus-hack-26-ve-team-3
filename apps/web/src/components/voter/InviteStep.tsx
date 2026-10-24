@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert } from "@/components/ui/alert";
 import { PhaseTimeline } from "@/components/election/PhaseTimeline";
 import { cn } from "@/lib/client/cn";
-import { formatDateTime, kindLabel } from "@/lib/client/format";
+import { formatDate, formatDateTime, kindLabel } from "@/lib/client/format";
 import type { InviteResponse as InviteV1 } from "@quorum/contracts";
 
 export type InviteMode = "register" | "vote" | "registered-waiting" | "already-voted" | "readonly";
@@ -50,7 +50,8 @@ export function InviteStep({ invite, mode, onNext }: { invite: InviteV1; mode: I
           </Alert>
         ) : null}
         {mode === "already-voted" ? (
-          <Alert tone="info" title="Ya votaste desde este navegador">
+          <Alert tone="info" title="Ya votaste">
+            {invite.voter.votedAt ? <span data-testid="voted-at">Votaste el {formatDate(invite.voter.votedAt)}. </span> : null}
             Una credencial vale una sola boleta. Puedes comprobar que tu boleta está en el registro.
           </Alert>
         ) : null}

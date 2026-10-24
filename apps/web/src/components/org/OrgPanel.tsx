@@ -19,6 +19,7 @@ import { appendVoters, consumeTokenReveal, loadOrgToken, loadVoters, rememberEle
 import { hasAuditPackage, nextOrganizerAction, phaseLabel } from "@/lib/client/phases";
 import type { Aggregates as AggregatesV1, Election as ElectionV1, VotersListResponse as VotersListV1 } from "@quorum/contracts";
 import { CandidatesList } from "./CandidatesEditor";
+import { RoomCard, openProjector } from "@/components/room/RoomCard";
 
 type Channel = "dry-run" | "wame";
 const stateLabel = { invited: "Invitado", registered: "Inscrito", voted: "Votó" } as const;
@@ -227,6 +228,9 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
             Resultados en vivo
           </Link>
+          <Button variant="secondary" size="sm" onClick={() => openProjector(electionId)}>
+            Proyectar
+          </Button>
         </div>
       </header>
 
@@ -357,6 +361,8 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           {actionError}
         </Alert>
       ) : null}
+
+      {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} /> : null}
 
       <Card>
         <CardHeader>

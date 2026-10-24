@@ -8,6 +8,8 @@ import { defineConfig, devices } from "@playwright/test";
  * Proyectos: `chromium` (escritorio) y `mobile-360` (Pixel 5 forzado a 360×740, spec §9).
  *  - Fase 2: `e2e/phase2.spec.ts` (mocks del contrato v1) y `SCREENSHOTS=1 … e2e/screenshots.phase2.spec.ts`.
  *    Usa un puerto propio (`PORT=3317`) para no reutilizar el servidor de otro worktree.
+ *  - Sala abierta y proyector: `e2e/room.spec.ts` (mocks) y `SCREENSHOTS=1 … e2e/screenshots.room.spec.ts`.
+ *  - Servidor real (sin mocks): `playwright.real.config.ts` → `e2e/room.real.spec.ts`.
  */
 const PORT = Number(process.env.PORT ?? 3000);
 const externalBaseURL = process.env.PLAYWRIGHT_BASE_URL;
@@ -38,7 +40,8 @@ export default defineConfig({
   webServer: externalBaseURL
     ? undefined
     : {
-        command: "pnpm dev",
+        // `E2E_PROD=1`: contra `next start` (requiere `NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE=1 pnpm build` antes).
+        command: process.env.E2E_PROD ? `pnpm exec next start -p ${PORT}` : "pnpm dev",
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

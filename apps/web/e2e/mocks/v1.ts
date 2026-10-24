@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { Page, Route } from "@playwright/test";
+import type { BrowserContext, Page, Route } from "@playwright/test";
 // Sólo el módulo del sorteo (el índice del adaptador usa `import.meta`, que el cargador CJS de Playwright no admite):
 // es la MISMA función que usa el servidor y que la web llama en "Recomputar aquí".
 import { drawWinners } from "../../../../packages/protocol-adapter/src/draw";
@@ -35,6 +35,31 @@ export const E2E = {
   finalHash: validPkg.finalHash,
 };
 
+/** Resultado del verificador para el proyector (FIXTURE: forma de `GET /audit`, no una ejecución real). */
+export function fixtureAudit(valid = true) {
+  const names = ["package_schema", "manifest_hash", "group_root", "chain_integrity", "proofs_valid", "nullifiers_unique", "tally_matches", "anchor_matches"];
+  return {
+    auditResult: {
+      electionId: E2E.electionId,
+      verifierVersion: "fixture-0.0.0",
+      protocol: "semaphore-ledger",
+      inputArtifactDigest: `sha256:${"7e".repeat(32)}`,
+      checkedAt: "2026-10-24T22:01:00.000Z",
+      valid,
+      checks: names.map((name) =>
+        name === "anchor_matches"
+          ? { name, passed: true, reason: "no evaluado: sin RPC", status: "not-evaluated" }
+          : name === "tally_matches" && !valid
+            ? { name, passed: false, reason: "el recuento publicado no coincide", status: "fail" }
+            : { name, passed: true, status: "pass" },
+      ),
+      unsupportedGuarantees: ["censo-abierto-en-sala: la elegibilidad depende de la deduplicación facial demo"],
+    },
+    packageDigest: `sha256:${"7e".repeat(32)}`,
+    anchorStatus: { mode: "disabled", reason: "ancla deshabilitada (fixture)" },
+  };
+}
+
 export class MockV1 {
   phase: Phase;
   packageFile: "valid.json" | "tampered_total.json" = "valid.json";
@@ -44,6 +69,12 @@ export class MockV1 {
   nullifier: string | null = null;
   votedMarked = false;
   authSeen: string[] = [];
+  /** Sala abierta (docs/API_CONTRACT.md § "Sala abierta"). `null` = nunca se abrió. */
+  room: { code: string; open: boolean; seatsTaken: number; maxSeats: number; expiresAt: string; closedReason: null | "manual" | "expired" | "election-opened" } | null = null;
+  joins: string[] = [];
+  /** Respuesta de GET /audit (para el proyector); `null` → 404. */
+  auditBody: unknown = null;
+  anchorTx: string | null = null;
 
   constructor(phase: Phase) {
     this.phase = phase;
@@ -67,7 +98,7 @@ export class MockV1 {
       winnersCountFromResult: true,
       candidates: E2E.candidates,
       draw: this.phase === "drawn" ? this.drawInfo() : null,
-      anchor: null,
+      anchor: this.anchorTx ? { chainId: 84532, txHash: this.anchorTx } : null,
       registryAddress: null,
       layout: null,
     };
@@ -88,12 +119,18 @@ export class MockV1 {
   }
 
   drawInfo() {
+    // Misma implementación que el servidor real (`drawWinners` del adaptador): "Recomputar aquí" debe coincidir.
     const r = drawWinners(E2E.candidates, 2, E2E.finalHash as `0x${string}`);
     return { seed: r.seed, n: 2, winners: r.winners, candidates: E2E.candidates, finalHash: E2E.finalHash, method: "keccak256(finalHash)|fisher-yates", tieBreak: "lowest" };
   }
 
   async install(page: Page) {
     await page.route("**/api/**", (route) => this.handle(route));
+  }
+
+  /** Para pruebas con varias pestañas (p. ej. "Proyectar" abre una nueva). */
+  async installContext(ctx: BrowserContext) {
+    await ctx.route("**/api/**", (route) => this.handle(route));
   }
 
   private json(route: Route, body: unknown, status = 200) {
@@ -134,6 +171,41 @@ export class MockV1 {
       return this.json(route, { ok: true, votedAt: "2026-10-24T04:00:00.000Z" });
     }
 
+    /* ---------- Sala abierta ---------- */
+    const roomStatus = (secret: boolean) =>
+      this.room
+        ? { open: this.room.open, seatsTaken: this.room.seatsTaken, maxSeats: this.room.maxSeats, expiresAt: this.room.expiresAt, closedReason: this.room.closedReason, ...(secret ? { roomCode: this.room.code, joinUrl: `${url.origin}/j/${this.room.code}` } : {}) }
+        : { open: false, seatsTaken: 0, maxSeats: null, expiresAt: null, closedReason: null };
+    if (p === `${E}/room`) {
+      const org = this.isOrg(route);
+      if (m === "GET") return this.json(route, roomStatus(org));
+      if (!org) return this.json(route, { error: "falta token", code: "forbidden" }, 401);
+      if (m === "POST") {
+        const created = !this.room?.open;
+        const expiresAt = new Date(Date.now() + Number(body.expiresInMin) * 60_000).toISOString();
+        this.room = { code: this.room?.open ? this.room.code : "K7M3QP", open: true, seatsTaken: this.room?.seatsTaken ?? 0, maxSeats: Number(body.maxSeats), expiresAt, closedReason: null };
+        return this.json(route, roomStatus(true), created ? 201 : 200);
+      }
+      if (m === "DELETE") {
+        if (this.room) this.room = { ...this.room, open: false, closedReason: "manual" };
+        return this.json(route, roomStatus(false));
+      }
+    }
+    if (p.startsWith("/api/rooms/")) {
+      const code = decodeURIComponent(p.split("/")[3] ?? "").toUpperCase();
+      if (!this.room || code !== this.room.code) return this.json(route, { error: "Sala no encontrada", code: "not_found" }, 404);
+      const { code: _c, ...rest } = { ...this.room };
+      void _c;
+      if (p.endsWith("/join") && m === "POST") {
+        if (!this.room.open) return this.json(route, { error: this.room.closedReason === "election-opened" ? "La votación ya comenzó: la inscripción está cerrada" : "La sala está cerrada", code: "room_closed" }, 410);
+        if (this.room.seatsTaken >= this.room.maxSeats) return this.json(route, { error: `La sala está llena (${this.room.seatsTaken} de ${this.room.maxSeats})`, code: "room_full" }, 409);
+        this.room.seatsTaken += 1;
+        this.joins.push(String(body.displayName));
+        return this.json(route, { electionId: E2E.electionId, voterId: E2E.voterId, displayName: body.displayName, inviteToken: E2E.token, inviteUrl: `${url.origin}/v/${E2E.token}` }, 201);
+      }
+      return this.json(route, { electionId: E2E.electionId, title: E2E.title, ...rest });
+    }
+
     if (p === "/api/elections" && m === "POST") return this.json(route, { ...this.election(), status: "draft", organizerToken: E2E.orgToken }, 201);
     if (p === E) return this.json(route, this.election());
     if (p === `${E}/tally`) return this.json(route, this.tally());
@@ -153,7 +225,7 @@ export class MockV1 {
       return n === this.nullifier ? this.json(route, { electionId: E2E.electionId, inclusionId: n, nullifier: n, index: 6, hash: `0x${"3c".repeat(32)}`, receivedAt: "2026-10-24T15:00:00.000Z", includedAt: "2026-10-24T15:00:00.000Z", state: "incluido" }) : this.json(route, { error: "no existe", code: "not_found" }, 404);
     }
     if (p === `${E}/artifacts`) return route.fulfill({ status: 200, contentType: "application/json", body: readFileSync(path.join(FIXTURES, this.packageFile)) });
-    if (p === `${E}/audit`) return this.json(route, { error: "sin auditoría en el mock", code: "not_found" }, 404);
+    if (p === `${E}/audit`) return this.auditBody ? this.json(route, this.auditBody) : this.json(route, { error: "sin auditoría en el mock", code: "not_found" }, 404);
     if (p === `${E}/draw` && m === "GET") return this.phase === "drawn" ? this.json(route, this.drawInfo()) : this.json(route, { error: "sin sorteo", code: "not_found" }, 404);
     if (p === `${E}/voters` && m === "GET") {
       const counts = { total: 9, invited: 4, registered: 3, withIdentity: 3, voted: 2 };
@@ -174,6 +246,7 @@ export class MockV1 {
       const [from, to] = transitions[action];
       if (this.phase !== from) return this.json(route, { error: `fase ${this.phase}`, code: "closed" }, 409);
       this.phase = to;
+      if (to === "open" && this.room) this.room = { ...this.room, open: false, closedReason: this.room.closedReason ?? "election-opened" };
       return this.json(route, this.election());
     }
     return this.json(route, { error: `mock sin ruta ${m} ${p}`, code: "not_found" }, 404);

@@ -6,6 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * E2E REAL de fase 2 (sin mocks del contrato): `next build` + `next start` propios, store JSON en un DATA_DIR temporal.
+ * Corre todos los `e2e/*.real.spec.ts` juntos (phase2.real y room.real) contra el mismo servidor:
  *   pnpm --filter @quorum/web test:e2e:real
  *
  * Entorno hermético (sobrescribe `.env.local`, que Next no aplica sobre variables ya definidas aunque estén vacías):

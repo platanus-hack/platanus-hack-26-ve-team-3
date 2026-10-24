@@ -131,11 +131,15 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (rostro, wal
   const replay = await request.post(`/api/elections/${electionId}/vote`, { data: JSON.parse(voteBodies[0]) });
   expect(replay.status()).toBe(409);
   expect((await replay.json()).code).toBe("already_voted");
-  // (b) Desde la UI con una prueba NUEVA (otra opción) con la misma credencial: mismo nullifier → rechazado.
+  // (b) Aunque se borre el comprobante del navegador, la UI no ofrece votar otra vez: el servidor recuerda "ya votó"
+  //     (votedAt, solo la fecha) y la invitación lo muestra.
   await voters[0].page.evaluate((id) => localStorage.removeItem(`quorum.receipt.${id}`), electionId);
-  await vote(voters[0], "1");
-  await expect(voters[0].page.getByText("No se pudo enviar la boleta")).toBeVisible({ timeout: 90_000 });
-  await expect(voters[0].page.getByText(/ya fue usada para votar/)).toBeVisible();
+  await expect
+    .poll(async () => (await (await request.get(new URL(voters[0].link).pathname.replace("/v/", "/api/invite/"))).json()).voter.votedAt, { timeout: 15_000 })
+    .toMatch(/T04:00:00\.000Z$/); // inicio del día en Caracas (granularidad de día, AT-10)
+  await voters[0].page.goto(voters[0].link);
+  await expect(voters[0].page.getByTestId("voted-at")).toContainText("Votaste el");
+  await expect(voters[0].page.getByRole("button", { name: "Ir a votar" })).toHaveCount(0);
   // (c) Un campo `onchain` se rechaza (solo ancla on-chain).
   const withOnchain = await request.post(`/api/elections/${electionId}/vote`, { data: { ...JSON.parse(voteBodies[0]), onchain: { txHash: `0x${"ab".repeat(32)}` } } });
   expect(withOnchain.status()).toBe(400);

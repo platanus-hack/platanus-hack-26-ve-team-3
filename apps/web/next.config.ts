@@ -13,6 +13,18 @@ const nextConfig: NextConfig = {
   // ya no llevan `.js` (motor de fase 2), así que no hace falta ningún loader propio.
   transpilePackages: ["@quorum/protocol-adapter", "@quorum/verifier", "@quorum/wallet"],
   partialPrefetching: true,
+  // Sala con ~60 teléfonos en el mismo wifi: los modelos de Human (~12 MB) y los artefactos Groth16 (~4 MB) se descargan
+  // una sola vez por teléfono y quedan en caché. Los ZK tienen SHA-256 fijado en @quorum/protocol-adapter. OJO: si algún
+  // archivo de /zk o /models cambia de contenido, hay que cambiarle el nombre; si no, los teléfonos usarán la copia vieja.
+  async headers() {
+    const immutable = [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }];
+    return [
+      { source: "/zk/:path*", headers: immutable },
+      { source: "/models/:path*", headers: immutable },
+      // El service worker (public/sw.js) se revalida siempre para poder actualizarlo.
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }, { key: "Service-Worker-Allowed", value: "/" }] },
+    ];
+  },
   turbopack: {
     rules: {
       "*.css": {
