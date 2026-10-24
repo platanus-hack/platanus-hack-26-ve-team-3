@@ -37,9 +37,22 @@ Todo lo demás está abajo.
 | **Censo (padrón)** | El organizador decide a quién invita. El verificador comprueba que la raíz publicada sale de los compromisos publicados, **no** que esos compromisos correspondan a personas reales y elegibles. Un organizador deshonesto puede inscribir credenciales falsas y votar con ellas (relleno de urna dentro del padrón). La deduplicación facial la ejecuta **el servidor del organizador**: si él es el atacante, no la aplica. |
 | **Único escritor del registro** | No hay coordinador ni secuenciador independiente: el organizador escribe el ledger. Puede **omitir** boletas que recibió (censura) y reconstruir un paquete coherente desde cero. Eso solo se detecta (a) si ancló antes el `finalHash` y el verificador lee el ancla, o (b) si un votante busca su nullifier y no aparece. El fixture `removed_record_rechained.json` documenta este límite: **sin ancla el verificador no lo detecta**. |
 | **Ancla opcional y firmada por el organizador** | El ancla en Base Sepolia la firma la cuenta del organizador y solo prueba que **ese** hash existía en ese momento. Si no hay ancla, `anchor_matches` aparece como "no evaluado" y se lista en `unsupportedGuarantees`. El verificador confía en el RPC que se le pase. |
-| **Influencia sobre el sorteo** | La semilla es `keccak256(finalHash)`. Nadie puede elegirla libremente, pero el organizador controla el momento de cierre y podría dejar fuera una última boleta para obtener otra semilla (pocas alternativas, pero no cero). Mitigación parcial: hora de cierre fija en el manifiesto y votantes que verifiquen su inclusión. La lista de proyectos y la regla de empate deben quedar en el manifiesto **antes** de abrir; si no, el organizador podría ajustarlas. |
+| **Influencia sobre el sorteo** | La semilla es `keccak256(finalHash)`. Nadie puede elegirla libremente, pero el organizador controla el momento de cierre y podría dejar fuera una última boleta para obtener otra semilla (pocas alternativas, pero no cero). Mitigación parcial: hora de cierre fija en el manifiesto y votantes que verifiquen su inclusión. La lista de postulados y la regla de empate (decidida: **gana el N menor**) deben quedar en el manifiesto **antes** de abrir; si no, el organizador podría ajustarlas. |
 | **El verificador del navegador lo sirve el organizador** | "Verificar ahora" corre un código descargado del mismo sitio. Un sitio falso o un organizador malicioso podría servir un verificador que siempre dice "verificado" (amenaza A6 de la spec). La verificación genuinamente independiente es ejecutar el verificador desde el repositorio público, en otra máquina, sobre el paquete descargado. |
 | **Disponibilidad** | Si el organizador no publica el paquete o no cierra, la interfaz debe mostrar "no verificable", no "válido" (amenaza A7). |
+
+## 3 bis. Censo abierto en sala (modo de la demo)
+
+En la demo cualquiera que escanee el QR (`/j/<roomCode>`) puede inscribirse con un alias libre, hasta el tope (~60) y antes de que expire la sala (15 min). Eso cambia el modelo de elegibilidad:
+
+| Limitación | Detalle |
+|---|---|
+| **La elegibilidad depende de la deduplicación facial demo** | No hay lista previa de personas con derecho a voto. "Una persona, una credencial" descansa **solo** en la comparación facial por umbral dentro de la sala, que puede fallar en ambos sentidos (ver §4): alguien puede inscribirse dos veces engañando al modelo (foto, video, otro ángulo), y dos personas distintas parecidas pueden ser rechazadas como "ya inscrito". |
+| **Cualquiera con el enlace entra** | El QR y la URL corta se pueden fotografiar y compartir fuera de la sala. Quien esté fuera puede ocupar lugares hasta el tope. Ni el tope ni la expiración son controles de identidad. |
+| **Alias libre** | El alias no identifica a nadie ni se verifica. No sirve para saber quién votó (y no debe publicarse como lista). |
+| **Sin cámara no hay voto** | Quien no tiene cámara, niega el permiso o no es detectado por el modelo solo puede observar y auditar. Es una exclusión deliberada para no abrir la puerta al doble voto, y tiene un costo de accesibilidad. |
+| **Lo hace el servidor del organizador** | La deduplicación corre en el servidor de quien organiza la sala. El verificador público **no** puede comprobar que se aplicó: solo ve compromisos. |
+| **No apto fuera de la demo** | Para un condominio, una universidad o una cooperativa, el padrón debe salir de su registro de miembros (invitaciones nominales), no de una sala abierta. |
 
 ## 4. Biometría (prueba de vida y deduplicación facial)
 
@@ -60,14 +73,14 @@ Todo lo demás está abajo.
 | **Malware / XSS** | Quien controle el navegador del votante (extensión maliciosa, XSS en nuestro sitio) puede robar la credencial y votar en su lugar. |
 | **Wallet = dispositivo, no persona** | La firma del enlace rostro↔wallet prueba que esa wallet aceptó ese `faceBindingHash`; no prueba que la persona esté presente al votar. Al votar no se repite la prueba facial (en la v1). |
 | **Modo `eoa-demo`** | Si no hay ZeroDev configurado, se usa una clave local simple, sin cuenta inteligente ni patrocinio. Se etiqueta en pantalla. |
-| **Servicios de terceros** | ZeroDev (bundler/paymaster sandbox, cuota limitada) y el RPC pueden caer o bloquear por IP. La elegibilidad del voto no depende de ellos (la da la prueba Semaphore), pero el registro on-chain sí. |
+| **Servicios de terceros** | ZeroDev (bundler/paymaster sandbox, cuota limitada) y el RPC pueden caer o bloquear por IP. La elegibilidad del voto no depende de ellos (la da la prueba Semaphore), pero el ancla del cierre depende del RPC y de la cuenta del organizador. |
 
 ## 6. Red de pruebas (testnet) y componentes de cadena
 
 - **Base Sepolia es una testnet**: sin valor económico, puede reiniciarse o cambiar; no ofrece la seguridad de una red principal. Es apropiada para demostrar el mecanismo, no para garantizar persistencia a largo plazo.
 - **Ninguna transacción real se había enviado** a la fecha del ADR-001. Si el día de la demo no hay ancla, se dice.
 - **"Recursos asignados" es simulado**: no hay fondos ni contratos que transfieran dinero. Un contrato de ejecución real quedó como idea (ADR-001 §3), no implementada.
-- El contrato `QuorumRegistry` (evento `Cast`) solo registra compromisos; **no** verifica pruebas on-chain.
+- **Solo hay un ancla del organizador al cierre** (contrato `QuorumRegistry` en Base Sepolia). No hay registro on-chain por votante: la cadena no ve boletas individuales y **no** verifica pruebas on-chain.
 
 ## 7. Criptografía y dependencias
 
@@ -88,10 +101,10 @@ Todo lo demás está abajo.
 
 ## 9. Producto y demo
 
-- **Fase 2 en construcción:** inscripción con rostro + wallet, voto con prueba Semaphore desde el navegador, verificación en la app y sorteo están definidos en el Contrato v1 pero se implementan en paralelo; ver `docs/DEMO_SCRIPT.md` §8.
+- **Fase 2 en construcción:** inscripción con rostro + wallet, voto con prueba Semaphore desde el navegador, verificación en la app y sorteo están definidos en el Contrato v1 pero se implementan en paralelo; ver `docs/DEMO_SCRIPT.md` §9.
 - **Datos ficticios:** la elección, los vecinos, los proyectos y los montos son ficticios y se etiquetan `fixture` / `simulación`.
 - **Sin pruebas con usuarios reales** todavía; métricas del hackathon con muestra pequeña.
-- **Regla de empate** en la votación de N: no decidida a la fecha de este documento.
+- **Regla de empate** en la votación de N: gana el N menor (decisión del 2026-10-24). Debe publicarse en el manifiesto antes de abrir.
 - **Invitaciones por WhatsApp:** en modo `dry-run` o `wa.me` salvo aprobación humana; el envío real depende de Kapso y de la aprobación de la plantilla.
 
 ## 10. Frases prohibidas (política de claims)

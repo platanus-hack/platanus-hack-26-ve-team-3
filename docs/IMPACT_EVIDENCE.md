@@ -72,11 +72,11 @@ No hay usuarios reales todavía. Lo que se puede medir hoy, con muestra pequeña
 | Hipótesis | Métrica | Cómo | Resultado |
 |---|---|---|---|
 | H1: un observador no técnico distingue un escrutinio válido de uno alterado | aciertos y tiempo | 5 sesiones con personas del evento (si se ofrecen), usando `/audit/lab` | _pendiente_ |
-| H2: una persona vota en el móvil sin ayuda | tiempo de inscripción y de voto, abandonos | ensayos con los 3 móviles | _pendiente_ |
+| H2: una persona vota en el móvil sin ayuda | tiempo de inscripción y de voto, abandonos | ensayos y demo en modo sala abierta (público con su propio teléfono) | _pendiente_ |
 | H3: un tercero verifica los mismos artefactos sin acceso privilegiado | coincidencia de `sha256` del paquete y del resultado en dos máquinas | Laptop B + móvil | _pendiente_ |
 | Integridad | alteraciones probadas / detectadas por tipo | fixtures + laboratorio | 7 fixtures de manipulación definidos; 1 (`removed_record_rechained`) **no** se detecta sin ancla (por diseño, documentado). Ver `packages/demo-fixtures/protocol/README.md` |
 
-Resultados se registran en `docs/DEMO_SCRIPT.md` §7 con fecha y hora.
+Resultados se registran en `docs/DEMO_SCRIPT.md` §8 con fecha y hora.
 
 ## 5. Lo que NO afirmamos
 - Que Quórum reduzca el fraude en un porcentaje, ni que lo haya evitado en algún caso.
