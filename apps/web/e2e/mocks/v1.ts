@@ -70,7 +70,12 @@ export class MockV1 {
   votedMarked = false;
   authSeen: string[] = [];
   /** Sala abierta (docs/API_CONTRACT.md § "Sala abierta"). `null` = nunca se abrió. */
-  room: { code: string; open: boolean; seatsTaken: number; maxSeats: number; expiresAt: string; closedReason: null | "manual" | "expired" | "election-opened" } | null = null;
+  room: { code: string; open: boolean; seatsTaken: number; maxSeats: number; expiresAt: string; closedReason: null | "manual" | "expired" | "election-opened" | "election-closed" } | null = null;
+  /** D-23: modo continuo (al instante). `groupSize` = inscritos en el grupo; `votes` = boletas; K = 5. */
+  continuous = false;
+  groupSize = 0;
+  votes = 0;
+  minAnonymitySet = 5;
   joins: string[] = [];
   /** D-19: método de elegibilidad (`null` = apodo libre, como antes). */
   eligibility: { method: "open-alias" | "event-badge"; badgeCheck?: "list" | "live" | "none"; badgeUrlPrefix?: string; allowlistCount?: number } | null = null;
@@ -128,6 +133,7 @@ export class MockV1 {
       layout: null,
       ...(this.eligibility ? { eligibility: this.eligibility } : {}),
       votingStartsAt: this.votingStartsAt,
+      ...(this.continuous ? { votingMode: "continuous", minAnonymitySet: this.minAnonymitySet } : {}),
       serverNow: new Date().toISOString(),
     };
   }
@@ -141,6 +147,19 @@ export class MockV1 {
   }
 
   tally() {
+    if (this.continuous) {
+      const total = this.votes;
+      return {
+        electionId: E2E.electionId,
+        turnout: this.groupSize ? total / this.groupSize : 0,
+        totalVotes: total,
+        eligible: this.groupSize,
+        leadingShare: null,
+        closesAt: "2026-10-24T22:00:00.000Z",
+        status: this.phase,
+        options: E2E.options.map((o) => ({ ...o, count: null })),
+      };
+    }
     const total = this.phase === "registration" || this.phase === "draft" ? 0 : 7;
     return {
       electionId: E2E.electionId,
@@ -190,7 +209,7 @@ export class MockV1 {
 
     if (p === `/api/invite/${E2E.token}`)
       return this.json(route, {
-        election: { id: E2E.electionId, title: E2E.title, kind: "multiple", options: E2E.options, status: this.phase, endsAt: "2026-10-24T22:00:00.000Z", votingStartsAt: this.votingStartsAt },
+        election: { id: E2E.electionId, title: E2E.title, kind: "multiple", options: E2E.options, status: this.phase, endsAt: "2026-10-24T22:00:00.000Z", votingStartsAt: this.votingStartsAt, ...(this.continuous ? { votingMode: "continuous", minAnonymitySet: this.minAnonymitySet } : {}) },
         voter: {
           id: E2E.voterId,
           displayName: "Vecina Ana (ficticia)",
@@ -233,6 +252,7 @@ export class MockV1 {
     }
     if (p === `/api/voters/${E2E.voterId}/identity` && m === "POST") {
       this.commitment = String(body.commitment);
+      if (this.continuous) this.groupSize += 1;
       return this.json(route, { ok: true, registeredCount: 4 }, 201);
     }
     if (p === `/api/voters/${E2E.voterId}/voted` && m === "POST") {
@@ -254,6 +274,7 @@ export class MockV1 {
         const created = !this.room?.open;
         const expiresAt = new Date(Date.now() + Number(body.expiresInMin) * 60_000).toISOString();
         this.room = { code: this.room?.open ? this.room.code : "K7M3QP", open: true, seatsTaken: this.room?.seatsTaken ?? 0, maxSeats: Number(body.maxSeats), expiresAt, closedReason: null };
+        if (this.continuous) return this.json(route, roomStatus(true), created ? 201 : 200);
         this.votingStartsAt = body.votingStartsAt === null ? null : typeof body.votingStartsAt === "string" ? body.votingStartsAt : expiresAt;
         return this.json(route, roomStatus(true), created ? 201 : 200);
       }
@@ -314,11 +335,14 @@ export class MockV1 {
     }
     if (p === `${E}/tally`) return this.json(route, this.tally());
     if (p === `${E}/layout`) return this.json(route, { error: "sin layout", code: "not_found" }, 404);
+    if ((p === `${E}/roll` || p === `${E}/group`) && this.continuous)
+      return this.json(route, { electionId: E2E.electionId, status: this.phase, frozen: false, groupRoot: "0", scope: "0", merkleTreeDepth: 10, commitments: [validPkg.commitments[0], ...(this.commitment ? [this.commitment] : []), validPkg.commitments[1]], votingMode: "continuous", size: this.groupSize, minAnonymitySet: this.minAnonymitySet, rootWindow: 32 });
     if (p === `${E}/roll`)
       return this.json(route, { electionId: E2E.electionId, status: this.phase, frozen: true, groupRoot: "0", scope: "0", merkleTreeDepth: 10, commitments: [validPkg.commitments[0], ...(this.commitment ? [this.commitment] : []), validPkg.commitments[1]] });
     if (p === `${E}/vote` && m === "POST") {
       if (this.delays.vote) await new Promise((r) => setTimeout(r, this.delays.vote));
       this.voteBodies.push(body);
+      this.votes += 1;
       const proof = body.proof as { nullifier: string };
       this.nullifier = proof.nullifier;
       return this.json(route, { electionId: E2E.electionId, inclusionId: proof.nullifier, nullifier: proof.nullifier, index: 6, hash: `0x${"3c".repeat(32)}`, receivedAt: "2026-10-24T15:00:00.000Z", includedAt: "2026-10-24T15:00:00.000Z", state: "incluido" }, 201);
@@ -348,6 +372,12 @@ export class MockV1 {
     const action = p.startsWith(`${E}/`) ? p.slice(E.length + 1) : "";
     if (m === "POST" && transitions[action]) {
       if (!this.isOrg(route)) return this.json(route, { error: "falta token", code: "forbidden" }, 401);
+      if (this.continuous && (action === "publish" || action === "open") && this.phase === "draft") {
+        this.phase = "open"; // D-23: publicar = abrir inscripción + votación
+        this.votingStartsAt = new Date().toISOString();
+        return this.json(route, this.election());
+      }
+      if (this.continuous && action === "close" && this.phase === "open" && this.room) this.room = { ...this.room, open: false, closedReason: "election-closed" };
       const [from, to] = transitions[action];
       if (this.phase !== from) return this.json(route, { error: `fase ${this.phase}`, code: "closed" }, 409);
       this.phase = to;
