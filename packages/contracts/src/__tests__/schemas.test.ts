@@ -380,3 +380,42 @@ describe("ApiError", () => {
     expect(ApiError.safeParse({ error: "msg", code: "internal" }).success).toBe(false);
   });
 });
+
+describe("Contrato v1 (aditivo)", () => {
+  it("ElectionStatus acepta las fases v1 y Election v0 sigue parseando con defaults", async () => {
+    const { ElectionStatus } = await import("../index");
+    for (const s of ["draft", "registration", "open", "closed", "tallying", "auditable", "drawn", "failed"]) expect(ElectionStatus.safeParse(s).success).toBe(true);
+    const e = Election.parse(validElection);
+    expect(e).toMatchObject({ groupRoot: null, candidates: [], draw: null, anchor: null, winnersCountFromResult: false, packageDigest: null });
+  });
+
+  it("ApiError acepta duplicate_identity", () => {
+    expect(ApiError.safeParse({ error: "dup", code: "duplicate_identity" }).success).toBe(true);
+  });
+
+  it("CastVoteInput exige una prueba Semaphore con 8 puntos decimales; IdentityInput acota el commitment al campo BN254", async () => {
+    const { CastVoteInput, IdentityInput, SNARK_SCALAR_FIELD } = await import("../index");
+    const proof = { merkleTreeDepth: 10, merkleTreeRoot: "1", message: "2", nullifier: "3", scope: "4", points: ["1", "2", "3", "4", "5", "6", "7", "8"] };
+    expect(CastVoteInput.safeParse({ proof }).success).toBe(true);
+    expect(CastVoteInput.safeParse({ proof: { ...proof, points: proof.points.slice(0, 7) } }).success).toBe(false);
+    expect(CastVoteInput.safeParse({ proof: { ...proof, message: "0x01" } }).success).toBe(false);
+    expect(CastVoteInput.safeParse({ proof, plainChoice: "sab" }).data).not.toHaveProperty("plainChoice");
+    expect(IdentityInput.safeParse({ inviteToken: "t", commitment: "123" }).success).toBe(true);
+    expect(IdentityInput.safeParse({ inviteToken: "t", commitment: SNARK_SCALAR_FIELD.toString() }).success).toBe(false);
+    expect(IdentityInput.safeParse({ inviteToken: "t", commitment: "0" }).success).toBe(false);
+  });
+
+  it("LinkWalletInput exige kind y bindingSignature; FaceBindingTypes tiene los 4 campos firmados", async () => {
+    const { LinkWalletInput, FaceBindingTypes } = await import("../index");
+    const base = { inviteToken: "t", walletAddress: "0x" + "ab".repeat(20) };
+    expect(LinkWalletInput.safeParse(base).success).toBe(false);
+    expect(LinkWalletInput.safeParse({ ...base, kind: "eoa-demo", bindingSignature: "0x1234" }).success).toBe(true);
+    expect(FaceBindingTypes.FaceBinding.map((f) => f.name)).toEqual(["electionId", "voterId", "faceBindingHash", "wallet"]);
+  });
+
+  it("Receipt v1 admite nullifier/index sin exigirlos (compatibilidad v0)", () => {
+    const r = { electionId: "e", inclusionId: "1", receivedAt: ISO_START, includedAt: ISO_START, state: "incluido" };
+    expect(Receipt.safeParse(r).success).toBe(true);
+    expect(Receipt.safeParse({ ...r, nullifier: "1", index: 0 }).success).toBe(true);
+  });
+});
