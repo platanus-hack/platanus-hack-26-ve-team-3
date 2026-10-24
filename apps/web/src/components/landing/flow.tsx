@@ -168,23 +168,23 @@ export function Stage({ step, header = false, playing = false }: { step: number;
             {playing ? <Timer key={step} /> : null}
           </div>
         ) : null}
-        <div className="flex min-h-[14rem] flex-col gap-4 p-5 md:p-7 lg:min-h-[16rem]" aria-hidden="true">
-          {step === 0 ? <FaceStage /> : step === 1 ? <AccountStage /> : step === 2 ? <RollStage /> : step === 3 ? <VoteStage /> : step === 4 ? <ChainStage /> : <VerifyStage />}
-        </div>
-        <div className="border-t border-border bg-card/70 p-5 md:px-7">
+        <div className="border-b border-border bg-card/70 px-5 pb-5 pt-4 md:px-7">
           <p className="q-eyebrow flex items-center gap-1.5 text-primary-ink">
             <Lock aria-hidden="true" className="size-3.5" /> Por dentro
           </p>
           <ul className="mt-3 flex flex-col gap-2">
             {s.how.map((h, i) => (
-              <li key={h} className="q-flow-hl flex items-start gap-2.5 rounded-md px-2.5 py-1.5 text-small font-medium text-foreground" style={{ animationDelay: `${700 + i * 450}ms` }}>
-                <span aria-hidden="true" className="q-pop mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground" style={{ animationDelay: `${900 + i * 450}ms` }}>
+              <li key={h} className="q-flow-hl flex items-start gap-2.5 rounded-md px-2.5 py-1.5 text-small font-medium text-foreground" style={{ animationDelay: `${250 + i * 450}ms` }}>
+                <span aria-hidden="true" className="q-pop mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground" style={{ animationDelay: `${450 + i * 450}ms` }}>
                   <Check className="size-2.5" strokeWidth={3.5} />
                 </span>
                 {h}
               </li>
             ))}
           </ul>
+        </div>
+        <div className="flex min-h-[14rem] flex-col gap-4 p-5 md:px-7 md:py-6 lg:min-h-0" aria-hidden="true">
+          {step === 0 ? <FaceStage /> : step === 1 ? <AccountStage /> : step === 2 ? <RollStage /> : step === 3 ? <VoteStage /> : step === 4 ? <ChainStage /> : <VerifyStage />}
         </div>
       </div>
     </Glass>
@@ -282,7 +282,7 @@ function RollStage() {
         <span className="q-mono rounded-full bg-primary px-3 py-1 text-small font-semibold text-primary-foreground">raíz 0xe27c…5b13</span>
       </In>
       <In i={1} className="-mt-4 flex justify-center">
-        <svg viewBox="0 0 320 136" className="w-full max-w-md" role="presentation">
+        <svg viewBox="0 0 320 136" className="w-full max-w-md lg:max-w-xs" role="presentation">
           <g className="stroke-border" strokeWidth="1.5" fill="none">
             {LEAVES.map((x, k) => (
               <line key={`l${x}`} x1={x} y1={108} x2={MIDS[k >> 1]} y2={70} />
