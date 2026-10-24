@@ -13,3 +13,4 @@ playwright-report/
 *.log
 .turbo/
 .vercel
+.data/

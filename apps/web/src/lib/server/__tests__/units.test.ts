@@ -1,0 +1,184 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createProvider, DryRunProvider, KapsoProvider, WaMeProvider, buildInviteMessage } from "@quorum/notify";
+import { canonicalJson, hmacSha256Hex, keyFromSecret, open, seal, sha256Hex } from "../crypto";
+import { manifestHashOf } from "../elections";
+import { cosineSimilarity } from "../face";
+import { defaultLayout, generateLayout } from "../layout";
+import { inclusionIdFor } from "../vote";
+import { JsonFileStore } from "../store";
+import { POST as kapsoWebhook } from "@/app/api/webhooks/kapso/route";
+import { extractIncoming } from "../kapso";
+import { POST as createElection } from "@/app/api/elections/route";
+import { POST as publish } from "@/app/api/elections/[id]/publish/route";
+import { call, freshStore, sampleElection } from "./helpers";
+
+describe("crypto y manifiesto", () => {
+  it("canonicalJson ordena claves y el hash es estable", () => {
+    expect(canonicalJson({ b: 1, a: [{ z: 1, y: 2 }] })).toBe('{"a":[{"y":2,"z":1}],"b":1}');
+    const e = sampleElection();
+    const h1 = manifestHashOf(e as Parameters<typeof manifestHashOf>[0]);
+    const h2 = sha256Hex(canonicalJson({ endsAt: e.endsAt, kind: e.kind, options: e.options, startsAt: e.startsAt, title: e.title }));
+    expect(h1).toBe(h2);
+    expect(manifestHashOf({ ...e, title: `${e.title}!` } as Parameters<typeof manifestHashOf>[0])).not.toBe(h1);
+  });
+
+  it("AES-256-GCM sella y abre; clave incorrecta falla", () => {
+    const k = keyFromSecret("secreto-dev");
+    const blob = seal(k, "[0.1,0.2]");
+    expect(open(k, blob)).toBe("[0.1,0.2]");
+    expect(() => open(keyFromSecret("otra"), blob)).toThrow();
+    expect(keyFromSecret("ab".repeat(32)).toString("hex")).toBe("ab".repeat(32));
+  });
+
+  it("inclusionId es determinista y depende del índice", () => {
+    const c = `0x${"11".repeat(32)}`;
+    expect(inclusionIdFor(c, "el_1", 0)).toBe(sha256Hex(`${c}el_10`));
+    expect(inclusionIdFor(c, "el_1", 1)).not.toBe(inclusionIdFor(c, "el_1", 0));
+  });
+
+  it("similitud coseno", () => {
+    expect(cosineSimilarity([1, 0], [1, 0])).toBeCloseTo(1);
+    expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0);
+    expect(cosineSimilarity([1, 0], [1])).toBe(0);
+  });
+});
+
+describe("layout", () => {
+  it("default por kind válido y sin AI_GATEWAY_API_KEY usa default", async () => {
+    for (const kind of ["yes-no", "multiple", "ranking", "budget"] as const) expect(defaultLayout(kind).tiles.length).toBeGreaterThanOrEqual(2);
+    const r = await generateLayout({ kind: "yes-no", optionCount: 2, durationMin: 60 });
+    expect(r.source).toBe("default");
+    expect(r.layout).toEqual(defaultLayout("yes-no"));
+  });
+});
+
+describe("JsonFileStore", () => {
+  let dir: string;
+  afterEach(async () => {
+    if (dir) await rm(dir, { recursive: true, force: true });
+  });
+
+  it("persiste y recarga desde disco", async () => {
+    dir = await mkdtemp(path.join(os.tmpdir(), "quorum-store-"));
+    const a = new JsonFileStore(dir);
+    await a.init();
+    await a.putElection({ ...(sampleElection() as object), id: "el_x", status: "draft", protocol: "integrity-demo", manifestHash: null, eligibilityIssuerId: "i", organizerId: "o", layout: null } as never);
+    await a.putBallot({ inclusionId: "abc", electionId: "el_x", commitment: "0x00", choice: "sab", receivedAt: new Date().toISOString(), includedAt: null });
+    const raw = JSON.parse(await readFile(path.join(dir, "ballots.json"), "utf8"));
+    expect(raw["el_x:abc"]).not.toHaveProperty("voterId");
+
+    const b = new JsonFileStore(dir);
+    await b.init();
+    expect((await b.getElection("el_x"))?.id).toBe("el_x");
+    expect(await b.listBallots("el_x")).toHaveLength(1);
+  });
+});
+
+describe("@quorum/notify", () => {
+  it("dry-run registra y devuelve sent; wame devuelve link wa.me", async () => {
+    const lines: string[] = [];
+    const dry = new DryRunProvider((l) => lines.push(l));
+    const r = await dry.send("+584121234567", "Ana", "http://localhost:3000/v/tok");
+    expect(r.status).toBe("sent");
+    expect(lines[0]).toContain("***4567");
+    expect(lines[0]).not.toContain("+58412");
+
+    const w = await new WaMeProvider().send("+584121234567", "Ana", "http://localhost:3000/v/tok");
+    expect(w.status).toBe("pending");
+    expect(w.link).toBe(`https://wa.me/584121234567?text=${encodeURIComponent(buildInviteMessage("Ana", "http://localhost:3000/v/tok"))}`);
+  });
+
+  it("kapso/meta se degradan a dry-run sin aprobación o sin credenciales", () => {
+    const noApproval = createProvider({ INVITE_CHANNEL: "kapso", KAPSO_API_KEY: "k", KAPSO_PHONE_NUMBER_ID: "p" });
+    expect(noApproval.channel).toBe("dry-run");
+    expect(noApproval.note).toContain("INVITE_SEND_APPROVED");
+    const noCreds = createProvider({ INVITE_SEND_APPROVED: "true" }, "meta");
+    expect(noCreds.channel).toBe("dry-run");
+    expect(noCreds.note).toContain("META_ACCESS_TOKEN");
+    const ok = createProvider({ INVITE_SEND_APPROVED: "true", KAPSO_API_KEY: "k", KAPSO_PHONE_NUMBER_ID: "p" }, "kapso");
+    expect(ok.channel).toBe("kapso");
+    expect(ok.note).toBeNull();
+  });
+
+  it("KapsoProvider arma el request de texto y de template (fetch simulado, sin red)", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.1" }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const text = new KapsoProvider({ apiKey: "k", phoneNumberId: "123", fetchImpl });
+    const r = await text.send("+584121234567", "Ana", "http://localhost:3000/v/tok");
+    expect(r).toEqual({ status: "sent", messageId: "wamid.1" });
+    expect(calls[0].url).toBe("https://api.kapso.ai/meta/whatsapp/v24.0/123/messages");
+    expect((calls[0].init.headers as Record<string, string>)["X-API-Key"]).toBe("k");
+    const body = JSON.parse(String(calls[0].init.body));
+    expect(body.to).toBe("584121234567");
+    expect(body.type).toBe("text");
+    expect(body.text.preview_url).toBe(true);
+
+    const tpl = new KapsoProvider({ apiKey: "k", phoneNumberId: "123", useTemplate: true, fetchImpl });
+    await tpl.send("+584121234567", "Ana", "http://localhost:3000/v/tok");
+    const body2 = JSON.parse(String(calls[1].init.body));
+    expect(body2.template.name).toBe("quorum_invite");
+    expect(body2.template.components[1].parameters[0].text).toBe("tok");
+
+    const failing = new KapsoProvider({ apiKey: "k", phoneNumberId: "123", fetchImpl: (async () => new Response("nope", { status: 401 })) as unknown as typeof fetch });
+    const f = await failing.send("+584121234567", "Ana", "u");
+    expect(f.status).toBe("failed");
+    expect(f.error).toContain("http_401");
+  });
+});
+
+describe("webhook Kapso", () => {
+  const secret = "test-webhook-secret";
+  const signed = (body: string) => ({ "x-webhook-signature": hmacSha256Hex(secret, body) });
+
+  it("rechaza firma inválida", async () => {
+    const r = await call(kapsoWebhook, { rawBody: "{}", headers: { "x-webhook-signature": "00" } });
+    expect(r.status).toBe(401);
+  });
+
+  it("extrae mensajes de varias formas de evento", () => {
+    expect(extractIncoming({ event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: "QUORUM el_1" } } } })).toEqual([
+      { from: "584121234567", text: "QUORUM el_1", profileName: undefined },
+    ]);
+    expect(extractIncoming({ event: "whatsapp.message.delivered", data: { message: { from: "1", text: { body: "x" } } } })).toEqual([]);
+    const meta = { entry: [{ changes: [{ value: { contacts: [{ profile: { name: "Ana" } }], messages: [{ from: "584121234567", text: { body: "hola" } }] } }] }] };
+    expect(extractIncoming(meta)).toEqual([{ from: "584121234567", text: "hola", profileName: "Ana" }]);
+  });
+
+  it("opt-in QUORUM <id> crea al votante por teléfono y responde con el enlace (dry-run); batch y dedupe", async () => {
+    const store = freshStore();
+    const created = await call(createElection, { body: sampleElection() });
+    const id = created.json.id as string;
+    await call(publish, { params: { id } });
+
+    const body = JSON.stringify({
+      batch: true,
+      events: [
+        { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: `QUORUM ${id}` } }, contact: { name: "Ana" } } },
+        { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: "hola" } } } },
+        { event: "whatsapp.message.received", data: { message: { from: "584129999999", text: { body: "QUORUM el_inexistente" } } } },
+      ],
+    });
+    const r = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-1" } });
+    expect(r.status).toBe(200);
+    expect(r.json).toEqual({ ok: true, received: 3, sent: 1, ignored: 2, failed: 0 });
+
+    const voters = await store.listVoters(id);
+    expect(voters).toHaveLength(1);
+    expect(voters[0].phoneE164).toBe("+584121234567");
+    expect(voters[0].displayName).toBe("Ana");
+    expect(voters[0].inviteStatus).toBe("sent");
+
+    // Mismo mensaje otra vez: no duplica votante; misma idempotency key → duplicate
+    const dup = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-1" } });
+    expect(dup.json.duplicate).toBe(true);
+    const again = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-2" } });
+    expect(again.json.sent).toBe(1);
+    expect(await store.listVoters(id)).toHaveLength(1);
+  });
+});
