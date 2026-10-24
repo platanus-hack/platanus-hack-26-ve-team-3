@@ -19,6 +19,7 @@
     "@quorum/protocol-adapter": "workspace:*",
     "@quorum/ui": "workspace:*",
     "@quorum/verifier": "workspace:*",
+    "@quorum/wallet": "workspace:*",
     "@vladmandic/human": "^3.3.6",
     "ai": "^7.0.0",
     "class-variance-authority": "^0.7.1",
