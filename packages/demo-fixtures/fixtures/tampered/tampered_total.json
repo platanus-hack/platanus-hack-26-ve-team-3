@@ -1,0 +1,81 @@
+{
+  "fixture": {
+    "label": "fixture",
+    "note": "FIXTURE de demostración. Elección y votantes ficticios. Los commitments son hashes de demo con sal fija; no afirman privacidad ni anonimato.",
+    "tamper": {
+      "kind": "tampered_total",
+      "description": "Se sumó 1 voto a 'sab-14-mar' sin boleta que lo respalde; checksums originales."
+    }
+  },
+  "manifest": {
+    "electionId": "el_fixture_samanes_2026",
+    "title": "Condominio Los Samanes — fecha de la asamblea anual",
+    "kind": "multiple",
+    "protocol": "integrity-demo",
+    "options": [
+      {
+        "id": "sab-14-mar",
+        "label": "Sábado 14 de marzo, 9:00 a. m."
+      },
+      {
+        "id": "sab-21-mar",
+        "label": "Sábado 21 de marzo, 9:00 a. m."
+      },
+      {
+        "id": "dom-22-mar",
+        "label": "Domingo 22 de marzo, 10:00 a. m."
+      }
+    ],
+    "startsAt": "2026-03-01T13:00:00.000Z",
+    "endsAt": "2026-03-08T22:00:00.000Z",
+    "eligibilityIssuerId": "issuer_fixture_samanes",
+    "eligibleCount": 6,
+    "manifestHash": "sha256:d6b730ae8ef2830460bcdd35b64826990c486dde120dc11e65cdfb15cef8f80f"
+  },
+  "ballots": [
+    {
+      "inclusionId": "inc_aa122d6e46504205",
+      "commitment": "0x199fa4019f72d953ec23ced89a94782c922455dae4b7d7d73dd0f0c0d85a3f1d"
+    },
+    {
+      "inclusionId": "inc_b884d5f1156b5005",
+      "commitment": "0xd67a45fe6af39e313093deb1443ba0b7239f952bdd5c1362b23a83ac339fddd6"
+    },
+    {
+      "inclusionId": "inc_de996d13cf37e8a4",
+      "commitment": "0x03b36df471e47ee2f970c529e26785ab0f507c9ca30afa28eaad54885b32e7db"
+    },
+    {
+      "inclusionId": "inc_1d4d03818b816a5a",
+      "commitment": "0xf5e6d9e30d7aac0ca8f7811a54f82488845f70681b7fe78254b5bb28f03a4f8c"
+    },
+    {
+      "inclusionId": "inc_a2615ea68ef93ce4",
+      "commitment": "0x51855c8a0f9f9cf1795521afeac98bfe439529159e3f47999e69d1b6b23d1391"
+    }
+  ],
+  "result": {
+    "counts": {
+      "sab-14-mar": 3,
+      "sab-21-mar": 2,
+      "dom-22-mar": 1
+    },
+    "totalVotes": 6,
+    "proof": {
+      "type": "integrity-demo/sha256",
+      "digest": "sha256:fccb79a9bbe42d8b3a077b6f2be4d3e2d0173cf8dfd4a92eba6e943e151c271a"
+    }
+  },
+  "versions": {
+    "packageFormat": "quorum-audit-package/0",
+    "protocol": "integrity-demo",
+    "engine": "integrity-demo-fixture/0 (stub hasta ADR-001)",
+    "generator": "@quorum/demo-fixtures/0.0.1"
+  },
+  "checksums": {
+    "algorithm": "sha256",
+    "manifest": "sha256:497fe829a153582997c0f2de8a25399326e0d68f4c05a187cf528773ff9f6002",
+    "ballots": "sha256:adff68d9e20f4e8965b93679ebe6da667e3286d2f500a29a07a06fccde8076ef",
+    "result": "sha256:89be37a360a437d62d9d85fdb85fe8b24bc6c7a08cff2d425983736979f773b4"
+  }
+}
