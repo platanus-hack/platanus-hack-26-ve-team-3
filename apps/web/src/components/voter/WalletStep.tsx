@@ -31,6 +31,7 @@ type Phase = "idle" | "creating" | "signing" | "done";
  * Paso de wallet: crea (o recupera) la smart wallet Kernel gasless del votante y firma EIP-712
  * `FaceBinding`. Sin `NEXT_PUBLIC_ZERODEV_PROJECT_ID` usa `eoa-demo`, etiquetado como demo.
  * No llama a la API: entrega `{address, signature, mode}` por `onDone`.
+ * No envía nada on-chain (C2): `sendCast` queda tras `NEXT_PUBLIC_QUORUM_ONCHAIN_CAST`, desactivado por defecto.
  */
 export function WalletStep({ electionId, voterId, faceBindingHash, onDone, onBack }: WalletStepProps) {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -72,11 +73,11 @@ export function WalletStep({ electionId, voterId, faceBindingHash, onDone, onBac
           <CardTitle as="h1" className="text-title">
             Tu wallet
           </CardTitle>
-          {mode === "kernel" ? <Badge tone="success">Smart wallet · sin gas · Base Sepolia (testnet)</Badge> : <Badge tone="warning">Wallet demo</Badge>}
+          {mode === "kernel" ? <Badge tone="warning">Smart wallet demo · sin gas · Base Sepolia (testnet)</Badge> : <Badge tone="warning">Wallet demo</Badge>}
         </div>
         <CardDescription>
           {mode === "kernel"
-            ? "Creamos una smart wallet Kernel (ZeroDev) controlada por una clave que se guarda solo en este navegador. No necesitas frase semilla ni pagar gas. Firmarás que tu verificación facial queda enlazada a esta wallet."
+            ? "Wallet de demostración: creamos una smart wallet Kernel (ZeroDev) controlada por una clave que se guarda solo en este navegador. No hay frase semilla ni forma de exportar la clave: si borras los datos del sitio o cambias de dispositivo, la pierdes. No pagas gas. Firmarás que tu verificación facial queda enlazada a esta wallet."
             : "No hay proveedor de smart wallets configurado. Se usa una clave efímera de demostración en este navegador (se borra al cerrar la pestaña). No es una smart wallet y no envía nada on-chain."}
         </CardDescription>
       </CardHeader>

@@ -22,13 +22,19 @@ contract QuorumRegistry {
     mapping(bytes32 => bytes32) public finalHashOf;
 
     event Cast(bytes32 indexed electionId, bytes32 commitment);
-    event Anchored(bytes32 indexed electionId, bytes32 finalHash, uint256 castCount);
+    event Anchored(bytes32 indexed electionId, bytes32 finalHash, uint256 castCount, address indexed organizer);
 
     error ZeroValue();
     error AlreadyCast(bytes32 electionId, bytes32 commitment);
     error AlreadyAnchored(bytes32 electionId);
     error NotOrganizer();
 
+    modifier onlyOrganizer() {
+        if (msg.sender != organizer) revert NotOrganizer();
+        _;
+    }
+
+    /// @notice El organizador queda fijado al desplegar (quien despliega); no hay forma de cambiarlo.
     constructor() {
         organizer = msg.sender;
     }
@@ -44,11 +50,11 @@ contract QuorumRegistry {
         emit Cast(electionId, commitment);
     }
 
-    function anchor(bytes32 electionId, bytes32 finalHash) external {
-        if (msg.sender != organizer) revert NotOrganizer();
+    /// @notice Solo el organizador. El evento incluye `organizer` para que el verificador compruebe quién ancló.
+    function anchor(bytes32 electionId, bytes32 finalHash) external onlyOrganizer {
         if (electionId == bytes32(0) || finalHash == bytes32(0)) revert ZeroValue();
         if (finalHashOf[electionId] != bytes32(0)) revert AlreadyAnchored(electionId);
         finalHashOf[electionId] = finalHash;
-        emit Anchored(electionId, finalHash, castCount[electionId]);
+        emit Anchored(electionId, finalHash, castCount[electionId], msg.sender);
     }
 }

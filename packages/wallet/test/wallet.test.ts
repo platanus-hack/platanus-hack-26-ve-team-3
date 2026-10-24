@@ -43,6 +43,8 @@ import {
   CastUnavailableError,
   FaceBindingTypes,
   MODE_LABEL,
+  OnchainCastDisabledError,
+  onchainCastEnabled,
   SIGNER_KEY_STORAGE,
   createEoaDemoWallet,
   electionIdToBytes32,
@@ -88,8 +90,22 @@ describe("configuración", () => {
     expect(zerodevRpcUrl(PROJECT_ID)).toBe(`https://rpc.zerodev.app/api/v3/${PROJECT_ID}/chain/84532`);
     expect(() => zerodevRpcUrl("../../evil")).toThrow();
   });
-  it("la etiqueta del modo demo dice demo", () => {
+  it("M8: ambas etiquetas dicen demo", () => {
     expect(MODE_LABEL["eoa-demo"].toLowerCase()).toContain("demo");
+    expect(MODE_LABEL.kernel.toLowerCase()).toContain("demo");
+  });
+  it("C2: onchainCastEnabled solo con el literal true", () => {
+    expect(onchainCastEnabled("true")).toBe(true);
+    expect(onchainCastEnabled(" TRUE ")).toBe(true);
+    for (const v of [undefined, null, "", "false", "1", "yes", false]) expect(onchainCastEnabled(v)).toBe(false);
+  });
+  it("M8: el paquete no expone exportación de clave ni seed phrase", async () => {
+    const mod = await import("../src/index");
+    const names = Object.keys(mod).join(" ").toLowerCase();
+    expect(names).not.toMatch(/export.*key|seed|mnemonic|reveal/);
+    const w = await getOrCreateWallet({ projectId: null, demoStorage: memoryStorage() });
+    const keys = Object.keys(w).join(" ").toLowerCase();
+    expect(keys).not.toMatch(/private|seed|mnemonic|export/);
   });
 });
 
@@ -154,7 +170,9 @@ describe("kernel (ZeroDev simulado)", () => {
     const kernelStorage = memoryStorage();
     const w = await getOrCreateWallet({ projectId: PROJECT_ID, kernelStorage });
     expect(w.mode).toBe("kernel");
-    expect(w.isDemo).toBe(false);
+    expect(w.isDemo).toBe(true);
+    expect(w.label.toLowerCase()).toContain("demo");
+    expect(w.onchainCast).toBe(false);
     expect(w.address).toBe(sdk.KERNEL_ADDRESS);
     expect(kernelStorage.getItem(SIGNER_KEY_STORAGE.kernel)).toMatch(/^0x[0-9a-f]{64}$/);
     expect(sdk.state.clientConfig).toHaveProperty("paymaster.getPaymasterData");
@@ -180,8 +198,16 @@ describe("kernel (ZeroDev simulado)", () => {
     expect(await verifyFaceBinding({ message, signature: ("0x" + "ab".repeat(65)) as Hex })).toBe(false);
   });
 
-  it("sendCast envía una UserOp patrocinada con calldata cast(electionId, commitment)", async () => {
+  it("C2: por defecto sendCast/sendSponsored están desactivados y no envían nada", async () => {
     const w = await getOrCreateWallet({ projectId: PROJECT_ID, kernelStorage: memoryStorage() });
+    const p = { registryAddress: "0x3333333333333333333333333333333333333333" as const, electionId: "e", commitment: FACE_HASH };
+    await expect(w.sendCast(p)).rejects.toBeInstanceOf(OnchainCastDisabledError);
+    await expect(w.sendSponsored({ to: p.registryAddress, data: "0x" })).rejects.toBeInstanceOf(OnchainCastDisabledError);
+    expect(sdk.state.sent).toHaveLength(0);
+  });
+
+  it("con onchainCast:true, sendCast envía una UserOp patrocinada con calldata cast(electionId, commitment)", async () => {
+    const w = await getOrCreateWallet({ projectId: PROJECT_ID, kernelStorage: memoryStorage(), onchainCast: true });
     const nullifier = "98765432109876543210";
     const r = await w.sendCast({ registryAddress: "0x3333333333333333333333333333333333333333", electionId: "demo-condominio-01", commitment: nullifier });
     expect(r).toEqual({ mode: "kernel", userOpHash: "0x" + "11".repeat(32), txHash: "0x" + "22".repeat(32), sponsored: true });

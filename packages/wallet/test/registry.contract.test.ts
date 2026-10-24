@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createEVM, type EVM } from "@ethereumjs/evm";
 import { createAddressFromString, type Address as EjsAddress } from "@ethereumjs/util";
-import { bytesToHex, decodeErrorResult, decodeEventLog, decodeFunctionResult, encodeFunctionData, hexToBytes, keccak256, toBytes, type Hex } from "viem";
+import { getAddress, bytesToHex, decodeErrorResult, decodeEventLog, decodeFunctionResult, encodeFunctionData, hexToBytes, keccak256, toBytes, type Hex } from "viem";
 import { compileRegistry } from "../src/compile";
 import { encodeAnchor, encodeCast, electionIdToBytes32, registryAbi, registryBytecode, registrySourceSha256, toBytes32 } from "../src/index";
 
@@ -90,6 +90,11 @@ describe("QuorumRegistry (EVM en memoria)", () => {
     expect(await read<bigint>("castCount", [electionIdToBytes32(ELECTION)])).toBe(2n);
   });
 
+  it("el evento Anchored declara organizer como topic indexado (M1)", () => {
+    const ev = registryAbi.find((x) => x.type === "event" && x.name === "Anchored") as unknown as { inputs: readonly { name: string; indexed: boolean }[] };
+    expect(ev.inputs.find((i) => i.name === "organizer")?.indexed).toBe(true);
+  });
+
   it("anchor solo lo puede llamar el organizador (NotOrganizer)", async () => {
     const r = await call(VOTER, encodeAnchor(ELECTION, keccak256(toBytes("final"))));
     expect(r.reverted).toBe(true);
@@ -102,7 +107,7 @@ describe("QuorumRegistry (EVM en memoria)", () => {
     expect(r.reverted).toBe(false);
     const ev = decodeEventLog({ abi: registryAbi, ...r.logs[0]! });
     expect(ev.eventName).toBe("Anchored");
-    expect(ev.args).toEqual({ electionId: electionIdToBytes32(ELECTION), finalHash, castCount: 2n });
+    expect(ev.args).toEqual({ electionId: electionIdToBytes32(ELECTION), finalHash, castCount: 2n, organizer: getAddress(ORGANIZER.toString()) });
     expect(await read<Hex>("finalHashOf", [electionIdToBytes32(ELECTION)])).toBe(finalHash);
 
     const again = await call(ORGANIZER, encodeAnchor(ELECTION, keccak256(toBytes("otro"))));

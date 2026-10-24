@@ -8,21 +8,22 @@ Decisiones: D-10, D-11 (`docs/DECISIONS.md`). Contrato: "Smart wallet gasless (c
 | Pieza | Ruta | Qué hace |
 |---|---|---|
 | Paquete | `packages/wallet` (`@quorum/wallet`) | Crea/recupera la cuenta del votante, firma EIP-712 `FaceBinding`, envía `cast` patrocinado (solo Kernel). |
-| Contrato | `contracts/QuorumRegistry.sol` | `cast(electionId, commitment)` y `anchor(electionId, finalHash)` con eventos `Cast` / `Anchored`. |
+| Contrato | `contracts/QuorumRegistry.sol` | `cast(electionId, commitment)` y `anchor(electionId, finalHash)` con eventos `Cast(electionId, commitment)` / `Anchored(electionId, finalHash, castCount, organizer)`. `anchor` es `onlyOrganizer`: el `organizer` es quien despliega, se fija en el constructor (inmutable) y va como topic indexado en `Anchored`, para que el verificador compruebe quién ancló (M1). |
 | ABI + bytecode | `contracts/build/QuorumRegistry.json`, `packages/wallet/src/registry-artifact.ts` | Generados con `pnpm --filter @quorum/wallet compile:contracts` (solc-js 0.8.38, optimizer 200, evm cancun). Un test falla si el artefacto no coincide con una compilación fresca. |
 | Deploy | `scripts/deploy-registry.ts` | Despliega con viem usando `ORGANIZER_PRIVATE_KEY` + `BASE_SEPOLIA_RPC`. Sin clave sale con mensaje claro y código 1. **No se ha desplegado nada.** |
 | UI | `apps/web/src/components/voter/WalletStep.tsx` | Paso de wallet de la inscripción: entrega `{ address, signature, mode }` por `onDone`. |
 
 ### Modos
-- **`kernel`** (si existe `NEXT_PUBLIC_ZERODEV_PROJECT_ID`): smart account Kernel v3.1 (EntryPoint 0.7) con validador ECDSA cuyo signer es una clave generada en el navegador (`localStorage`, clave `quorum.wallet.kernelSigner.v1`). Bundler y paymaster de ZeroDev: el votante no paga gas. La cuenta es contrafactual (se despliega en su primera UserOp); sus firmas antes del despliegue vienen envueltas en ERC-6492 y el servidor debe verificarlas con `publicClient.verifyTypedData` (ERC-1271/6492, requiere `BASE_SEPOLIA_RPC`). `verifyFaceBinding({ ..., publicClient })` del paquete ya hace eso.
+- **`kernel`** (si existe `NEXT_PUBLIC_ZERODEV_PROJECT_ID`), etiquetada **"Smart wallet demo"**: smart account Kernel v3.1 (EntryPoint 0.7) con validador ECDSA cuyo signer es una clave generada en el navegador (`localStorage`, clave `quorum.wallet.kernelSigner.v1`). Bundler y paymaster de ZeroDev: el votante no paga gas. La cuenta es contrafactual (se despliega en su primera UserOp); sus firmas antes del despliegue vienen envueltas en ERC-6492 y el servidor debe verificarlas con `publicClient.verifyTypedData` (ERC-1271/6492, requiere `BASE_SEPOLIA_RPC`). `verifyFaceBinding({ ..., publicClient })` del paquete ya hace eso.
 - **`eoa-demo`** (sin project id, o si ZeroDev falla al iniciar): EOA de viem con clave efímera en `sessionStorage` (se borra al cerrar la pestaña). Etiquetada "Wallet demo" en la UI. No es smart wallet, no tiene gas y **no** envía `cast` (lanza `CastUnavailableError`): el compromiso queda solo off-chain y así se etiqueta.
 
-La clave del signer es custodia del propio navegador del votante: si borra datos del sitio o cambia de dispositivo, pierde la wallet. No es una solución de recuperación de cuentas para producción.
+### Limitación de custodia (M8)
+Las claves de signer (`localStorage` en `kernel`, `sessionStorage` en `eoa-demo`) viven en el navegador del votante, sin cifrar más allá de lo que ofrece el navegador; cualquier script con acceso al origen (XSS, extensión maliciosa) podría leerlas. Por eso **ambos modos llevan la etiqueta "demo" visible** (`MODE_LABEL`, `isDemo: true`) y no se presentan como wallets de producción. No hay frase semilla ni función para exportar o mostrar la clave (un test lo comprueba): si el votante borra datos del sitio o cambia de dispositivo, pierde la wallet y debe re-inscribirse con el organizador. Producción requeriría passkeys/WebAuthn como signer o un proveedor de wallets embebidas con recuperación.
 
 ## API de `@quorum/wallet`
 
 ```ts
-getOrCreateWallet({ projectId, kernelStorage?, demoStorage?, publicRpcUrl?, fallbackToDemo? = true, onFallback? }): Promise<QuorumWallet>
+getOrCreateWallet({ projectId, onchainCast? = false, kernelStorage?, demoStorage?, publicRpcUrl?, fallbackToDemo? = true, onFallback? }): Promise<QuorumWallet>
 createKernelWallet({ projectId, privateKey, publicRpcUrl? }): Promise<QuorumWallet>
 createEoaDemoWallet({ privateKey }): QuorumWallet
 
@@ -30,8 +31,11 @@ type QuorumWallet = {
   mode: "kernel" | "eoa-demo"; address; label; isDemo; created; persisted;
   signTypedData(td): Promise<Hex>;
   signFaceBinding({ electionId, voterId, faceBindingHash }): Promise<{ message, signature }>;
-  sendCast({ registryAddress, electionId, commitment }): Promise<{ userOpHash, txHash, sponsored: true }>;
+  onchainCast: boolean; // false por defecto (C2)
+  sendCast({ registryAddress, electionId, commitment }): Promise<{ userOpHash, txHash, sponsored: true }>; // requiere onchainCast
+  sendSponsored({ to, data }): Promise<{ userOpHash, txHash, sponsored: true }>;                         // requiere onchainCast
 };
+onchainCastEnabled(flag), OnchainCastDisabledError, CastUnavailableError
 
 FaceBindingTypes, faceBindingDomain(chainId), faceBindingTypedData(msg), verifyFaceBinding({ message, signature, publicClient? })
 registryAbi, registryBytecode, encodeCast(electionId, commitment), encodeAnchor(electionId, finalHash), electionIdToBytes32(id), toBytes32(v)
@@ -42,7 +46,10 @@ EIP-712 `FaceBinding`: dominio `{ name: "Quorum", version: "1", chainId: 84532, 
 
 On-chain, `electionId` es `keccak256(utf8(electionId))` y `commitment` un bytes32 (hash de entrada del ledger o nullifier Semaphore convertido con `toBytes32`).
 
-## Privacidad: leer antes de activar `cast` on-chain
+## Privacidad: leer antes de activar `cast` on-chain (C2)
+**Por defecto desactivado.** `sendCast` y `sendSponsored` lanzan `OnchainCastDisabledError` salvo que la wallet se cree con `onchainCast: onchainCastEnabled(process.env.NEXT_PUBLIC_QUORUM_ONCHAIN_CAST)` y la variable valga exactamente `true`. `NEXT_PUBLIC_QUORUM_ONCHAIN_CAST=false` en `.env.example`. El flujo de voto no debe usarlo por defecto; `WalletStep` nunca lo llama.
+
+- **Correlación por tiempo y orden:** aunque `commitment` fuese opaco, la tx del votante aparece en un bloque con marca de tiempo y el ledger público asigna índices en orden de llegada; comparando ambos se puede asociar la wallet a su entrada del ledger (y a la opción) con alta probabilidad, sobre todo con pocos votantes.
 - La transacción revela el remitente (la smart account del votante). Esa dirección está enlazada en el servidor a la inscripción facial del votante.
 - Si `commitment` es el nullifier o el hash de una entrada del ledger público que contiene `message` (= índice de la opción), **cualquiera puede unir wallet → nullifier → opción**. Eso rompe el secreto del voto frente al público.
 - Por eso `cast` desde la wallet del votante **no debe enviar el nullifier ni el hash de la boleta** mientras el ledger publique la opción junto al nullifier. Alternativas: (a) no enviar `cast` por votante y usar solo `anchor` del organizador al cierre (recomendado para la demo); (b) que un relayer/organizador envíe los `cast` en lote; (c) un `cast` que solo registre "participó" con un valor no relacionable con el ledger. Decisión pendiente de José/crypto; este paquete no decide por el flujo.
@@ -90,8 +97,8 @@ Si ZeroDev no carga desde Venezuela o se agota la cuota:
 - Cambio de código: en `createKernelWallet` sustituir `zerodevRpcUrl(...)` por la URL del proveedor y `paymaster.getPaymasterData` por el cliente de paymaster ERC-7677 del proveedor (viem `createPaymasterClient`). La cuenta Kernel y las firmas no cambian. No implementado aún: hoy el plan B operativo es `eoa-demo` etiquetado.
 
 ## Cómo se probó (sin red, sin fondos)
-- `packages/wallet/test/wallet.test.ts`: modos, recuperación de clave, firma `FaceBinding` verificada offline (EOA) y rechazo al alterar cualquier campo o el chainId, Kernel con el SDK de ZeroDev simulado (`vi.mock`), calldata exacta de `cast`, fallback a demo, `fetch` bloqueado para asegurar cero llamadas de red, validación del entorno de deploy.
-- `packages/wallet/test/registry.contract.test.ts`: el contrato corre en un EVM en memoria (`@ethereumjs/evm`): deploy, `cast` + evento, doble `cast` rechazado, `anchor` solo organizador y una vez, `cast` rechazado tras `anchor`, ceros rechazados; y el artefacto del repo coincide con una compilación fresca.
+- `packages/wallet/test/wallet.test.ts`: compuerta C2 (`sendCast`/`sendSponsored` rechazados por defecto sin enviar nada; `onchainCastEnabled` solo con `"true"`), etiquetas "demo" y ausencia de API de exportación de clave (M8), modos, recuperación de clave, firma `FaceBinding` verificada offline (EOA) y rechazo al alterar cualquier campo o el chainId, Kernel con el SDK de ZeroDev simulado (`vi.mock`), calldata exacta de `cast`, fallback a demo, `fetch` bloqueado para asegurar cero llamadas de red, validación del entorno de deploy.
+- `packages/wallet/test/registry.contract.test.ts`: el contrato corre en un EVM en memoria (`@ethereumjs/evm`): deploy, `cast` + evento, doble `cast` rechazado, `anchor` solo organizador y una vez (evento con `organizer` indexado), `cast` rechazado tras `anchor`, ceros rechazados; y el artefacto del repo coincide con una compilación fresca.
 - **No probado:** Kernel real contra ZeroDev (falta project id), verificación ERC-6492 real contra RPC, deploy real.
 
 Fuentes: https://docs.zerodev.app/sdk/core-api/sponsor-gas · https://docs.zerodev.app/wallets/quickstart · https://docs.arbitrum.io/for-devs/third-party-docs/ZeroDev/zero-dev (formato de URL v3) · https://www.dynamic.xyz/docs/smart-wallets/smart-wallet-providers/zerodev (proyecto ligado a una red; política de gas obligatoria) · https://docs.base.org/base-chain/tools/network-faucets · research/02-wallets-identidad.md.

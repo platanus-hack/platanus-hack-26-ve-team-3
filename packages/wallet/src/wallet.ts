@@ -7,6 +7,7 @@ import { SIGNER_KEY_STORAGE, loadOrCreateSignerKey, type KeyStorage } from "./st
 
 export type CastParams = { registryAddress: Address; electionId: string; commitment: string | bigint };
 export type CastResult = { mode: "kernel"; userOpHash: Hex; txHash: Hex; sponsored: true };
+export type SponsoredCall = { to: Address; data: Hex };
 
 export type QuorumWallet = {
   mode: WalletMode;
@@ -21,14 +22,31 @@ export type QuorumWallet = {
   signTypedData(td: TypedDataDefinition): Promise<Hex>;
   /** Firma EIP-712 `FaceBinding` con `wallet = address`. */
   signFaceBinding(input: Omit<FaceBindingMessage, "wallet">): Promise<{ message: FaceBindingMessage; signature: Hex }>;
-  /** Envía `cast` al QuorumRegistry con UserOp patrocinada. Solo `kernel`; en `eoa-demo` lanza `CastUnavailableError`. */
+  /** true solo si se creó con `onchainCast: true` (flag `NEXT_PUBLIC_QUORUM_ONCHAIN_CAST`). */
+  onchainCast: boolean;
+  /**
+   * Envía `cast` al QuorumRegistry con UserOp patrocinada. Solo `kernel` y solo con `onchainCast: true`
+   * (si no, lanza `OnchainCastDisabledError`); en `eoa-demo` lanza `CastUnavailableError`.
+   * Riesgo C2: enlaza públicamente wallet ↔ boleta. Ver docs/WALLETS.md.
+   */
   sendCast(params: CastParams): Promise<CastResult>;
+  /** UserOp patrocinada genérica (`{to, data}`), con la misma compuerta que `sendCast`. */
+  sendSponsored(call: SponsoredCall): Promise<CastResult>;
 };
 
 export class CastUnavailableError extends Error {
   constructor(message = "La wallet demo no tiene gas ni paymaster: el compromiso queda solo off-chain (etiquetado).") {
     super(message);
     this.name = "CastUnavailableError";
+  }
+}
+
+export class OnchainCastDisabledError extends Error {
+  constructor(
+    message = "Envío on-chain desde la wallet del votante desactivado (NEXT_PUBLIC_QUORUM_ONCHAIN_CAST!=true): enlazaría la wallet con su boleta.",
+  ) {
+    super(message);
+    this.name = "OnchainCastDisabledError";
   }
 }
 
@@ -57,7 +75,11 @@ export function createEoaDemoWallet(opts: { privateKey: Hex; created?: boolean; 
     persisted: opts.persisted ?? false,
     signTypedData,
     signFaceBinding: withBinding({ address: account.address, signTypedData }, chainId),
+    onchainCast: false,
     sendCast: async () => {
+      throw new CastUnavailableError();
+    },
+    sendSponsored: async () => {
       throw new CastUnavailableError();
     },
   };
@@ -70,6 +92,8 @@ export type KernelWalletOptions = {
   publicRpcUrl?: string;
   created?: boolean;
   persisted?: boolean;
+  /** C2: habilita `sendCast`/`sendSponsored`. Default false. */
+  onchainCast?: boolean;
 };
 
 /**
@@ -105,22 +129,28 @@ export async function createKernelWallet(opts: KernelWalletOptions): Promise<Quo
   });
 
   const signTypedData = (td: TypedDataDefinition) => account.signTypedData(td);
+  const onchainCast = opts.onchainCast === true;
+  const sendSponsored = async ({ to, data }: SponsoredCall): Promise<CastResult> => {
+    if (!onchainCast) throw new OnchainCastDisabledError();
+    const callData = await account.encodeCalls([{ to, value: BigInt(0), data }]);
+    const userOpHash = await kernelClient.sendUserOperation({ callData });
+    const receipt = await kernelClient.waitForUserOperationReceipt({ hash: userOpHash });
+    if (!receipt.success) throw new Error(`UserOp revertida (${userOpHash})`);
+    return { mode: "kernel", userOpHash, txHash: receipt.receipt.transactionHash, sponsored: true };
+  };
   return {
     mode: "kernel",
     address: account.address,
     label: MODE_LABEL.kernel,
-    isDemo: false,
+    // M8: la clave del signer vive en localStorage; es una wallet de demostración, no de producción.
+    isDemo: true,
     created: opts.created ?? false,
     persisted: opts.persisted ?? false,
     signTypedData,
     signFaceBinding: withBinding({ address: account.address, signTypedData }, BASE_SEPOLIA_CHAIN_ID),
-    sendCast: async ({ registryAddress, electionId, commitment }) => {
-      const callData = await account.encodeCalls([{ to: registryAddress, value: BigInt(0), data: encodeCast(electionId, commitment) }]);
-      const userOpHash = await kernelClient.sendUserOperation({ callData });
-      const receipt = await kernelClient.waitForUserOperationReceipt({ hash: userOpHash });
-      if (!receipt.success) throw new Error(`UserOp revertida (${userOpHash})`);
-      return { mode: "kernel", userOpHash, txHash: receipt.receipt.transactionHash, sponsored: true };
-    },
+    onchainCast,
+    sendCast: ({ registryAddress, electionId, commitment }) => sendSponsored({ to: registryAddress, data: encodeCast(electionId, commitment) }),
+    sendSponsored,
   };
 }
 
@@ -135,6 +165,8 @@ export type GetOrCreateWalletOptions = {
   /** Si Kernel falla al inicializar (red, project id inválido), cae a `eoa-demo` en vez de lanzar. Default true. */
   fallbackToDemo?: boolean;
   onFallback?: (error: unknown) => void;
+  /** C2: `onchainCastEnabled(process.env.NEXT_PUBLIC_QUORUM_ONCHAIN_CAST)`. Default false. */
+  onchainCast?: boolean;
 };
 
 function browserStorage(kind: "localStorage" | "sessionStorage"): KeyStorage | null {
@@ -163,6 +195,7 @@ export async function getOrCreateWallet(opts: GetOrCreateWalletOptions = {}): Pr
       publicRpcUrl: opts.publicRpcUrl,
       created: key.created,
       persisted: key.persisted,
+      onchainCast: opts.onchainCast === true,
     });
   } catch (err) {
     if (opts.fallbackToDemo === false) throw err;

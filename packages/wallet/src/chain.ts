@@ -8,6 +8,15 @@ export const DEFAULT_BASE_SEPOLIA_RPC = "https://sepolia.base.org";
 
 export type WalletMode = "kernel" | "eoa-demo";
 
+/**
+ * C2: el envío on-chain de `cast` desde la wallet del votante permite asociar wallet ↔ boleta
+ * (momento de la tx + orden del ledger). Desactivado por defecto: solo se habilita con el valor
+ * literal "true" (p. ej. `process.env.NEXT_PUBLIC_QUORUM_ONCHAIN_CAST`). Ver docs/WALLETS.md.
+ */
+export function onchainCastEnabled(flag: string | boolean | null | undefined): boolean {
+  return flag === true || (typeof flag === "string" && flag.trim().toLowerCase() === "true");
+}
+
 /** Endpoint bundler+paymaster de ZeroDev v3 para Base Sepolia (https://docs.zerodev.app, formato verificado en el dashboard). */
 export function zerodevRpcUrl(projectId: string, chainId: number = BASE_SEPOLIA_CHAIN_ID): string {
   const id = projectId.trim();
@@ -21,6 +30,6 @@ export function resolveWalletMode(projectId: string | null | undefined): WalletM
 }
 
 export const MODE_LABEL: Record<WalletMode, string> = {
-  kernel: "Smart wallet Kernel (ZeroDev) · Base Sepolia · sin gas",
+  kernel: "Smart wallet Kernel (ZeroDev) · demo: clave guardada solo en este navegador · Base Sepolia · sin gas",
   "eoa-demo": "Wallet demo (clave efímera en este navegador, sin smart wallet)",
 };
