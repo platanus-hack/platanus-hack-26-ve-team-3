@@ -88,6 +88,7 @@ for (const w of WIDTHS) {
       await page.goto("/org/new");
       await page.getByLabel("Título de la votación").fill(E2E.title);
       for (let i = 0; i < 2; i++) await page.getByPlaceholder(`Opción ${i + 1}`).fill(String(i + 1));
+      await page.getByText("Más ajustes").click();
       for (const c of E2E.candidates.slice(0, 3)) {
         await page.getByLabel("Proyecto").fill(c.label);
         await page.getByLabel("Monto (opcional)").fill(String(c.amount));

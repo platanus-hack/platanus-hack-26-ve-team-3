@@ -199,7 +199,7 @@ describe("selector del organizador", () => {
     expect(list.disabled).toBe(true);
     expect(screen.getByText("Próximamente")).toBeTruthy();
     expect(screen.queryByText(/Verificación de rostro/)).toBeNull();
-    expect(screen.getByText(/El rostro se comprueba siempre/)).toBeTruthy();
+    expect(screen.getByText(/Siempre se comprueba el rostro/)).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: /Apodo libre/ }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ method: "open-alias" }));
   });

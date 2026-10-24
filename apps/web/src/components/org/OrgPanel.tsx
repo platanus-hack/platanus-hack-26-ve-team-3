@@ -16,7 +16,7 @@ import { cn } from "@/lib/client/cn";
 import { copyText } from "@/lib/client/download";
 import { formatDateTime, formatInt, formatPercent } from "@/lib/client/format";
 import { appendVoters, consumeTokenReveal, loadOrgToken, loadVoters, rememberElection, saveOrgToken, type StoredVoter } from "@/lib/client/orgStore";
-import { hasAuditPackage, nextOrganizerAction, phaseLabel } from "@/lib/client/phases";
+import { hasAuditPackage, nextOrganizerAction } from "@/lib/client/phases";
 import type { Aggregates as AggregatesV1, Election as ElectionV1, VotersListResponse as VotersListV1 } from "@quorum/contracts";
 import { CandidatesList } from "./CandidatesEditor";
 import { RoomCard, openProjector } from "@/components/room/RoomCard";
@@ -262,74 +262,73 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card className="md:col-span-2">
-          <CardContent className="pt-5 md:pt-6">
-            <StatGrid className="md:grid-cols-4">
-              <Stat label="Participación" value={tally ? formatPercent(tally.turnout) : "—"} hint={tally ? `${formatInt(tally.totalVotes)} de ${formatInt(tally.eligible)}` : undefined} />
-              {shownCounts ? (
-                (["invited", "registered", "voted"] as const).map((k) => <Stat key={k} label={stateLabel[k]} value={formatInt(shownCounts[k])} />)
-              ) : (
-                <p className="col-span-2 self-center text-small text-muted-foreground md:col-span-3">{token ? "No se pudo leer la lista de participantes." : "Requiere el token del organizador."}</p>
-              )}
-            </StatGrid>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle as="h2" className="text-body text-muted-foreground">
-              Siguiente paso
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {action ? (
-              !confirming ? (
-                <Button onClick={() => setConfirming(true)} disabled={!token} data-testid="phase-action">
-                  {action.label}
-                </Button>
-              ) : (
-                <div className="flex flex-col gap-2 rounded-md border border-danger/50 p-2">
-                  <p className="text-small">{action.confirm} ¿Confirmas?</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="danger" size="sm" onClick={act} loading={acting}>
-                      Sí, {action.label.toLowerCase()}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setConfirming(false)} disabled={acting}>
-                      Cancelar
-                    </Button>
-                  </div>
-                </div>
-              )
+      <Card className="border-transparent shadow-elevated">
+        <CardContent className="flex flex-col gap-4 pt-5 md:pt-6">
+          <div>
+            <p className="q-eyebrow">Siguiente paso</p>
+            {action ? <p className="mt-1 text-heading font-semibold">{action.hint}</p> : null}
+          </div>
+          {action ? (
+            !confirming ? (
+              <Button size="lg" full onClick={() => setConfirming(true)} disabled={!token} data-testid="phase-action">
+                {action.label}
+              </Button>
             ) : (
-              <p className="text-small text-muted-foreground">
-                {phase === "auditable" && (election.candidates?.length ?? 0) === 0
-                  ? "Auditable. No hay proyectos postulados: no hay sorteo."
-                  : phase === "drawn"
-                    ? "Sorteo realizado."
-                    : phase === "failed"
-                      ? "La verificación del paquete falló: el resultado se publica con el error."
-                      : `Fase ${phaseLabel[phase].toLowerCase()}: no hay acción pendiente.`}
-              </p>
-            )}
-            {!token && action ? <p className="text-small text-muted-foreground">Necesitas el token del organizador.</p> : null}
-            {hasAuditPackage(phase) ? (
-              <div className="flex flex-col gap-1 text-small">
-                <a href={`/api/elections/${encodeURIComponent(electionId)}/artifacts`} download className="inline-flex min-h-tap items-center gap-2 font-semibold underline underline-offset-4">
-                  <Download className="size-4" aria-hidden="true" /> Exportar paquete de auditoría
-                </a>
-                <Link href={`/e/${encodeURIComponent(electionId)}#verificar`} className="inline-flex min-h-tap items-center underline underline-offset-4">
-                  Verificar en el navegador
-                </Link>
+              <div className="q-fade-in flex flex-col gap-3 rounded-md bg-muted p-4">
+                <p className="text-body">{action.confirm} ¿Seguimos?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="secondary" onClick={() => setConfirming(false)} disabled={acting}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={act} loading={acting}>
+                    Sí, {action.label.toLowerCase()}
+                  </Button>
+                </div>
               </div>
-            ) : null}
-            {phase === "drawn" ? (
-              <Link href={`/e/${encodeURIComponent(electionId)}/draw`} className="inline-flex min-h-tap items-center text-small underline underline-offset-4">
-                Ver sorteo y recomputarlo
+            )
+          ) : (
+            <p className="text-small text-muted-foreground">
+              {phase === "auditable" && (election.candidates?.length ?? 0) === 0
+                ? "Votación cerrada. El resultado ya es verificable."
+                : phase === "drawn"
+                  ? "Sorteo realizado."
+                  : phase === "failed"
+                    ? "La verificación falló: el resultado se publica con el error."
+                    : "No hay nada pendiente."}
+            </p>
+          )}
+          {!token && action ? <p className="text-small text-muted-foreground">Necesitas el token del organizador.</p> : null}
+          {hasAuditPackage(phase) ? (
+            <div className="flex flex-col gap-1 text-small">
+              <a href={`/api/elections/${encodeURIComponent(electionId)}/artifacts`} download className="inline-flex min-h-tap items-center gap-2 font-semibold underline underline-offset-4">
+                <Download className="size-4" aria-hidden="true" /> Exportar paquete de auditoría
+              </a>
+              <Link href={`/e/${encodeURIComponent(electionId)}#verificar`} className="inline-flex min-h-tap items-center underline underline-offset-4">
+                Verificar en el navegador
               </Link>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          ) : null}
+          {phase === "drawn" ? (
+            <Link href={`/e/${encodeURIComponent(electionId)}/draw`} className="inline-flex min-h-tap items-center text-small underline underline-offset-4">
+              Ver sorteo y recomputarlo
+            </Link>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-5 md:pt-6">
+          <StatGrid className="md:grid-cols-4">
+            <Stat label="Participación" value={tally ? formatPercent(tally.turnout) : "—"} hint={tally ? `${formatInt(tally.totalVotes)} de ${formatInt(tally.eligible)}` : undefined} />
+            {shownCounts ? (
+              (["invited", "registered", "voted"] as const).map((k) => <Stat key={k} label={stateLabel[k]} value={formatInt(shownCounts[k])} />)
+            ) : (
+              <p className="col-span-2 self-center text-small text-muted-foreground md:col-span-3">{token ? "No se pudo leer la lista de participantes." : "Requiere el token del organizador."}</p>
+            )}
+          </StatGrid>
+        </CardContent>
+      </Card>
+
       {actionError ? (
         <Alert tone="danger" title="La acción falló">
           {actionError}
@@ -338,17 +337,19 @@ export function OrgPanel({ electionId }: { electionId: string }) {
 
       {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} onPhaseChange={reload} eligibility={election.eligibility} onElectionChange={setElection} /> : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Proyectos postulados al sorteo</CardTitle>
-          <CardDescription>
-            {election.winnersCountFromResult ? "La opción ganadora define cuántos; el sorteo, cuáles." : "El sorteo elige los ganadores."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CandidatesList candidates={election.candidates ?? []} />
-        </CardContent>
-      </Card>
+      {(election.candidates?.length ?? 0) > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Proyectos postulados al sorteo</CardTitle>
+            <CardDescription>
+              {election.winnersCountFromResult ? "La opción ganadora define cuántos; el sorteo, cuáles." : "El sorteo elige los ganadores."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CandidatesList candidates={election.candidates ?? []} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

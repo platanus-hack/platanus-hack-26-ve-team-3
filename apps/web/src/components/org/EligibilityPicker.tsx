@@ -9,15 +9,15 @@ export type EligibilityDraft = { method: "open-alias" | "event-badge"; badgeChec
 export const DEFAULT_ELIGIBILITY: EligibilityDraft = { method: "event-badge", badgeCheck: "live", allowlist: "", prefix: DEFAULT_BADGE_URL_PREFIX };
 
 const METHODS = [
-  { id: "event-badge", label: "Credencial del evento", cost: "Cada participante escanea el QR de su credencial: unos segundos por persona y una credencial vale una sola vez.", recommended: true },
-  { id: "open-alias", label: "Apodo libre", cost: "Cualquiera con el código de la sala entra con un apodo. No hay que preparar nada, pero entra quien esté en la sala." },
-  { id: "list", label: "Lista (correo o cédula)", cost: "Solo las personas de una lista que cargas tú.", soon: true },
+  { id: "event-badge", label: "Credencial del evento", cost: "Escanean el QR de su credencial. Una por persona.", recommended: true },
+  { id: "open-alias", label: "Apodo libre", cost: "Entra quien tenga el código de la sala." },
+  { id: "list", label: "Lista (correo o cédula)", cost: "Solo las personas de tu lista.", soon: true },
 ] as const;
 
 const CHECKS: { id: BadgeCheck; label: string; cost: string }[] = [
-  { id: "live", label: "En vivo, con la página del evento", cost: "El servidor pregunta a la página de la credencial si existe (hasta 3 s la primera vez; luego queda en memoria). Depende de que esa página responda." },
-  { id: "list", label: "Con una lista que cargo yo", cost: "No depende de internet. Pega los usuarios de GitHub de los participantes; se guardan cifrados (solo una huella), nunca en claro." },
-  { id: "none", label: "Sin comprobar", cost: "Basta con que el QR tenga el formato de la credencial. Más rápido, pero cualquiera que conozca un usuario puede entrar una vez." },
+  { id: "live", label: "En vivo, con la página del evento", cost: "Se consulta la página del evento." },
+  { id: "list", label: "Con una lista que cargo yo", cost: "Pegas los usuarios permitidos. Funciona sin internet." },
+  { id: "none", label: "Sin comprobar", cost: "Más rápido, pero menos seguro." },
 ];
 
 /** Usuarios de la lista: uno por línea (o separados por comas/espacios); acepta @usuario o la URL completa de la credencial. */
@@ -53,11 +53,11 @@ export function EligibilityPicker({ value, onChange, disabled, idPrefix = "elig"
   return (
     <div className="flex flex-col gap-4" data-testid="eligibility-picker">
       <fieldset className="flex flex-col gap-2" disabled={disabled}>
-        <legend className="mb-1 text-body font-semibold">¿Quién puede votar?</legend>
+        <legend className="mb-2 text-small font-medium text-muted-foreground">¿Quién puede votar?</legend>
         {METHODS.map((m) => {
           const soon = "soon" in m && m.soon;
           return (
-            <label key={m.id} className={`flex min-h-tap items-start gap-3 rounded-md border p-3 ${value.method === m.id ? "border-primary bg-muted" : "border-border"} ${soon ? "opacity-60" : "cursor-pointer"}`}>
+            <label key={m.id} className={`flex min-h-tap items-start gap-3 rounded-md border bg-card p-4 transition-colors ${value.method === m.id ? "border-foreground shadow-card" : "border-border hover:border-subtle"} ${soon ? "opacity-60" : "cursor-pointer"}`}>
               <input
                 type="radio"
                 name={`${idPrefix}-method`}
@@ -70,7 +70,7 @@ export function EligibilityPicker({ value, onChange, disabled, idPrefix = "elig"
               <span className="flex flex-col gap-0.5">
                 <span className="flex flex-wrap items-center gap-2 font-semibold">
                   {m.label}
-                  {"recommended" in m && m.recommended ? <Badge tone="success">Recomendado para el evento</Badge> : null}
+                  {"recommended" in m && m.recommended ? <Badge tone="success">Recomendado</Badge> : null}
                   {soon ? <Badge tone="neutral">Próximamente</Badge> : null}
                 </span>
                 <span className="text-small text-muted-foreground">{m.cost}</span>
@@ -82,7 +82,7 @@ export function EligibilityPicker({ value, onChange, disabled, idPrefix = "elig"
 
       {value.method === "event-badge" ? (
         <fieldset className="flex flex-col gap-2" disabled={disabled}>
-          <legend className="mb-1 text-body font-semibold">¿Cómo comprobamos la credencial?</legend>
+          <legend className="mb-2 text-small font-medium text-muted-foreground">¿Cómo se comprueba?</legend>
           {CHECKS.map((c) => (
             <label key={c.id} className="flex min-h-tap cursor-pointer items-start gap-3">
               <input type="radio" name={`${idPrefix}-check`} value={c.id} checked={value.badgeCheck === c.id} onChange={() => onChange({ ...value, badgeCheck: c.id })} className="mt-1 size-5 shrink-0 accent-[var(--color-primary)]" />
@@ -106,7 +106,7 @@ export function EligibilityPicker({ value, onChange, disabled, idPrefix = "elig"
         </fieldset>
       ) : null}
 
-      <p className="text-small text-muted-foreground">El rostro se comprueba siempre: impide que una misma persona entre dos veces (o con varias credenciales). No guardamos fotos.</p>
+      <p className="text-small text-muted-foreground">Siempre se comprueba el rostro para evitar duplicados. No guardamos fotos.</p>
     </div>
   );
 }

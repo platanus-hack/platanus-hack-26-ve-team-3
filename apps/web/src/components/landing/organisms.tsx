@@ -10,7 +10,7 @@ export function Backdrop() {
   return <div aria-hidden="true" className="q-grid-bg pointer-events-none absolute inset-x-0 top-0 -z-10 h-[44rem]" />;
 }
 
-export function Hero({ demoHref }: { demoHref: string }) {
+export function Hero() {
   return (
     <section className="q-page-in grid grid-cols-1 items-center gap-12 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,25rem)] lg:pt-10">
       <div className="flex flex-col gap-6">
@@ -24,8 +24,8 @@ export function Hero({ demoHref }: { demoHref: string }) {
           <Link href="/org/new" className={cn(buttonVariants({ size: "lg" }))}>
             Crear votación <ArrowRight aria-hidden="true" />
           </Link>
-          <Link href={demoHref} className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "border-glass-border bg-glass backdrop-blur-xl")}>
-            Ver una votación
+          <Link href="/votaciones" className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "border-glass-border bg-glass backdrop-blur-xl")}>
+            Mis votaciones
           </Link>
         </div>
         <Glass className="grid max-w-lg grid-cols-3 gap-2 px-5 py-4">

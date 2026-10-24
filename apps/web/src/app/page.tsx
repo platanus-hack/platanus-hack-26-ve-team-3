@@ -1,14 +1,11 @@
 import { Backdrop, FinalCta, Hero, HowItWorks, Promise } from "@/components/landing/organisms";
-import { FIXTURE_PACKAGE_ID } from "@/lib/client/fixtures";
-
-const DEMO_ID = process.env.NEXT_PUBLIC_DEMO_ELECTION_ID ?? FIXTURE_PACKAGE_ID;
 
 export default function Home() {
   return (
     <div className="relative isolate overflow-x-clip">
       <Backdrop />
       <div className="q-container flex flex-col gap-16 py-8 md:gap-24 md:py-14">
-        <Hero demoHref={`/e/${encodeURIComponent(DEMO_ID)}`} />
+        <Hero />
         <HowItWorks />
         <Promise />
         <FinalCta />

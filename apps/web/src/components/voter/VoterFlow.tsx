@@ -22,6 +22,7 @@ import { Consent } from "./Consent";
 import { VoteReceiptCard, type ReceiptView } from "./VoteReceiptCard";
 import { StepIndicator, VoterShell } from "./VoterUi";
 import { SuccessMark } from "@/components/ui/success-mark";
+import { rememberVoterLink } from "@/lib/client/myElections";
 
 type ReceiptV1 = z.infer<typeof Receipt>;
 
@@ -127,6 +128,7 @@ export function VoterFlow({ token }: { token: string }) {
         const l = readLocal(data.election.id, data.voter.id);
         const auto = autoView(data, l, Boolean(roomJoinForToken(token)?.consentAt));
         setInvite(data);
+        rememberVoterLink(data.election.id, `/v/${token}`, data.election.title);
         setLocal(l);
         setLoadError(null);
         const prev = viewRef.current;
