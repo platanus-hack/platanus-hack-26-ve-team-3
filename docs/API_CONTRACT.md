@@ -26,3 +26,35 @@ Tipos en `packages/contracts/src/index.ts`. Todos los inputs se validan con Zod;
 
 ## Rutas de UI
 `/` landing · `/org/new` wizard · `/org/[id]` panel · `/v/[token]` flujo del votante (invitación → datos → consentimiento → prueba de vida → wallet → boleta → recibo) · `/e/[id]/live` resultados en vivo · `/e/[id]` centro de transparencia · `/audit` auditor independiente · `/audit/lab` laboratorio de ataques
+
+## Integración del motor (crypto) — Plan A `semaphore-ledger` (2026-10-24)
+
+Código en `packages/protocol-adapter` (servidor y navegador) y `apps/verifier` (`verifyPackage`). Formato y garantías en `docs/ADR-001-voting-engine.md`. El servidor **nunca** recibe la clave privada Semaphore; solo commitments y pruebas.
+
+### Cambios de contrato
+| Ruta | Antes | Ahora |
+|---|---|---|
+| `POST /api/voters/:id/credential` (nuevo) | — | `{ inviteToken, commitment }` → `Voter`. Guarda `commitment` (string decimal) ligado al `voterId` **solo hasta `publish`**; en el paquete público va la lista de commitments sin ids. Una sola vez por votante. |
+| `POST /api/elections/:id/publish` | fija `manifestHash` | además construye el padrón: `groupRoot = groupRoot(commitments)` (orden = orden de registro, se congela), guarda `commitments[]`, `scope = electionScope(id)` y crea el ledger `createLedger(id, groupRoot)`. Desde aquí no se admiten más commitments (un commitment nuevo cambia la raíz ⇒ nueva elección). Responde `Election` + `{ groupRoot, scope, merkleTreeDepth: 10 }`. |
+| `GET /api/elections/:id/roll` (nuevo, público) | — | `{ groupRoot, commitments[], merkleTreeDepth }`: el navegador lo necesita para generar la prueba. Sin nombres. |
+| `POST /api/elections/:id/vote` | `SignedVote` con `plainChoice` | `{ proof: SemaphoreProof }` (`{ merkleTreeDepth, merkleTreeRoot, message, nullifier, scope, points[8] }`). El servidor llama `await appendBallot(ledger, proof, election.groupRoot)` y mapea `LedgerRejection.code` → `ApiError.code`: `DOUBLE_VOTE`→`already_voted`; `WRONG_ROOT`/`WRONG_SCOPE`/`WRONG_DEPTH`/`INVALID_PROOF`→`not_eligible`; elección no `open`→`closed`. Responde `Receipt` con `inclusionId = proof.nullifier` y `state: "incluido"` (la entrada ya tiene `hash`). **No se guarda `voterId` junto a la boleta**; `votedAt` del `Voter` solo se marca si el cliente lo pide con su `inviteToken` (hecho de haber votado, no qué). La firma EIP-712 pasa a ser opcional: la prueba ya demuestra elegibilidad y unicidad. |
+| `GET /api/elections/:id/receipt/:inclusionId` | — | busca `nullifier === inclusionId` en el ledger; devuelve `idx`, `hash`, `includedAt`. No revela `message`. |
+| `GET /api/elections/:id/tally` | — | `tally(ledger, options.length)` mapeado a `Aggregates` (regla `< 5` votos ⇒ `count:null` se mantiene). |
+| `POST /api/elections/:id/close` | stub | 1) status `closed`; 2) `t = tally(ledger, n)`; 3) opcional ancla (abajo); 4) `pkg = buildAuditPackage({ electionId, manifest, commitments, ledger, tally: t, anchor })`; 5) `result = await verifyPackage(pkg, { anchorRpcUrl: process.env.BASE_SEPOLIA_RPC })`; 6) si `result.valid` → `auditable`, si no → `failed`, y se publica igualmente el `AuditResult` (nunca ocultar). Guardar `pkg` como artefacto inmutable (JSON) y su `sha256`. |
+| `GET /api/elections/:id/artifacts` | — | devuelve el `pkg` JSON tal cual se guardó (`Content-Type: application/json`, `ETag` = sha256). |
+| `POST /api/audit/verify` | `valid:false` + `verifier-not-integrated` | `import { verifyPackage } from "@quorum/verifier"`; `return verifyPackage(body.package, { anchorRpcUrl: process.env.BASE_SEPOLIA_RPC, inputArtifactDigest: "sha256:" + sha256(bodyBytes) })`. Devuelve el `AuditResult` íntegro: la UI muestra `checks[].reason` y `unsupportedGuarantees`, nunca solo `valid`. |
+
+### Manifiesto canónico (`ElectionManifest` del adaptador)
+`{ electionId, title, kind, options:[{id,label}], startsAt, endsAt, protocol:"semaphore-ledger", merkleTreeDepth:10, label:"fixture"|"simulación"|"real" }` → `manifestHash = manifestHash(manifest)` (SHA-256 del JSON canónico; la misma función vive en el verificador). Cualquier cambio posterior ⇒ `manifest_hash` falla.
+
+### Navegador del votante (`/v/[token]`)
+1. `const id = createVoterIdentity()` → guardar `id.privateKey` en `localStorage` (clave por `electionId`); enviar solo `id.commitment` a `/credential`.
+2. Tras `publish`: `GET /roll` → `castBallot(privateKey, commitments, electionId, optionIndex, browserArtifacts())` (artefactos en `/zk/semaphore-10.{wasm,zkey}`; copiarlos con `pnpm --filter @quorum/protocol-adapter copy-artifacts`, 4,2 MB; ~0,4 s en Node, estimar 1–3 s en móvil, sin medir).
+3. `POST /vote { proof }` → guardar `Receipt`; el recibo del votante es su `nullifier`: puede buscarlo en `artifacts` y comprobar que está en el ledger.
+4. `castBallot` importa `@semaphore-protocol/core` (snarkjs + WASM): cargarla con `dynamic import` en un componente cliente para no meterla en el bundle inicial.
+
+### Ancla (opcional; requiere decisión humana: clave con ETH en Base Sepolia)
+En `close`, antes de construir el paquete final: `anchorOnBaseSepolia({ finalHash: finalHash(ledger), groupRoot, tallyHash: tallyHash(t), electionId }, ORGANIZER_PRIVATE_KEY, BASE_SEPOLIA_RPC)` → `anchor = { chainId: 84532, txHash }`. Sin clave: `anchor = null` y el verificador lo declara `no evaluado`. EAS detrás de `QUORUM_EAS_ENABLED=true` + `QUORUM_EAS_SCHEMA_UID` (ver ADR-001).
+
+### Variables de entorno nuevas
+`BASE_SEPOLIA_RPC` (ya listada), `ORGANIZER_PRIVATE_KEY` (solo servidor, nunca en git), `QUORUM_EAS_ENABLED=false`, `QUORUM_EAS_SCHEMA_UID`.

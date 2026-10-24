@@ -1,0 +1,8 @@
+{
+  "name": "@quorum/demo-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fixtures de demo de Quórum. Todo es ficticio y está etiquetado como fixture / simulación. protocol/ se genera con `pnpm --filter @quorum/protocol-adapter fixtures`.",
+  "scripts": { "typecheck": "echo skip", "lint": "echo skip", "test": "echo skip", "build": "echo skip" }
+}
