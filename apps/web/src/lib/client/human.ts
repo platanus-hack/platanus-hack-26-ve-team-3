@@ -16,9 +16,13 @@ export type HumanInstance = HumanType;
  */
 export const HUMAN_CONFIG: Partial<Config> = {
   modelBasePath: "/models",
-  backend: "webgl",
+  // `humangl` es el backend WebGL que Human recomienda para navegadores: en WebKit (iPhone) compila los shaders mucho
+  // más rápido que `webgl` (medido: calentamiento 0,4 s vs 3,6 s en WebKit de escritorio; en iPhone real `webgl` se
+  // quedaba en "Preparando la cámara…").
+  backend: "humangl",
   cacheSensitivity: 0,
-  warmup: "face",
+  // El calentamiento solo hace falta para la autoprueba de E2E; en producción el primer `detect` ya compila.
+  warmup: process.env.NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE === "1" ? "face" : "none",
   filter: { enabled: true, equalization: false },
   face: {
     enabled: true,
@@ -57,7 +61,9 @@ export async function loadHuman(): Promise<HumanType> {
       const mod = await import("@vladmandic/human");
       const Human = mod.Human ?? mod.default;
       const h = new Human(HUMAN_CONFIG);
+      const t0 = performance.now();
       await h.load();
+      clientLog("human:loaded", { ms: Math.round(performance.now() - t0), backend: String(h.tf?.getBackend?.() ?? "") });
       const warm = await h.warmup();
       const f = warm?.face?.[0];
       selfTest = {
@@ -70,9 +76,28 @@ export async function loadHuman(): Promise<HumanType> {
       };
       instance = h;
       return h;
-    })();
+    })().catch((e) => {
+      loading = null; // permite reintentar
+      clientLog("human:error", { error: e instanceof Error ? e.message : String(e) });
+      throw e;
+    });
   }
   return loading;
+}
+
+/**
+ * Diagnóstico mínimo para el ensayo con teléfonos reales: en qué paso va la cámara y cuánto tarda. Va a los logs del
+ * servidor (`/api/client-log`). Nunca lleva imagen, descriptor, nombre ni token: solo etapa, tiempos y navegador.
+ */
+export function clientLog(stage: string, data: Record<string, string | number | boolean> = {}): void {
+  try {
+    const body = JSON.stringify({ stage, ...data, ua: navigator.userAgent.slice(0, 160) });
+    if (!navigator.sendBeacon?.("/api/client-log", new Blob([body], { type: "application/json" }))) {
+      void fetch("/api/client-log", { method: "POST", body, headers: { "content-type": "application/json" }, keepalive: true }).catch(() => undefined);
+    }
+  } catch {
+    /* el diagnóstico nunca rompe el flujo */
+  }
 }
 
 /** Acción pedida al votante para la prueba de vida activa. */

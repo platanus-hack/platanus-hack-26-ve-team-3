@@ -5,7 +5,7 @@ import { CameraOff, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiClientError, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { actionSatisfied, averageDescriptors, humanSelfTest, loadHuman, pickAction, type HumanInstance, type LivenessAction } from "@/lib/client/human";
+import { actionSatisfied, averageDescriptors, clientLog, humanSelfTest, loadHuman, pickAction, type HumanInstance, type LivenessAction } from "@/lib/client/human";
 import { cn } from "@/lib/client/cn";
 
 /** Umbrales mínimos de antispoof (`face.real`) y liveness (`face.live`) de Human (threat model M5). Siguen siendo demo. */
@@ -20,7 +20,7 @@ const CAPTURES = 3;
  */
 const E2E_FAKE_FACE = process.env.NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE === "1";
 
-type Phase = "loading" | "look" | "spoof" | "action" | "hold" | "checking" | "error";
+type Phase = "loading" | "slow" | "look" | "spoof" | "action" | "hold" | "checking" | "error";
 type ErrorKind = "camera-denied" | "no-camera" | "duplicate" | "other";
 
 const actionText: Record<LivenessAction, string> = { blink: "Parpadea", turn: "Gira un poco la cabeza" };
@@ -29,6 +29,8 @@ function instruction(phase: Phase, action: LivenessAction): string {
   switch (phase) {
     case "loading":
       return "Preparando la cámara…";
+    case "slow":
+      return "Cargando el reconocimiento facial… con datos móviles puede tardar un poco";
     case "look":
       return "Mira a la cámara";
     case "spoof":
@@ -145,10 +147,23 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
       const video = videoRef.current;
       if (!video) throw new Error("Sin elemento de video");
       video.srcObject = stream;
-      await video.play();
+      // En iOS `play()` puede no resolver nunca aunque el video ya se vea (autoPlay + muted): no lo esperamos.
+      void video.play().catch(() => undefined);
+      clientLog("camera:ready");
       // Primero la cámara (el permiso se pide de inmediato), luego los modelos mientras la persona se ve en pantalla.
-      const human = await loadHuman();
+      const t0 = performance.now();
+      const slowTimer = window.setTimeout(() => !stale() && setPhase("slow"), 6000);
+      let human: HumanInstance;
+      try {
+        human = await Promise.race([
+          loadHuman(),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("El reconocimiento facial tardó demasiado en cargar. Revisa tu conexión e intenta de nuevo.")), 90_000)),
+        ]);
+      } finally {
+        clearTimeout(slowTimer);
+      }
       if (stale()) return;
+      clientLog("camera:models-ready", { ms: Math.round(performance.now() - t0) });
       humanRef.current = human;
       if (E2E_FAKE_FACE) (window as unknown as { __quorumHumanSelfTest?: unknown }).__quorumHumanSelfTest = humanSelfTest();
 
@@ -159,8 +174,15 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
       let actionSeen = false;
       let lastCaptureAt = 0;
 
+      let firstDetect = true;
       const loop = async () => {
         if (stale() || !humanRef.current || !videoRef.current) return;
+        if (firstDetect) {
+          firstDetect = false;
+          const td = performance.now();
+          const r0 = await humanRef.current.detect(videoRef.current);
+          clientLog("camera:first-detect", { ms: Math.round(performance.now() - td), faces: r0.face.length });
+        }
         const result = await humanRef.current.detect(videoRef.current);
         if (stale()) return;
         const face = result.face[0];
@@ -202,6 +224,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
       if (stale()) return;
       stopAll();
       const kind = e instanceof DOMException ? classifyCameraError(e) : "other";
+      clientLog("camera:error", { kind, error: e instanceof Error ? e.message.slice(0, 200) : "?" });
       setError({ kind, message: e instanceof Error ? e.message : "Error desconocido" });
       setPhase("error");
     }
@@ -255,7 +278,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
         {phase !== "error" ? (
           <>
             <p role="status" aria-live="assertive" className="rounded-lg bg-black/60 px-4 py-2 text-title font-bold" data-testid="face-instruction">
-              {phase === "loading" || phase === "checking" ? <span className="q-spinner mr-2 align-middle" aria-hidden="true" /> : null}
+              {phase === "loading" || phase === "slow" || phase === "checking" ? <span className="q-spinner mr-2 align-middle" aria-hidden="true" /> : null}
               {text}
             </p>
             {phase === "hold" ? (
