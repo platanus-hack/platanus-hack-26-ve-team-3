@@ -84,8 +84,8 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
                 setPhase("idle");
               }}
               className={cn(
-                "flex min-h-14 w-full items-center gap-3 rounded-lg border-2 px-4 text-left text-heading font-semibold transition-colors disabled:opacity-60",
-                selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:bg-muted",
+                "flex min-h-14 w-full items-center gap-3 rounded-md border-2 px-4 text-left text-heading font-semibold transition-[background-color,border-color,box-shadow] duration-150 disabled:opacity-60",
+                selected ? "border-primary bg-primary text-primary-foreground shadow-primary" : "border-border bg-card shadow-card hover:border-primary/40",
               )}
             >
               <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full border-2", selected ? "border-primary-foreground" : "border-subtle")} aria-hidden="true">

@@ -396,7 +396,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <Field label="Canal" htmlFor="channel">
                   <Select id="channel" value={channel} onChange={(e) => setChannel(e.target.value as Channel)}>
-                    <option value="dry-run">dry-run (simulación, sin envío)</option>
+                    <option value="dry-run">Sin envío (prueba)</option>
                     <option value="wame">wame (enlaces wa.me para copiar)</option>
                   </Select>
                 </Field>

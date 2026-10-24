@@ -51,7 +51,7 @@ export function ReceiptCard({ receipt, electionTitle }: { receipt: Receipt; elec
           <Button variant="secondary" onClick={copy}>
             <Copy aria-hidden="true" /> {copied === "ok" ? "Copiado" : copied === "fail" ? "No se pudo copiar" : "Copiar ID"}
           </Button>
-          <Link href={`/e/${encodeURIComponent(receipt.electionId)}`} className="inline-flex min-h-tap items-center gap-2 px-2 text-body font-semibold text-primary underline-offset-4 hover:underline">
+          <Link href={`/e/${encodeURIComponent(receipt.electionId)}`} className="inline-flex min-h-tap items-center gap-2 px-2 text-body font-semibold text-primary-ink underline-offset-4 hover:underline">
             <ExternalLink className="size-4" aria-hidden="true" /> Centro de transparencia
           </Link>
         </div>

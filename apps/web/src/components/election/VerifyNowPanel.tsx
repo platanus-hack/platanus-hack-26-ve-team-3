@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Download, ShieldQuestion } from "lucide-react";
 import { AuditChecklist } from "@/components/AuditChecklist";
 import { Alert } from "@/components/ui/alert";
-import { FixtureTag } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchAuditPackageBytes } from "@/lib/client/apiV1";
@@ -77,10 +77,10 @@ export function VerifyNowPanel({ source, serverAudit, onVerified }: { source: Pa
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle id="verify-now-h">Verificar ahora</CardTitle>
-            {source.kind === "fixture" ? <FixtureTag>{source.label}</FixtureTag> : null}
+            {source.kind === "fixture" ? <Badge tone="neutral">{source.label}</Badge> : null}
           </div>
           <CardDescription>
-            Tu navegador descarga el paquete de auditoría y corre el verificador independiente (<span className="q-mono">@quorum/verifier</span>) aquí mismo: recalcula padrón, cadena, pruebas, nullifiers y recuento sin confiar en el servidor.
+            Tu navegador recalcula padrón, pruebas y recuento sin confiar en el servidor.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">

@@ -47,7 +47,7 @@ export function ThemeToggle() {
     }
   }
   return (
-    <button type="button" onClick={toggle} className="inline-flex size-tap cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"} aria-pressed={isDark}>
+    <button type="button" onClick={toggle} className="inline-flex size-tap cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"} aria-pressed={isDark}>
       {isDark ? <Sun className="size-5" aria-hidden="true" /> : <Moon className="size-5" aria-hidden="true" />}
     </button>
   );

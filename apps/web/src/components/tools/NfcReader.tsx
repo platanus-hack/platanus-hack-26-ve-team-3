@@ -69,7 +69,7 @@ export function NfcReader() {
         </div>
       ) : (
         <>
-          <button type="button" onClick={start} disabled={scanning} className="mt-6 h-14 w-full rounded-xl bg-primary text-lg font-semibold text-primary-foreground disabled:opacity-60">
+          <button type="button" onClick={start} disabled={scanning} className="mt-6 h-14 w-full rounded-full bg-primary text-lg font-semibold text-primary-foreground shadow-primary disabled:opacity-60">
             {scanning ? "Leyendo…" : "Empezar a leer"}
           </button>
           <p className="mt-3 text-base" role="status" aria-live="polite">{status}</p>

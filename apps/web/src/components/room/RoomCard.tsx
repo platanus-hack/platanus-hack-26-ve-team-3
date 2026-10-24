@@ -160,8 +160,8 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
         </div>
         <CardDescription>
           {isBadge
-            ? "El público escanea el QR del proyector y luego su credencial del evento. Una credencial vale una vez y el rostro impide que una persona use varias; así queda declarado en el paquete de auditoría."
-            : "El público entra escaneando un QR, con un alias y sin estar en el padrón. Es un censo abierto: la única barrera para duplicados es la deduplicación facial demo, y así queda declarado en el paquete de auditoría."}
+            ? "El público escanea el QR del proyector y su credencial. Cada credencial vale una vez."
+            : "El público entra con el QR y un alias. Padrón abierto: la cámara es la única barrera contra duplicados."}
         </CardDescription>
         <p className="text-small" data-testid="room-eligibility">
           <span className="text-muted-foreground">¿Quién puede votar? </span>

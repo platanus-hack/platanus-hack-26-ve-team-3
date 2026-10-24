@@ -23,11 +23,11 @@ export function PhaseTimeline({ phase, className }: { phase: ElectionPhase; clas
               key={p.id}
               aria-current={state === "current" || state === "failed" ? "step" : undefined}
               className={cn(
-                "flex min-h-tap flex-col justify-center rounded-md border px-2 py-1.5 text-small",
-                state === "done" && "border-success/50 bg-success-soft text-success-strong",
-                state === "current" && "border-primary bg-card font-semibold text-foreground ring-2 ring-ring/30",
+                "flex min-h-tap flex-col justify-center rounded-md border px-3 py-2 text-small",
+                state === "done" && "border-transparent bg-success-soft text-success-strong",
+                state === "current" && "border-primary bg-primary-soft font-semibold text-primary-soft-foreground ring-4 ring-ring/15",
                 state === "failed" && "border-danger/60 bg-danger-soft font-semibold text-danger-strong",
-                state === "todo" && "border-border text-subtle",
+                state === "todo" && "border-dashed border-input bg-card/60 text-subtle",
               )}
             >
               <span className="flex items-center gap-1">

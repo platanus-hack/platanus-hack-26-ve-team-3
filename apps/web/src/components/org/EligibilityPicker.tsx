@@ -98,7 +98,7 @@ export function EligibilityPicker({ value, onChange, disabled, idPrefix = "elig"
             </Field>
           ) : null}
           <details>
-            <summary className="min-h-tap cursor-pointer text-small font-semibold text-primary">Avanzado: dirección de la credencial</summary>
+            <summary className="min-h-tap cursor-pointer text-small font-semibold text-primary-ink">Avanzado: dirección de la credencial</summary>
             <Field label="Prefijo de la URL del QR" htmlFor={`${idPrefix}-prefix`} hint="El usuario va justo después. Por defecto, la credencial de Platanus Hack 26 Caracas.">
               <Input id={`${idPrefix}-prefix`} value={value.prefix} onChange={(e) => onChange({ ...value, prefix: e.target.value })} className="q-mono" />
             </Field>

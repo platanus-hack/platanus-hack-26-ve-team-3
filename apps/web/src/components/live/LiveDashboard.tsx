@@ -20,7 +20,6 @@ const POLL_MS = 3000;
 export function LiveDashboard({ electionId }: { electionId: string }) {
   const [title, setTitle] = useState<string>("");
   const [layout, setLayout] = useState<LiveLayout | null>(null);
-  const [layoutSource, setLayoutSource] = useState<"servidor" | "por defecto">("por defecto");
   const [data, setData] = useState<Aggregates | null>(null);
   const [phase, setPhase] = useState<ElectionPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +51,6 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
         const fromElection = LiveLayoutSchema.safeParse(e.layout);
         if (fromElection.success) {
           setLayout(fromElection.data);
-          setLayoutSource("servidor");
         }
       } catch {
         /* el título y el layout caen a valores por defecto */
@@ -61,7 +59,6 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
         const l = await api.getLayout(electionId);
         if (cancelled) return;
         setLayout(l);
-        setLayoutSource("servidor");
       } catch {
         if (!cancelled) setLayout((prev) => prev ?? defaultLayout(kind));
       }
@@ -91,11 +88,10 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="neutral">Resultados en vivo</Badge>
           {phase ? <Badge tone={phase === "open" ? "success" : "neutral"}>{phaseLabel[phase]}</Badge> : null}
-          <Badge tone="neutral">Layout: {layoutSource}</Badge>
         </div>
         <h1 className="text-title font-bold tracking-tight md:text-display">{title || "Elección"}</h1>
         <p className="text-small text-muted-foreground" aria-live="polite">
-          Sólo agregados (participación y, desde 5 votos, conteo por opción); se actualiza cada 3 s. {updatedAt ? `Última actualización: ${formatDateTime(new Date(updatedAt).toISOString())}` : ""}
+          Se actualiza cada 3 s{updatedAt ? ` · ${formatDateTime(new Date(updatedAt).toISOString())}` : ""}
         </p>
       </header>
 
@@ -134,13 +130,9 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
       ) : null}
 
       <p className="text-small text-muted-foreground">
-        Estas cifras las publica el organizador. El resultado sólo es confiable cuando lo confirma el{" "}
-        <Link href="/audit" className="underline underline-offset-4">
-          verificador independiente
-        </Link>
-        . Ver también el{" "}
+        El resultado final vale cuando lo confirma el{" "}
         <Link href={`/e/${encodeURIComponent(electionId)}`} className="underline underline-offset-4">
-          centro de transparencia
+          verificador
         </Link>
         .
       </p>

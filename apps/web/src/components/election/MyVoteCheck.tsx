@@ -93,9 +93,9 @@ export function MyVoteCheck({ electionId, verified }: { electionId: string; veri
   return (
     <Card id="mi-voto">
       <CardHeader>
-        <CardTitle>Mi voto está</CardTitle>
+        <CardTitle>¿Está mi voto?</CardTitle>
         <CardDescription>
-          Comprueba con tu nullifier que tu boleta sigue en el registro. {verified ? "Se busca en el paquete que verificaste en tu navegador." : "Aún no verificaste el paquete: se consulta el registro publicado (durante la votación, el recibo por nullifier)."}
+          Pega el código de tu comprobante. {verified ? "Se busca en el paquete que verificaste." : "Se consulta el registro publicado."}
         </CardDescription>
       </CardHeader>
       <CardContent>

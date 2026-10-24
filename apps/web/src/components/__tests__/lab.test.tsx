@@ -62,7 +62,7 @@ describe("AlterationDiff", () => {
 describe("AttackLab con el verificador REAL", () => {
   it("carga el fixture etiquetado, verifica el original y un toque en «Inflar el resultado» ⇒ FALLO DETECTADO en tally_matches", async () => {
     render(<AttackLab />);
-    expect(await screen.findByText("fixture")).toBeTruthy();
+    expect(await screen.findByText("ejemplo")).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId("baseline-status").textContent).toMatch(/verificado/), { timeout: 30_000 });
     // El fixture v1 del laboratorio trae sorteo: sus alteraciones están disponibles; ocultar la sala no (no hay sala).
     expect((screen.getByTestId("alt-draw-seed") as HTMLButtonElement).disabled).toBe(false);

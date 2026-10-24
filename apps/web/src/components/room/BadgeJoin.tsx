@@ -177,7 +177,7 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
             )}
           </form>
         ) : (
-          <button type="button" className="min-h-tap self-center text-heading font-semibold text-primary underline underline-offset-4" onClick={() => setTyping(true)}>
+          <button type="button" className="min-h-tap self-center text-heading font-semibold text-primary-ink underline underline-offset-4" onClick={() => setTyping(true)}>
             o escribe tu usuario
           </button>
         )

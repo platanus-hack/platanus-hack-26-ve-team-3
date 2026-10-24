@@ -224,7 +224,7 @@ function RegistrationView({ election, room, counts, hasToken, now, offset }: { e
             La entrada cierra en {left}
           </p>
         ) : null}
-        <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#2C3A4E]">Entras con un nombre o apodo. El descriptor facial (demo) se borra al abrir la votación.</p>
+        <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#2C3A4E]">Entras con un nombre o apodo. Tu rostro no se guarda como foto.</p>
         {election.status === "draft" ? <p className="text-[clamp(1rem,1.5vw,1.8rem)] font-bold">La inscripción todavía no abre.</p> : null}
       </div>
     </div>

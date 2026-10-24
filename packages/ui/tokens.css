@@ -1,45 +1,56 @@
 /*
   Quórum — design tokens (fuente de verdad: docs/DESIGN_SYSTEM.md)
-  Paleta sobria y editorial: hueso, azul noche, verde verificación, ámbar, rojo.
+  Estilo "UI kit azul": fondo niebla, tarjetas blancas con sombra azulada difusa, primario azul,
+  botones píldora, cifras grandes en Space Grotesk. Oscuro: grafito con acentos azul/verde/rojo.
   Los tokens --q-* son primitivos; los semánticos (--color-*) se consumen desde Tailwind.
-  Sin neón. Contraste objetivo WCAG AA (texto ≥ 4.5:1, UI ≥ 3:1).
+  Contraste objetivo WCAG AA (texto ≥ 4.5:1, UI ≥ 3:1), medido par por par.
 */
 :root {
   /* Primitivos */
-  --q-bone: #f8f7f3;
-  --q-bone-2: #efede6;
-  --q-bone-3: #e3e0d6;
-  --q-night: #182b45;
-  --q-night-2: #223a5c;
-  --q-night-3: #0f1c2e;
-  --q-ink: #1b1f26;
-  --q-ink-2: #4a5160;
-  --q-ink-3: #6b7280;
-  --q-green: #147d68;
-  --q-green-2: #0f6353;
-  --q-green-soft: #e3f1ec;
-  --q-amber: #b7791f;
-  --q-amber-2: #8f5e14;
-  --q-amber-soft: #f7edd8;
-  --q-red: #c44242;
-  --q-red-2: #9f3333;
-  --q-red-soft: #f8e4e4;
+  --q-mist: #f3f6fb;
+  --q-mist-2: #eaf0f8;
+  --q-line: #e3e8f0;
+  --q-line-2: #d3dbe7;
+  --q-blue: #1f6bf5;
+  --q-blue-2: #155ce0;
+  --q-blue-ink: #1a5fe0;
+  --q-blue-soft: #e8f0fe;
+  --q-blue-soft-ink: #1d4fb8;
+  --q-blue-muted: #c4d7fc;
+  --q-navy: #1b3a6b;
+  --q-ink: #0f1729;
+  --q-ink-2: #5a6577;
+  --q-ink-3: #626c7e;
+  --q-green: #0e7c5a;
+  --q-green-2: #0a5f45;
+  --q-green-soft: #e0f4eb;
+  --q-amber: #9a6410;
+  --q-amber-2: #8a5a10;
+  --q-amber-soft: #fbf0db;
+  --q-red: #c73a4c;
+  --q-red-2: #a8283a;
+  --q-red-soft: #fde8ea;
   --q-white: #ffffff;
 
   /* Semánticos — tema claro */
-  --color-background: var(--q-bone);
+  --color-background: var(--q-mist);
   --color-foreground: var(--q-ink);
-  --color-muted: var(--q-bone-2);
+  --color-muted: var(--q-mist-2);
   --color-muted-foreground: var(--q-ink-2);
   --color-subtle: var(--q-ink-3);
   --color-card: var(--q-white);
   --color-card-foreground: var(--q-ink);
-  --color-border: var(--q-bone-3);
-  --color-input: var(--q-bone-3);
-  --color-ring: var(--q-night-2);
-  --color-primary: var(--q-night);
-  --color-primary-hover: var(--q-night-2);
-  --color-primary-foreground: var(--q-bone);
+  --color-border: var(--q-line);
+  --color-input: var(--q-line-2);
+  --color-ring: var(--q-blue);
+  --color-primary: var(--q-blue);
+  --color-primary-hover: var(--q-blue-2);
+  --color-primary-foreground: var(--q-white);
+  --color-primary-ink: var(--q-blue-ink); /* texto/links azules sobre card o fondo */
+  --color-primary-soft: var(--q-blue-soft);
+  --color-primary-soft-foreground: var(--q-blue-soft-ink);
+  --color-primary-muted: var(--q-blue-muted); /* segunda barra de un split, tracks */
+  --color-navy: var(--q-navy);
   --color-success: var(--q-green);
   --color-success-strong: var(--q-green-2);
   --color-success-soft: var(--q-green-soft);
@@ -49,7 +60,20 @@
   --color-danger: var(--q-red);
   --color-danger-strong: var(--q-red-2);
   --color-danger-soft: var(--q-red-soft);
-  --color-neutral-soft: var(--q-bone-2);
+  --color-neutral-soft: var(--q-mist-2);
+
+  /* Series de gráficos: orden fijo, la 1 es la marca */
+  --color-chart-1: #1f6bf5;
+  --color-chart-2: #f08c1a;
+  --color-chart-3: #0e9f7a;
+  --color-chart-4: #7c3aed;
+  --color-chart-5: #e5b100;
+  --color-chart-6: #e5484d;
+  --color-chart-7: #0ea5e9;
+  --color-chart-8: #db2777;
+  --color-chart-9: #64748b;
+  --color-chart-10: #1b3a6b;
+  --color-grid: #e6ebf2;
 
   /* Tipografía: escala 32/24/18/15 */
   --text-display: 2rem;      /* 32px */
@@ -57,7 +81,7 @@
   --text-heading: 1.125rem;  /* 18px */
   --text-body: 0.9375rem;    /* 15px */
   --text-small: 0.8125rem;   /* 13px */
-  --leading-tight: 1.2;
+  --leading-tight: 1.15;
   --leading-body: 1.55;
 
   /* Espaciado 8pt */
@@ -70,11 +94,14 @@
   --space-12: 3rem;
   --space-16: 4rem;
 
-  /* Radios y sombras */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 1rem;
-  --shadow-card: 0 1px 2px rgb(24 43 69 / 0.06), 0 4px 16px rgb(24 43 69 / 0.05);
+  /* Radios y sombras: tarjetas grandes y suaves, sombra teñida de azul */
+  --radius-sm: 0.5rem;   /* 8px */
+  --radius-md: 0.75rem;  /* 12px */
+  --radius-lg: 1.25rem;  /* 20px */
+  --radius-xl: 1.75rem;  /* 28px */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 12px 32px -14px rgb(31 107 245 / 0.16);
+  --shadow-elevated: 0 2px 6px rgb(16 24 40 / 0.04), 0 28px 56px -24px rgb(31 107 245 / 0.3);
+  --shadow-primary: 0 10px 22px -10px rgb(31 107 245 / 0.65);
 
   /* Objetivo táctil mínimo */
   --tap: 2.75rem; /* 44px */
@@ -85,57 +112,87 @@
 /* Tema oscuro: por preferencia del sistema (si no se forzó claro) y por data-theme */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-background: #0f1826;
-    --color-foreground: #ecebe6;
-    --color-muted: #182438;
-    --color-muted-foreground: #b9bfcb;
-    --color-subtle: #8e97a6;
-    --color-card: #16223a;
-    --color-card-foreground: #ecebe6;
-    --color-border: #2a3a55;
-    --color-input: #2a3a55;
-    --color-ring: #9fb5d6;
-    --color-primary: #e8e5db;
-    --color-primary-hover: #ffffff;
-    --color-primary-foreground: #0f1826;
-    --color-success: #4fb59d;
-    --color-success-strong: #7fd0bc;
-    --color-success-soft: #113a32;
-    --color-warning: #d9a24a;
-    --color-warning-strong: #f0c072;
-    --color-warning-soft: #3d2d10;
-    --color-danger: #e26a6a;
-    --color-danger-strong: #f29a9a;
-    --color-danger-soft: #431c1c;
-    --color-neutral-soft: #1d2a40;
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
+    --color-background: #0f1218;
+    --color-foreground: #eef1f6;
+    --color-muted: #1c212b;
+    --color-muted-foreground: #a3acbb;
+    --color-subtle: #7d8696;
+    --color-card: #161a22;
+    --color-card-foreground: #eef1f6;
+    --color-border: #262c37;
+    --color-input: #343b48;
+    --color-ring: #6ea0ff;
+    --color-primary: #2a62f0;
+    --color-primary-hover: #3d72ff;
+    --color-primary-foreground: #ffffff;
+    --color-primary-ink: #6ea0ff;
+    --color-primary-soft: #19253f;
+    --color-primary-soft-foreground: #9db8ff;
+    --color-primary-muted: #263a66;
+    --color-navy: #10264a;
+    --color-success: #1a7f5e;
+    --color-success-strong: #6ee3b0;
+    --color-success-soft: #1d4a40;
+    --color-warning: #9a6410;
+    --color-warning-strong: #f3c77d;
+    --color-warning-soft: #3a2c12;
+    --color-danger: #c73a4c;
+    --color-danger-strong: #f58ea2;
+    --color-danger-soft: #4a2531;
+    --color-neutral-soft: #1c212b;
+    --color-chart-1: #3d78ff;
+    --color-chart-3: #2fbf93;
+    --color-chart-4: #9b6bff;
+    --color-chart-5: #f7c936;
+    --color-chart-6: #f03a34;
+    --color-chart-9: #94a3b8;
+    --color-chart-10: #8fb0e8;
+    --color-grid: #232935;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -16px rgb(0 0 0 / 0.6);
+    --shadow-elevated: 0 2px 6px rgb(0 0 0 / 0.4), 0 28px 56px -24px rgb(0 0 0 / 0.75);
+    --shadow-primary: 0 10px 22px -10px rgb(42 98 240 / 0.7);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --color-background: #0f1826;
-  --color-foreground: #ecebe6;
-  --color-muted: #182438;
-  --color-muted-foreground: #b9bfcb;
-  --color-subtle: #8e97a6;
-  --color-card: #16223a;
-  --color-card-foreground: #ecebe6;
-  --color-border: #2a3a55;
-  --color-input: #2a3a55;
-  --color-ring: #9fb5d6;
-  --color-primary: #e8e5db;
-  --color-primary-hover: #ffffff;
-  --color-primary-foreground: #0f1826;
-  --color-success: #4fb59d;
-  --color-success-strong: #7fd0bc;
-  --color-success-soft: #113a32;
-  --color-warning: #d9a24a;
-  --color-warning-strong: #f0c072;
-  --color-warning-soft: #3d2d10;
-  --color-danger: #e26a6a;
-  --color-danger-strong: #f29a9a;
-  --color-danger-soft: #431c1c;
-  --color-neutral-soft: #1d2a40;
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
+  --color-background: #0f1218;
+  --color-foreground: #eef1f6;
+  --color-muted: #1c212b;
+  --color-muted-foreground: #a3acbb;
+  --color-subtle: #7d8696;
+  --color-card: #161a22;
+  --color-card-foreground: #eef1f6;
+  --color-border: #262c37;
+  --color-input: #343b48;
+  --color-ring: #6ea0ff;
+  --color-primary: #2a62f0;
+  --color-primary-hover: #3d72ff;
+  --color-primary-foreground: #ffffff;
+  --color-primary-ink: #6ea0ff;
+  --color-primary-soft: #19253f;
+  --color-primary-soft-foreground: #9db8ff;
+  --color-primary-muted: #263a66;
+  --color-navy: #10264a;
+  --color-success: #1a7f5e;
+  --color-success-strong: #6ee3b0;
+  --color-success-soft: #1d4a40;
+  --color-warning: #9a6410;
+  --color-warning-strong: #f3c77d;
+  --color-warning-soft: #3a2c12;
+  --color-danger: #c73a4c;
+  --color-danger-strong: #f58ea2;
+  --color-danger-soft: #4a2531;
+  --color-neutral-soft: #1c212b;
+  --color-chart-1: #3d78ff;
+  --color-chart-3: #2fbf93;
+  --color-chart-4: #9b6bff;
+  --color-chart-5: #f7c936;
+  --color-chart-6: #f03a34;
+  --color-chart-9: #94a3b8;
+  --color-chart-10: #8fb0e8;
+  --color-grid: #232935;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -16px rgb(0 0 0 / 0.6);
+  --shadow-elevated: 0 2px 6px rgb(0 0 0 / 0.4), 0 28px 56px -24px rgb(0 0 0 / 0.75);
+  --shadow-primary: 0 10px 22px -10px rgb(42 98 240 / 0.7);
   color-scheme: dark;
 }
