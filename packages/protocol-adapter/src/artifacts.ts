@@ -18,7 +18,9 @@ export function defaultArtifacts(): SnarkArtifactPaths {
   // La ruta se arma en tiempo de ejecución para que los bundlers (Turbopack) no la traten como asset:
   // solo se usa en Node (tests, scripts); el servidor web nunca genera pruebas.
   const dir = ["..", "artifacts", ""].join("/");
-  const base = new URL(dir, import.meta.url);
+  // `Reflect.construct` en vez de `new URL(x, import.meta.url)`: Turbopack analiza ese patrón (aunque `x` sea dinámico)
+  // y falla con "Can't resolve <dynamic>" en `next build`. El valor en Node es idéntico.
+  const base = Reflect.construct(URL, [dir, import.meta.url]) as URL;
   return {
     wasm: decodeURIComponent(new URL(ARTIFACT_FILES.wasm, base).pathname),
     zkey: decodeURIComponent(new URL(ARTIFACT_FILES.zkey, base).pathname),
