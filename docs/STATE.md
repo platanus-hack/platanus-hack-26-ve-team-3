@@ -10,6 +10,11 @@
 - En curso (ramas en worktrees): backend (API + identidad + notify Kapso dry-run), frontend (onboarding rostro→wallet, boleta, live, organizador, auditor), QA (Vitest/Playwright/fixtures). Spike de motores (research/01) en curso.
 - Bloqueos humanos: cuentas Kapso/Privy/ZeroDev (probar acceso desde IP venezolana sin VPN), integrantes del equipo, ADR-001.
 
+## 2026-10-24 — H+3 (≈13:00 VET)
+- Entregas: QA (PR #1), backend (PR #2), frontend (PR #3), crypto Plan A (`feat/crypto-plan-a`). Integradas en `integration/h3` → **PR #4** con typecheck, lint, 124 tests, build y smoke E2E en verde. Espera aprobación en la página.
+- ADR-001 propuesto (Semaphore ledger + spike DAVINCI opcional); esperando confirmación.
+- Siguiente: conectar verificador real a `/api/audit/verify`, voto con prueba Semaphore, `GET /voters`, ancla real en Base Sepolia, sembrar elección demo, ensayo móvil.
+- Bloqueos humanos: credenciales (Kapso, Privy, ZeroDev), decisiones del ADR y del doble voto, equipo.
 ## 2026-10-24 — integración fase 2 (≈12:45 VET)
 - `integration/phase2` = motor + wallet + UI + QA adversarial + ancla + sala abierta. Verde: typecheck, lint, 272 tests, build, Playwright con mocks (20) y **E2E real sin mocks** (1). Evidencia: `docs/TEST_RESULTS.md` § "Integración fase 2 completa".
 - Decisión aplicada: "solo ancla on-chain" → `POST /vote` con `onchain` = 400 `onchain_not_supported`.
@@ -32,3 +37,8 @@
 - Cámara: 10,46 MB → 2,97 MB por teléfono (insightface uint8 en vez de faceres, sin facemesh, gzip, WASM). Backend wasm por defecto; `?fb=` para A/B. Dedupe 0.70 (256 dims) calibrado con LFW. Total por teléfono 14,89 → 7,35 MB.
 - Verde: typecheck, lint, 376 tests, build, 40 Playwright con mocks, 3 E2E reales. Evidencia: `docs/TEST_RESULTS.md` («Rostro rápido»).
 - Pendiente: A/B en teléfonos reales (desplegar la rama), licencia de pesos InsightFace.
+
+## 2026-10-24 — fase 2 en main (≈16:30 VET)
+- `main` = fase 2 completa + flujo simple + cuenta regresiva/inicio programado + credencial QR del evento + rostro rápido (WASM, 7,35 MB por teléfono) + diagnóstico de cámara. Desplegado en Render (https://quorum-sefw.onrender.com) desde `main`.
+- Verde: typecheck, lint, 425 tests, build, 70 Playwright con mocks y 5 E2E reales (credencial, espera, voto completo, sala, peso). Evidencia en `docs/TEST_RESULTS.md`.
+- Pendiente: probar en iPhone/Android reales (A/B `?fb=wasm|humangl`), calibrar el umbral de dedupe 0.70 con cámaras frontales reales.
