@@ -66,8 +66,8 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     await expect(page.getByText("La sala está llena")).toBeVisible();
     const obs = page.getByTestId("observer-mode");
     await expect(obs.getByRole("link", { name: /Ver en vivo/ })).toHaveAttribute("href", `/e/${E2E.electionId}/live`);
-    await expect(obs.getByRole("link", { name: /Verificar el escrutinio/ })).toHaveAttribute("href", `/e/${E2E.electionId}#verificar`);
-    await expect(obs.getByRole("link", { name: /Recomputar el sorteo/ })).toHaveAttribute("href", `/e/${E2E.electionId}/draw`);
+    await expect(obs.getByRole("link", { name: /Comprobar el resultado/ })).toHaveAttribute("href", `/e/${E2E.electionId}#verificar`);
+    await expect(obs.getByRole("link", { name: /Ver el sorteo/ })).toHaveAttribute("href", `/e/${E2E.electionId}/draw`);
     await expect(page.getByLabel("Tu nombre o apodo")).toHaveCount(0);
   });
 

@@ -222,7 +222,7 @@ body {
   }
 }
 .q-print {
-  animation: q-print 2.4s linear both;
+  animation: q-print 2.4s linear backwards;
 }
 @keyframes q-fade-up {
   from {
@@ -231,7 +231,7 @@ body {
   }
 }
 .q-after-print {
-  animation: q-fade-up 0.4s 2.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: q-fade-up 0.4s 2.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .q-ticket::after {
   content: "";
@@ -252,7 +252,7 @@ body {
 }
 .q-grow {
   transform-origin: left;
-  animation: q-grow 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: q-grow 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
 @keyframes q-page-in {
@@ -262,7 +262,7 @@ body {
   }
 }
 .q-page-in {
-  animation: q-page-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: q-page-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 @keyframes q-fade-in {
   from {
@@ -270,7 +270,7 @@ body {
   }
 }
 .q-fade-in {
-  animation: q-fade-in 0.35s ease-out both;
+  animation: q-fade-in 0.35s ease-out backwards;
 }
 
 @keyframes q-reveal {
@@ -281,7 +281,7 @@ body {
 }
 @supports (animation-timeline: view()) {
   .q-reveal {
-    animation: q-reveal linear both;
+    animation: q-reveal linear backwards;
     animation-timeline: view();
     animation-range: entry 0% cover 22%;
   }

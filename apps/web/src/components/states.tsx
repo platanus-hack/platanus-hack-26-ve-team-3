@@ -30,7 +30,7 @@ export function EmptyState({ title, children, action, className }: { title: stri
   );
 }
 
-export function ErrorState({ title = "No se pudo cargar", message, onRetry, children, className }: { title?: string; message: string; onRetry?: () => void; children?: React.ReactNode; className?: string }) {
+export function ErrorState({ title = "No se pudo cargar", message, onRetry, retryLabel = "Reintentar", primary = false, children, className }: { title?: string; message: string; onRetry?: () => void; retryLabel?: string; primary?: boolean; children?: React.ReactNode; className?: string }) {
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <Alert tone="danger" title={title}>
@@ -38,8 +38,8 @@ export function ErrorState({ title = "No se pudo cargar", message, onRetry, chil
       </Alert>
       <div className="flex flex-wrap gap-2">
         {onRetry ? (
-          <Button variant="secondary" onClick={onRetry}>
-            Reintentar
+          <Button variant={primary ? "primary" : "secondary"} size={primary ? "lg" : "default"} full={primary} onClick={onRetry}>
+            {retryLabel}
           </Button>
         ) : null}
         {children}

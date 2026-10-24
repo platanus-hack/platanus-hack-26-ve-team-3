@@ -1,5 +1,5 @@
-import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/client/cn";
+import { Disclosure } from "@/components/ui/disclosure";
 
 /** Contenedor del flujo del votante: texto base 18 px, una columna, cómodo a una mano desde 360 px. */
 export function VoterShell({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -25,12 +25,9 @@ export function StepIndicator({ current, total = 2 }: { current: number; total?:
 /** Todo lo técnico vive aquí (para quien audite). Cerrado por defecto. */
 export function TechDetails({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <details className={cn("group rounded-md border border-border bg-card", className)} data-testid="tech-details">
-      <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-2 px-3 text-base font-semibold text-muted-foreground [&::-webkit-details-marker]:hidden">
-        Detalles técnicos <ChevronDown className="size-5 transition-transform group-open:rotate-180" aria-hidden="true" />
-      </summary>
-      <div className="flex flex-col gap-3 border-t border-border p-3 text-small">{children}</div>
-    </details>
+    <Disclosure title="Detalles técnicos" testId="tech-details" className={cn("bg-card text-muted-foreground", className)} bodyClassName="flex flex-col gap-3 text-foreground">
+      {children}
+    </Disclosure>
   );
 }
 

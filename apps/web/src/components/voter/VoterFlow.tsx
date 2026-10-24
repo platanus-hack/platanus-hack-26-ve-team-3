@@ -9,7 +9,8 @@ import type { z } from "zod";
 import { ObserverPanel } from "@/components/room/ObserverPanel";
 import { ErrorState, LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/client/cn";
 import { voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { countdownText, formatStartTime, spokenCountdown, timed, useCountdown, useServerClock } from "@/lib/client/clock";
@@ -292,23 +293,23 @@ export function VoterFlow({ token }: { token: string }) {
     case "waiting":
       return (
         <VoterShell className="items-center text-center">
-          <SuccessMark />
+          <SuccessMark small />
           <div>
             <h1 className="text-display font-bold tracking-tight">¡Listo! Ya estás inscrito.</h1>
             <p className="mt-2 line-clamp-2 text-body text-muted-foreground">{title}</p>
           </div>
           <WaitingCountdown startsAt={startsAt} left={left} />
+          <p className="text-body text-muted-foreground">Deja esta página abierta: la boleta aparecerá aquí sola.</p>
           <Glass className="w-full p-5">
             <p className="q-eyebrow mb-4 text-left">Qué sigue</p>
             <NextSteps
               steps={[
                 { label: "Te inscribiste", hint: "Este teléfono quedó listo para votar.", state: "done" },
-                { label: "El organizador abre la votación", hint: startsAt ? `Programada para las ${formatStartTime(startsAt)}` : "Te avisamos aquí mismo.", state: "current" },
+                { label: "El organizador abre la votación", state: "current" },
                 { label: "Votas en dos toques", hint: "Recibes un comprobante sin tu opción.", state: "todo" },
               ]}
             />
           </Glass>
-          <p className="text-body text-muted-foreground">Deja esta página abierta: la boleta aparecerá aquí sola.</p>
         </VoterShell>
       );
 
@@ -353,10 +354,10 @@ export function VoterFlow({ token }: { token: string }) {
         <VoterShell>
           <h1 className="text-title font-bold leading-tight">La votación terminó</h1>
           <p className="text-muted-foreground">{title}</p>
-          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className="inline-flex min-h-14 items-center justify-center rounded-full bg-primary px-4 text-title font-semibold text-primary-foreground shadow-primary hover:bg-primary-hover">
+          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={buttonVariants({ size: "lg", full: true })}>
             Ver resultados
           </Link>
-          <Link href={`/e/${encodeURIComponent(electionId)}`} className="inline-flex min-h-tap items-center justify-center font-semibold underline underline-offset-4">
+          <Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "link" }), "self-center")}>
             Comprobar el resultado
           </Link>
         </VoterShell>
@@ -371,7 +372,7 @@ export function VoterFlow({ token }: { token: string }) {
       return <OtherDevice electionId={electionId} />;
 
     case "observer":
-      return <Watch title="Sigue la votación" body="No necesitas inscribirte para ver los resultados y comprobarlos." electionId={electionId} />;
+      return <Watch title="Sigue la votación" body="No necesitas inscribirte para ver los resultados." electionId={electionId} hasDraw={invite.election.status === "drawn"} />;
 
     case "draft":
       return (
@@ -418,12 +419,12 @@ function WaitingCountdown({ startsAt, left }: { startsAt: string | null; left: n
   );
 }
 
-function Watch({ title, body, electionId }: { title: string; body: string; electionId: string }) {
+function Watch({ title, body, electionId, hasDraw = false }: { title: string; body: string; electionId: string; hasDraw?: boolean }) {
   return (
     <VoterShell>
       <h1 className="text-title font-bold leading-tight">{title}</h1>
-      <p>{body}</p>
-      <ObserverPanel electionId={electionId} />
+      <p className="text-body text-muted-foreground">{body}</p>
+      <ObserverPanel electionId={electionId} hasDraw={hasDraw} bare />
     </VoterShell>
   );
 }
@@ -489,7 +490,7 @@ function ReviewPending({ voterId, inviteToken, onApproved, onRejected }: { voter
   );
 }
 
-const LINK_STEPS = ["Preparando este teléfono", "Guardando la vinculación", "Creando tu clave de voto", "Terminando la inscripción"] as const;
+const LINK_STEPS = ["Preparando", "Guardando", "Creando tu clave de voto", "Terminando"] as const;
 
 /** "Vinculando este teléfono…": wallet + FaceBinding + identidad Semaphore + commitment, sin pedir nada. */
 function Linking({ electionId, voterId, inviteToken, faceBindingHash, linkedAddress, onDone }: { electionId: string; voterId: string; inviteToken: string; faceBindingHash: `0x${string}`; linkedAddress: string | null; onDone: (r: LinkResult) => void }) {
@@ -512,31 +513,24 @@ function Linking({ electionId, voterId, inviteToken, faceBindingHash, linkedAddr
       <StepIndicator current={2} />
       {!error ? (
         <div className="flex flex-col gap-4" role="status" aria-live="polite" data-testid="linking">
-          <h1 className="text-title font-bold">Vinculando este teléfono…</h1>
+          <h1 className="text-title font-bold">Preparando este teléfono…</h1>
           <div className="h-3 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Progreso">
             <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${pct}%` }} />
           </div>
           <p className="text-muted-foreground">{LINK_STEPS[progress.step - 1]}…</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          <h1 className="text-title font-bold">No pudimos vincular este teléfono</h1>
-          <Alert tone="danger" title="Algo falló">
-            {error}
-          </Alert>
-          <Button
-            size="lg"
-            full
-            className="min-h-14"
-            onClick={() => {
-              setError(null);
-              setProgress({ step: 1, of: 4 });
-              setRun((r) => r + 1);
-            }}
-          >
-            Intentar de nuevo
-          </Button>
-        </div>
+        <ErrorState
+          title="No pudimos preparar este teléfono"
+          message={error}
+          primary
+          retryLabel="Intentar de nuevo"
+          onRetry={() => {
+            setError(null);
+            setProgress({ step: 1, of: 4 });
+            setRun((r) => r + 1);
+          }}
+        />
       )}
     </VoterShell>
   );

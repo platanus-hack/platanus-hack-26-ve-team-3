@@ -9,7 +9,7 @@ import { ErrorState, LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Consent } from "@/components/voter/Consent";
 import { StepIndicator } from "@/components/voter/VoterUi";
@@ -33,6 +33,7 @@ import type { BadgeFailure } from "@/lib/client/badge";
 import { BadgeJoin } from "./BadgeJoin";
 import { ObserverPanel } from "./ObserverPanel";
 import { remaining, useNow } from "./useNow";
+import { VoterShell } from "@/components/voter/VoterUi";
 
 /* Precarga y compila los modelos de la cámara mientras la persona escribe su nombre (solo cliente). */
 const HumanPreloader = dynamic(() => import("@/components/voter/HumanPreloader"), { ssr: false });
@@ -145,7 +146,7 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
 
   if (stored) {
     return (
-      <Shell>
+      <VoterShell>
         <Card data-testid="room-resume">
           <CardHeader>
             <CardTitle as="h1" className="text-title">
@@ -153,45 +154,43 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
             </CardTitle>
             <CardDescription>Tu lugar quedó guardado en este teléfono.</CardDescription>
           </CardHeader>
-          <CardFooter>
+          <CardFooter className="flex-col md:flex-col">
             <Button full size="lg" onClick={() => go(stored.invitePath)} loading={redirecting}>
               Continuar
             </Button>
-          </CardFooter>
-          <CardContent>
-            <button
-              type="button"
-              className="min-h-tap text-small text-muted-foreground underline underline-offset-4"
+            <Button
+              variant="link"
+              className="self-center"
               onClick={() => {
                 forgetRoomJoin(roomCode);
                 setStored(null);
               }}
             >
-              No soy yo: usar este teléfono para otra persona
-            </button>
-          </CardContent>
+              No soy yo
+            </Button>
+          </CardFooter>
         </Card>
-      </Shell>
+      </VoterShell>
     );
   }
 
   if (loadError) {
     return (
-      <Shell>
+      <VoterShell>
         <ErrorState title={loadError.notFound ? "Sala no encontrada" : "No se pudo abrir la sala"} message={loadError.message} onRetry={() => setAttempt((a) => a + 1)}>
           <Link href="/" className="inline-flex min-h-tap items-center px-2 font-semibold underline underline-offset-4">
             Ir al inicio
           </Link>
         </ErrorState>
-      </Shell>
+      </VoterShell>
     );
   }
 
   if (!info) {
     return (
-      <Shell>
+      <VoterShell>
         <LoadingState label="Abriendo la sala…" lines={4} />
-      </Shell>
+      </VoterShell>
     );
   }
 
@@ -200,7 +199,7 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
   const seats = info.maxSeats !== null ? `${formatInt(info.seatsTaken)} de ${formatInt(info.maxSeats)} lugares` : `${formatInt(info.seatsTaken)} lugares ocupados`;
 
   return (
-    <Shell>
+    <VoterShell>
       {gate === "open" ? <StepIndicator current={1} /> : null}
       {gate === "open" ? <HumanPreloader /> : null}
       <header className="flex flex-col gap-2">
@@ -217,7 +216,7 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
             {joinError?.kind === "closed" && joinError.message ? `${joinError.message}. ` : ""}
             {gateCopy[gate].body}
           </Alert>
-          <ObserverPanel electionId={info.electionId} />
+          <ObserverPanel electionId={info.electionId} hasDraw bare />
         </>
       ) : info.eligibility?.method === "event-badge" ? (
         <BadgeJoin roomCode={roomCode} badgeUrlPrefix={info.eligibility.badgeUrlPrefix} onJoined={joined} onRoomFailure={badgeRoomFailure} redirecting={redirecting} />
@@ -259,15 +258,12 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
               {joinError.message}
             </Alert>
           ) : null}
-          <Button type="submit" full size="lg" className="min-h-14 text-title" loading={joining || redirecting}>
+          <Button type="submit" full size="lg" className="min-h-14" loading={joining || redirecting}>
             {redirecting ? "Abriendo la cámara…" : "Continuar"}
           </Button>
         </form>
       )}
-    </Shell>
+    </VoterShell>
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="q-fade-in q-container q-narrow flex flex-col gap-5 py-5 text-heading md:py-10">{children}</div>;
-}

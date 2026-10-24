@@ -2,28 +2,26 @@ import Link from "next/link";
 import { Eye, Radio, ShieldQuestion, Shuffle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-/**
- * Modo observador: quien no consiguió lugar (sala llena, cerrada, expirada o votación ya abierta) puede seguir todo
- * sin votar: agregados en vivo, verificar el escrutinio en su propio navegador y recomputar el sorteo.
- */
-export function ObserverPanel({ electionId }: { electionId: string }) {
+export function ObserverPanel({ electionId, hasDraw = false, bare = false }: { electionId: string; hasDraw?: boolean; bare?: boolean }) {
   const id = encodeURIComponent(electionId);
   const items = [
     { href: `/e/${id}/live`, icon: <Radio aria-hidden="true" />, title: "Ver en vivo", body: "Participación y conteo por opción." },
-    { href: `/e/${id}#verificar`, icon: <ShieldQuestion aria-hidden="true" />, title: "Verificar el escrutinio", body: "Al cierre, compruébalo desde tu teléfono." },
-    { href: `/e/${id}/draw`, icon: <Shuffle aria-hidden="true" />, title: "Recomputar el sorteo", body: "Recalcula los ganadores." },
+    { href: `/e/${id}#verificar`, icon: <ShieldQuestion aria-hidden="true" />, title: "Comprobar el resultado", body: "Al cierre, compruébalo desde tu teléfono." },
+    ...(hasDraw ? [{ href: `/e/${id}/draw`, icon: <Shuffle aria-hidden="true" />, title: "Ver el sorteo", body: "Comprueba quién ganó." }] : []),
   ];
   return (
     <Card data-testid="observer-mode">
-      <CardHeader>
-        <div className="flex items-center gap-2 text-muted-foreground [&_svg]:size-5">
-          <Eye aria-hidden="true" />
-          <span className="text-small font-semibold uppercase tracking-wide">Modo observador</span>
-        </div>
-        <CardTitle as="h2">Sigue la votación sin votar</CardTitle>
-        <CardDescription>No necesitas inscribirte para comprobar el resultado.</CardDescription>
-      </CardHeader>
-      <CardContent>
+      {bare ? null : (
+        <CardHeader>
+          <div className="flex items-center gap-2 text-muted-foreground [&_svg]:size-5">
+            <Eye aria-hidden="true" />
+            <span className="q-eyebrow">Sin votar</span>
+          </div>
+          <CardTitle as="h2">Sigue la votación</CardTitle>
+          <CardDescription>No necesitas inscribirte para comprobar el resultado.</CardDescription>
+        </CardHeader>
+      )}
+      <CardContent className={bare ? "pt-5 md:pt-6" : undefined}>
         <ul className="flex flex-col gap-2">
           {items.map((it) => (
             <li key={it.href}>

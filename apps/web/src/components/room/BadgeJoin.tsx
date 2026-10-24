@@ -41,7 +41,7 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
   const [typing, setTyping] = useState(false);
   const [typed, setTyped] = useState("");
   const [typedError, setTypedError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ tone: "warning" | "danger"; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: "warning" | "danger"; title: string; text: string } | null>(null);
   const [joining, setJoining] = useState<string | null>(null);
   const busy = useRef(false);
 
@@ -65,7 +65,7 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
         } else {
           // Credencial usada / desconocida / QR ajeno: se apaga la cámara y se ofrece escanear otra vez.
           setScanning(false);
-          setNotice({ tone: f.kind === "rate" ? "warning" : "danger", text: f.message });
+          setNotice({ tone: f.kind === "rate" ? "warning" : "danger", title: f.kind === "rate" ? "Espera un momento" : "No pudimos dejarte entrar", text: f.message });
         }
       } finally {
         busy.current = false;
@@ -78,7 +78,7 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
     (text: string) => {
       if (busy.current) return;
       if (!parseBadgeUrl(text, prefix)) {
-        setNotice({ tone: "warning", text: BADGE_COPY.invalid });
+        setNotice({ tone: "warning", title: "Ese QR no sirve", text: BADGE_COPY.invalid });
         return;
       }
       void submit(text.trim());
@@ -89,7 +89,7 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
   const onCameraError = useCallback((kind: CameraFailure) => {
     setScanning(false);
     setTyping(true);
-    setNotice({ tone: "warning", text: cameraCopy[kind] });
+    setNotice({ tone: "warning", title: "No se pudo abrir la cámara", text: cameraCopy[kind] });
   }, []);
 
   function submitTyped(ev: React.FormEvent) {
@@ -117,20 +117,15 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
             )}
           </p>
           {!working ? (
-            <Button variant="ghost" full onClick={() => setScanning(false)}>
+            <Button variant="link" className="self-center" onClick={() => setScanning(false)}>
               Cancelar
             </Button>
           ) : null}
         </div>
-      ) : (
-        <Button full size="lg" className="min-h-16 text-title" onClick={() => (setNotice(null), setScanning(true))} loading={working} data-testid="badge-scan">
-          {!working ? <QrCode className="size-7" aria-hidden="true" /> : null}
-          {working ? (redirecting ? "Abriendo la cámara…" : "Comprobando…") : notice ? "Escanear otra vez" : SCAN_LABEL}
-        </Button>
-      )}
+      ) : null}
 
       {notice ? (
-        <Alert tone={notice.tone} title={notice.tone === "danger" ? "No pudimos dejarte entrar" : "Revisa"}>
+        <Alert tone={notice.tone} title={notice.title}>
           <span data-testid="badge-notice">{notice.text}</span>
         </Alert>
       ) : null}
@@ -138,12 +133,19 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
       {!scanning ? <Consent extra={BADGE_CONSENT_EXTRA} actionLabel={SCAN_LABEL} /> : null}
 
       {!scanning ? (
+        <Button full size="lg" variant={typing ? "secondary" : "primary"} className="min-h-14" onClick={() => (setNotice(null), setScanning(true))} loading={working} data-testid="badge-scan">
+          {!working ? <QrCode className="size-6" aria-hidden="true" /> : null}
+          {working ? (redirecting ? "Abriendo la cámara…" : "Comprobando…") : notice ? "Escanear otra vez" : SCAN_LABEL}
+        </Button>
+      ) : null}
+
+      {!scanning ? (
         typing ? (
           <form onSubmit={submitTyped} noValidate className="flex flex-col gap-2">
             <label htmlFor="badge-user" className="text-heading font-semibold">
               o escribe tu usuario
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 id="badge-user"
                 name="badge-user"
@@ -162,7 +164,7 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
                 aria-invalid={Boolean(typedError)}
                 aria-describedby={typedError ? "badge-user-error" : "badge-user-hint"}
               />
-              <Button type="submit" size="lg" className="min-h-14" loading={working} disabled={!typed.trim()}>
+              <Button type="submit" size="lg" full className="min-h-14 sm:w-auto" loading={working} disabled={!typed.trim()}>
                 Entrar
               </Button>
             </div>
@@ -177,9 +179,9 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
             )}
           </form>
         ) : (
-          <button type="button" className="min-h-tap self-center text-heading font-semibold text-primary-ink underline underline-offset-4" onClick={() => setTyping(true)}>
+          <Button variant="link" className="self-center" onClick={() => setTyping(true)}>
             o escribe tu usuario
-          </button>
+          </Button>
         )
       ) : null}
     </div>
