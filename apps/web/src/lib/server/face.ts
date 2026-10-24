@@ -78,8 +78,12 @@ export async function enrollFace(input: z.infer<typeof FaceEnrollInput>): Promis
   return withLock(`enroll:${voter.electionId}`, async () => {
     if (await store.getFaceTemplate(voter.id)) throw new HttpError("forbidden", "Ya existe una prueba de vida para este votante");
     const key = faceKey();
-    const threshold = env.faceDedupeThreshold;
+    const threshold = env.faceDedupeThresholdFor(input.descriptor.length);
     for (const tpl of await store.listFaceTemplates(voter.electionId)) {
+      // Descriptores de otro modelo (otras dimensiones) no se pueden comparar: aceptarlos saltaría el dedupe.
+      if (tpl.dims !== input.descriptor.length) {
+        throw new HttpError("invalid_input", "El reconocimiento facial de tu teléfono está desactualizado. Recarga la página e intenta de nuevo.");
+      }
       let other: number[];
       try {
         other = JSON.parse(open(key, tpl.sealed)) as number[];
@@ -107,7 +111,7 @@ export async function verifyFace(input: z.infer<typeof FaceVerifyInput>): Promis
   if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
   const template = await store.getFaceTemplate(voter.id);
   if (!template) throw new HttpError("not_found", "No hay prueba de vida enrolada para este votante");
-  const threshold = env.faceThreshold;
+  const threshold = env.faceThresholdFor(input.descriptor.length);
   let stored: number[];
   try {
     stored = JSON.parse(open(faceKey(), template.sealed)) as number[];

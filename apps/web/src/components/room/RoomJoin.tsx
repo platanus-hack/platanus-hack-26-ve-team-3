@@ -95,16 +95,10 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
     return () => clearInterval(t);
   }, []);
 
-  // Precarga de modelos de Human y artefactos ZK mientras escribe el alias (caché HTTP inmutable).
+  // Precarga de lo pesado (modelos de la cámara primero, luego ZK) desde que se abre /j: con red lenta cada segundo
+  // cuenta, así que no se espera a que el navegador esté ocioso.
   useEffect(() => {
-    const warm = () => {
-      void prefetchHeavyAssets().then((mode) => document.documentElement.setAttribute("data-heavy-prefetch", mode));
-    };
-    const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
-    const t = idle ? idle(warm) : window.setTimeout(warm, 1500);
-    return () => {
-      if (!idle) clearTimeout(t);
-    };
+    void prefetchHeavyAssets().then((mode) => document.documentElement.setAttribute("data-heavy-prefetch", mode));
   }, []);
 
   const go = useCallback(

@@ -18,7 +18,7 @@ export const POST = route(async (req) => {
   }
   const stage = typeof body.stage === "string" && ALLOWED.test(body.stage) ? body.stage : "unknown";
   const safe: Record<string, string | number | boolean> = {};
-  for (const k of ["ms", "faces", "backend", "kind", "error", "ua"]) {
+  for (const k of ["ms", "faces", "backend", "kind", "error", "ua", "source", "downloadMs", "initMs", "warmupMs", "simd", "wireKB", "step", "total", "wanted", "got", "loadedKB"]) {
     const v = body[k];
     if (typeof v === "number" || typeof v === "boolean") safe[k] = v;
     else if (typeof v === "string") safe[k] = v.slice(0, 200);

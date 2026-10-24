@@ -22,11 +22,17 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     await expect(page.getByText(/La entrada cierra en \d+:\d{2}/)).toBeVisible();
     // Precarga de lo pesado mientras escribe el alias: service worker + Cache Storage (localhost es contexto seguro).
     await expect(page.locator("html")).toHaveAttribute("data-heavy-prefetch", "service-worker", { timeout: 20_000 });
-    const cached = await page.evaluate(async () => (await (await caches.open("quorum-heavy-v1")).keys()).map((r) => new URL(r.url).pathname));
-    expect(cached).toEqual(expect.arrayContaining(["/zk/semaphore-10.zkey", "/zk/semaphore-10.wasm", "/models/faceres.bin", "/models/blazeface.json"]));
-    // 10 modelos de Human (sin iris) + 2 artefactos ZK: lo mismo que HEAVY_ASSETS (lib/client/room.ts).
-    expect(cached).toHaveLength(12);
-    expect(cached.some((p) => p.includes("iris"))).toBe(false);
+    const cached = await page.evaluate(async () => (await (await caches.open("quorum-heavy-v2")).keys()).map((r) => new URL(r.url).pathname));
+    expect(cached).toEqual(expect.arrayContaining(["/zk/semaphore-10.zkey", "/zk/semaphore-10.wasm", "/models/insightface-u8.bin", "/models/blazeface-f16.json", "/tfjs/4.22.0/tfjs-backend-wasm-simd.wasm"]));
+    // 8 archivos de modelos (sin malla, faceres ni iris) + WASM SIMD + 2 artefactos ZK: lo mismo que HEAVY_ASSETS.
+    expect(cached).toHaveLength(11);
+    expect(cached.some((p) => /iris|facemesh|faceres/.test(p))).toBe(false);
+    // Lo guardado está descomprimido y es usable (el servidor lo manda con Content-Encoding: gzip).
+    const head = await page.evaluate(async () => {
+      const r = await (await caches.open("quorum-heavy-v2")).match("/models/insightface-u8.json");
+      return (await r!.text()).slice(0, 1);
+    });
+    expect(head).toBe("{");
 
     await page.getByLabel("Tu nombre o apodo").fill("0412 555 1234");
     await page.getByRole("button", { name: "Continuar" }).click();

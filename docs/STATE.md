@@ -27,3 +27,8 @@
 - Credencial cifrada con clave del dispositivo (AES-GCM no extraíble en IndexedDB); las inscripciones v2 se abren re-firmando en segundo plano.
 - Verde: typecheck, lint, 361 tests, build, 58 Playwright con mocks (smoke, phase2, lab, room, voter-taps) y 3 E2E reales. Peso por teléfono: 14,83 MB. Evidencia: `docs/TEST_RESULTS.md` § "Flujo simple del votante".
 - Pendiente: probar en teléfonos reales (iPhone Safari, Android de gama baja) la cámara automática, la vibración/sonido al abrir y el Wake Lock.
+
+## 2026-10-24 — rostro rápido (`feat/rostro-rapido`, ≈16:15 VET)
+- Cámara: 10,46 MB → 2,97 MB por teléfono (insightface uint8 en vez de faceres, sin facemesh, gzip, WASM). Backend wasm por defecto; `?fb=` para A/B. Dedupe 0.70 (256 dims) calibrado con LFW. Total por teléfono 14,89 → 7,35 MB.
+- Verde: typecheck, lint, 376 tests, build, 40 Playwright con mocks, 3 E2E reales. Evidencia: `docs/TEST_RESULTS.md` («Rostro rápido»).
+- Pendiente: A/B en teléfonos reales (desplegar la rama), licencia de pesos InsightFace.

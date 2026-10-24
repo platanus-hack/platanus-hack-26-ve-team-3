@@ -182,14 +182,9 @@ export function VoterFlow({ token }: { token: string }) {
     return () => void lock?.release().catch(() => undefined);
   }, [view]);
 
-  // Precarga (sin bloquear) de los modelos de la cámara y los artefactos del voto mientras la persona lee.
+  // Precarga (sin bloquear) desde que se abre /v: modelos de la cámara primero, luego los artefactos del voto.
   useEffect(() => {
-    const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
-    const warm = () => void prefetchHeavyAssets().catch(() => undefined);
-    const t = idle ? idle(warm) : window.setTimeout(warm, 1500);
-    return () => {
-      if (!idle) clearTimeout(t);
-    };
+    void prefetchHeavyAssets().catch(() => undefined);
   }, []);
 
   const retry = useCallback(() => {

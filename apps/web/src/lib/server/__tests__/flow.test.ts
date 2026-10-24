@@ -277,6 +277,28 @@ describe("inscripción", () => {
     expect((await call(enroll, { body: { voterId: c.id, inviteToken: c.inviteToken, descriptor: descriptor(5), consent: true } })).status).toBe(201);
   });
 
+  it("dedupe con el descriptor actual (insightface, 256 dims): umbral 0.70; otras dimensiones en la misma elección → rechazo", async () => {
+    const org = await setupRegistration();
+    const [a, b, c, d] = [await addVoter(org, "A"), await addVoter(org, "B"), await addVoter(org, "C"), await addVoter(org, "D")];
+    const base = descriptor(7, 256);
+    expect((await call(enroll, { body: { voterId: a.id, inviteToken: a.inviteToken, descriptor: base, consent: true } })).status).toBe(201);
+    // Coseno ≈ 0.72 con `base` (≥ 0.70) → mismo rostro; con 1024 dims (faceres) el umbral sería 0.75 y pasaría.
+    const other = descriptor(8, 256);
+    const mix = (w: number) => base.map((x, i) => x * w + other[i] * Math.sqrt(1 - w * w));
+    const dup = await call(enroll, { body: { voterId: b.id, inviteToken: b.inviteToken, descriptor: mix(0.72), consent: true } });
+    expect(dup.status).toBe(409);
+    expect(dup.json.code).toBe("duplicate_identity");
+    expect((await call(enroll, { body: { voterId: b.id, inviteToken: b.inviteToken, descriptor: mix(0.6), consent: true } })).status).toBe(201);
+    // Un descriptor de otro modelo (128 o 1024 dims) no se puede comparar: aceptarlo saltaría el dedupe.
+    const stale = await call(enroll, { body: { voterId: c.id, inviteToken: c.inviteToken, descriptor: descriptor(7, 1024), consent: true } });
+    expect(stale.status).toBe(400);
+    expect(stale.json.error).toMatch(/Recarga la página/);
+    expect(await store.getFaceTemplate(c.id)).toBeNull();
+    // FACE_DEDUPE_THRESHOLD fija el umbral para todos los modelos.
+    vi.stubEnv("FACE_DEDUPE_THRESHOLD", "0.5");
+    expect((await call(enroll, { body: { voterId: d.id, inviteToken: d.inviteToken, descriptor: mix(0.6), consent: true } })).status).toBe(409);
+  });
+
   it("face/verify (A3): exige inviteToken y responde solo ok/no-ok", async () => {
     const org = await setupRegistration();
     const v = await addVoter(org);

@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Carga y compila los modelos de la cámara en segundo plano mientras la persona escribe su nombre (paso 1).
- * En iPhone la primera detección compila los shaders de la GPU (~25 s medidos en un iPhone real): hacerlo aquí deja la
- * cámara lista al llegar al paso 2. Se monta con `dynamic(..., { ssr: false })` porque Human solo existe en el navegador.
+ * Descarga, inicia y calienta los modelos de la cámara en segundo plano mientras la persona está en el paso 1
+ * (la descarga es la misma que arranca `prefetchHeavyAssets`; no se duplica). Así la cámara del paso 2 detecta al
+ * instante. Con WASM (por defecto) iniciar y calentar cuesta décimas de segundo; con `?fb=humangl` compila shaders. Se monta con `dynamic(..., { ssr: false })` porque Human solo existe en el navegador.
  */
 import { useEffect } from "react";
 import { clientLog, loadHuman } from "@/lib/client/human";

@@ -72,7 +72,7 @@ Decisiones D-09..D-12 en `docs/DECISIONS.md`. Cambios sobre v0:
 
 ## Inscripción (registration)
 1. `GET /api/invite/:token` igual.
-2. `POST /api/face/enroll` `{voterId, inviteToken, descriptor, consent}` → **dedupe 1:N**: compara contra todos los descriptores inscritos en la misma elección; si similitud ≥ `FACE_DEDUPE_THRESHOLD` (default 0.75) responde `409 {code:"duplicate_identity"}`. Si pasa: guarda cifrado y devuelve `{ ok, faceBindingHash, voteNonce }` donde `faceBindingHash = keccak256(electionId | voterId | sha256(descriptorCifrado))`.
+2. `POST /api/face/enroll` `{voterId, inviteToken, descriptor, consent}` → **dedupe 1:N**: compara contra todos los descriptores inscritos en la misma elección; si similitud ≥ umbral responde `409 {code:"duplicate_identity"}`. Umbral por defecto según el modelo (dimensiones del descriptor): 256 (insightface, el actual) → 0.70; otro (faceres, 1024) → 0.75; `FACE_DEDUPE_THRESHOLD` lo fija para todos. Un descriptor de distinta longitud que los ya inscritos en la elección → `400 invalid_input` ("recarga la página"): no se puede comparar y aceptarlo saltaría el dedupe. Si pasa: guarda cifrado y devuelve `{ ok, faceBindingHash, voteNonce }` donde `faceBindingHash = keccak256(electionId | voterId | sha256(descriptorCifrado))`.
 3. `POST /api/voters/:id/wallet` `{ inviteToken, walletAddress, kind: "kernel"|"eoa-demo", bindingSignature }` → la wallet firma EIP-712 `FaceBinding{ electionId, voterId, faceBindingHash, wallet }` (tipos en contracts `FaceBindingTypes`); servidor verifica (ERC-1271/6492 por RPC si `kind=kernel`), guarda y marca `registered`.
 4. `POST /api/voters/:id/identity` `{ inviteToken, commitment }` → guarda el `commitment` Semaphore (identidad generada en el navegador y guardada en `localStorage` cifrada con la wallet). Responde `{ ok, registeredCount }`.
 
@@ -93,7 +93,7 @@ Decisiones D-09..D-12 en `docs/DECISIONS.md`. Cambios sobre v0:
 `packages/wallet` (`@quorum/wallet`): `createKernelWallet({ projectId })` con `@zerodev/sdk` + `@zerodev/ecdsa-validator`, signer = clave viem local (`localStorage`, etiquetado demo), bundler/paymaster `https://rpc.zerodev.app/api/v3/<PROJECT_ID>/chain/84532`; `signTypedData`, `sendSponsored({to, data})`. Si falta `NEXT_PUBLIC_ZERODEV_PROJECT_ID` → `eoa-demo` (viem) con etiqueta visible. Contrato `contracts/QuorumRegistry.sol` mínimo (`cast(bytes32 electionId, bytes32 commitment)` + evento) compilado con solc-js, deploy script con viem (`scripts/deploy-registry.ts`, requiere clave con ETH de faucet).
 
 ## Env nuevas
-`NEXT_PUBLIC_ZERODEV_PROJECT_ID`, `NEXT_PUBLIC_REGISTRY_ADDRESS`, `ORGANIZER_PRIVATE_KEY`, `FACE_DEDUPE_THRESHOLD=0.75`, `NEXT_PUBLIC_DEMO_ELECTION_ID`.
+`NEXT_PUBLIC_ZERODEV_PROJECT_ID`, `NEXT_PUBLIC_REGISTRY_ADDRESS`, `ORGANIZER_PRIVATE_KEY`, `FACE_DEDUPE_THRESHOLD` (opcional; por defecto 0.70 con 256 dimensiones, 0.75 con otras), `NEXT_PUBLIC_DEMO_ELECTION_ID`.
 
 ## Contrato v1 — implementado (feat/phase2-engine, 2026-10-24) · diferencias que la UI debe conocer
 - `POST /api/elections` acepta además `candidates[]`, `winnersCountFromResult`, `optionValues[]` (un valor por opción) o `winnersCount`; responde `Election` + **`organizerToken`** (una sola vez; el servidor guarda solo su sha256).
