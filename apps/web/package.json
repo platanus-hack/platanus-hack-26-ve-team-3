@@ -11,7 +11,8 @@
     "test": "vitest run --passWithNoTests",
     "test:net": "vitest run --config vitest.net.config.ts",
     "test:e2e": "playwright test",
-    "seed:demo": "tsx --tsconfig tsconfig.json scripts/seed-demo.ts"
+    "seed:demo": "tsx --tsconfig tsconfig.json scripts/seed-demo.ts",
+    "test:e2e:real": "playwright test -c playwright.real.config.ts"
   },
   "dependencies": {
     "@privy-io/react-auth": "^3.51.0",

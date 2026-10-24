@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Page, Route } from "@playwright/test";
-import { drawWinners } from "@quorum/protocol-adapter";
+// Sólo el módulo del sorteo (el índice del adaptador usa `import.meta`, que el cargador CJS de Playwright no admite):
+// es la MISMA función que usa el servidor y que la web llama en "Recomputar aquí".
+import { drawWinners } from "../../../../packages/protocol-adapter/src/draw";
 
 /**
  * MOCK del contrato v1 (docs/API_CONTRACT.md → "Contrato v1 — implementado") para E2E y capturas de la UI.

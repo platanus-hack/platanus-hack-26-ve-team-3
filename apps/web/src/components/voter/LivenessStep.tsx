@@ -163,7 +163,14 @@ export default function LivenessStep({ voterId, inviteToken, onBack, onNext }: {
   /** Sólo E2E (NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE=1): envía un descriptor sintético al endpoint real/mock. Nunca en producción. */
   async function e2eFakeFace() {
     stopAll();
-    const descriptor = Array.from({ length: 128 }, (_, i) => Number(Math.sin(i + voterId.length).toFixed(6)));
+    // Pseudoaleatorio sembrado con el voterId: dos votantes distintos dan vectores casi ortogonales (el dedupe 1:N real
+    // del servidor no los confunde) y el mismo votante siempre produce el mismo descriptor.
+    let seed = 2166136261;
+    for (const ch of voterId) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
+    const descriptor = Array.from({ length: 128 }, () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return Number((seed / 2 ** 31 - 1).toFixed(6));
+    });
     await enroll(descriptor);
   }
 

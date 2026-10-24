@@ -15,6 +15,8 @@ const baseURL = externalBaseURL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  // El E2E real (servidor de producción propio, sin mocks) tiene su config: playwright.real.config.ts.
+  testIgnore: /\.real\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -43,6 +45,17 @@ export default defineConfig({
         stdout: "ignore",
         stderr: "pipe",
         // Fase 2: Playwright no tiene cámara. Este flag (sólo E2E) muestra "Simular rostro" en la prueba de vida.
-        env: { NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE: "1" },
+        // E2E hermético aunque `.env.local` tenga claves (Next no pisa variables ya definidas, aunque estén vacías):
+        // sin ancla ni registro on-chain (cerrar no envía tx), sin ZeroDev (wallet eoa-demo, sin red), sin RPC.
+        env: {
+          NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE: "1",
+          ORGANIZER_PRIVATE_KEY: "",
+          NEXT_PUBLIC_REGISTRY_ADDRESS: "",
+          NEXT_PUBLIC_ZERODEV_PROJECT_ID: "",
+          BASE_SEPOLIA_RPC: "",
+          NEXT_PUBLIC_BASE_SEPOLIA_RPC: "",
+          INVITE_SEND_APPROVED: "",
+          AI_GATEWAY_API_KEY: "",
+        },
       },
 });

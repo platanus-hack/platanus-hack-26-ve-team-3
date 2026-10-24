@@ -17,8 +17,11 @@ export const ARTIFACT_SHA256 = {
 export function defaultArtifacts(): SnarkArtifactPaths {
   // La ruta se arma en tiempo de ejecución para que los bundlers (Turbopack) no la traten como asset:
   // solo se usa en Node (tests, scripts); el servidor web nunca genera pruebas.
+  // Además se usa `globalThis.URL`: Turbopack trata `new URL(x, import.meta.url)` como asset a empaquetar y falla
+  // con una ruta dinámica cuando el adaptador entra en el bundle del navegador (prueba/sorteo). Mismo resultado en Node.
   const dir = ["..", "artifacts", ""].join("/");
-  const base = new URL(dir, import.meta.url);
+  const NodeURL = globalThis.URL;
+  const base = new NodeURL(dir, import.meta.url);
   return {
     wasm: decodeURIComponent(new URL(ARTIFACT_FILES.wasm, base).pathname),
     zkey: decodeURIComponent(new URL(ARTIFACT_FILES.zkey, base).pathname),
