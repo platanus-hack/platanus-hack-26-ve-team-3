@@ -133,7 +133,7 @@ export function DrawView({ electionId }: { electionId: string }) {
   return (
     <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
       <PageHeader title={election.title} meta="Sorteo verificable">
-        <PhaseTimeline phase={election.status} />
+        <PhaseTimeline phase={election.status} continuous={election.votingMode === "continuous"} />
       </PageHeader>
 
       {!draw ? (

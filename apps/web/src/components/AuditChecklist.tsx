@@ -45,6 +45,8 @@ const checkName: Record<string, string> = {
   tally_matches: "Recuento reproducido",
   anchor_matches: "Ancla on-chain",
   draw_matches: "Sorteo recomputado",
+  root_history: "Raíces del grupo (votación al instante)",
+  anonymity_set_min: "Mínimo de inscritos por boleta",
   "artifact-integrity": "Integridad de artefactos",
   "crypto-proof": "Prueba criptográfica",
   "result-consistency": "Coherencia del resultado",

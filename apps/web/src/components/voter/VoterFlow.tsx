@@ -17,6 +17,7 @@ import { formatDate } from "@/lib/client/format";
 import { clearPendingFace, savePendingFace } from "@/lib/client/identityVault";
 import { linkThisPhone, type LinkProgress, type LinkResult } from "@/lib/client/linkPhone";
 import { prefetchHeavyAssets, roomJoinForToken } from "@/lib/client/room";
+import { AnonymityGate } from "./AnonymityGate";
 import { BallotScreen } from "./BallotScreen";
 import { Consent } from "./Consent";
 import { VoteReceiptCard, type ReceiptView } from "./VoteReceiptCard";
@@ -54,11 +55,13 @@ export function autoView(invite: InviteV1, local: Local, roomConsent: boolean): 
   const phase = invite.election.status;
   // `votedAt` (autodeclarado, granularidad de día) también cuenta: otro navegador no ofrece votar de nuevo.
   if (local.receipt || invite.voter.votedAt) return "voted";
-  if (phase === "registration") {
+  // D-23, modo continuo: inscripción y votación a la vez. Inscrito → boleta (o el aviso de K) de inmediato.
+  const continuousOpen = phase === "open" && invite.election.votingMode === "continuous";
+  if (phase === "registration" || continuousOpen) {
     // D-21: coincidencia facial con credencial propia → el organizador revisa el caso.
     if (invite.voter.review === "pending") return "review";
     if (invite.voter.review === "rejected") return "review-rejected";
-    if (local.identity && local.registered && invite.voter.walletAddress) return "waiting";
+    if (local.identity && local.registered && invite.voter.walletAddress) return continuousOpen ? "ballot" : "waiting";
     const face = local.pendingFace ?? local.identity?.faceBindingHash ?? null;
     if (invite.voter.livenessPassedAt) return face ? "linking" : "other-device";
     return roomConsent ? "face" : "intro";
@@ -300,6 +303,12 @@ export function VoterFlow({ token }: { token: string }) {
     case "ballot":
       return (
         <VoterShell>
+          {invite.election.votingMode === "continuous" ? (
+            <p className="flex items-center gap-2 text-heading font-semibold" data-testid="enrolled-banner">
+              <SuccessMark className="size-8 [&>svg]:size-5" /> ¡Listo! Ya estás inscrito.
+            </p>
+          ) : null}
+          <AnonymityGate electionId={electionId} minAnonymitySet={invite.election.votingMode === "continuous" ? (invite.election.minAnonymitySet ?? 5) : null}>
           <BallotScreen
             electionId={electionId}
             electionTitle={title}
@@ -316,6 +325,7 @@ export function VoterFlow({ token }: { token: string }) {
               setView("voted");
             }}
           />
+          </AnonymityGate>
         </VoterShell>
       );
 

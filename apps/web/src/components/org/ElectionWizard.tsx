@@ -15,10 +15,11 @@ import { describeError } from "@/lib/client/api";
 import { apiV1, type CreateElectionV1 } from "@/lib/client/apiV1";
 import { appendVoters, rememberElection, saveOrgToken } from "@/lib/client/orgStore";
 import { kindLabel } from "@/lib/client/format";
-import type { Candidate } from "@quorum/contracts";
+import type { Candidate, VotingMode } from "@quorum/contracts";
 import { CandidatesEditor, CandidatesList } from "./CandidatesEditor";
 import { checkLabel, DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, methodLabel, type EligibilityDraft } from "./EligibilityPicker";
 import { PageHeader } from "@/components/ui/page-header";
+import { VotingModePicker, votingModeLabel } from "./VotingModePicker";
 
 const STEPS = [
   { id: "question", label: "Pregunta" },
@@ -75,6 +76,8 @@ export function ElectionWizard() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [winnersRule, setWinnersRule] = useState<"fixed" | "fromResult">("fromResult");
   const [winnersCount, setWinnersCount] = useState("1");
+  // D-23: ¿cuándo se vota? Al instante (predeterminado) o con hora de inicio.
+  const [votingMode, setVotingMode] = useState<VotingMode>("continuous");
 
   // Paso 2 — D-19: ¿quién puede votar? (credencial del evento por defecto) + invitados opcionales
   const [eligibility, setEligibility] = useState<EligibilityDraft>(DEFAULT_ELIGIBILITY);
@@ -178,6 +181,7 @@ export function ElectionWizard() {
         options: cleanOptions.map((label, i) => ({ id: slug(label, i), label })),
         startsAt: schedule().starts.toISOString(),
         endsAt: schedule().ends.toISOString(),
+        votingMode,
         ...(candidates.length > 0
           ? winnersRule === "fromResult" && optionValues
             ? { candidates, winnersCountFromResult: true, optionValues }
@@ -198,7 +202,7 @@ export function ElectionWizard() {
         appendVoters(election.id, res.voters);
       }
 
-      setProgress("Abriendo la inscripción…");
+      setProgress(votingMode === "continuous" ? "Abriendo la votación…" : "Abriendo la inscripción…");
       await apiV1.publish(election.id);
       router.push(`/org/${encodeURIComponent(election.id)}`);
     } catch (e) {
@@ -243,6 +247,8 @@ export function ElectionWizard() {
               <Plus aria-hidden="true" /> Agregar opción
             </Button>
           </fieldset>
+
+          <VotingModePicker value={votingMode} onChange={setVotingMode} />
 
           <ChoiceChips name="duration" legend="¿Cuánto dura?" choices={DURATIONS} value={duration} onChange={setDuration} />
           {duration === "custom" ? (
@@ -392,6 +398,12 @@ export function ElectionWizard() {
             <div className="flex justify-between gap-4 px-5 py-3.5">
               <dt className="text-muted-foreground">Duración</dt>
               <dd className="text-right font-medium">{durationLabel}</dd>
+            </div>
+            <div className="flex justify-between gap-4 px-5 py-3.5">
+              <dt className="text-muted-foreground">Cuándo se vota</dt>
+              <dd className="text-right font-medium" data-testid="review-voting-mode">
+                {votingModeLabel[votingMode]}
+              </dd>
             </div>
             <div className="flex justify-between gap-4 px-5 py-3.5">
               <dt className="text-muted-foreground">Quién vota</dt>

@@ -66,6 +66,8 @@ export const apiV1 = {
 
   /* Voto */
   getRoll: (id: string) => request(`/api/elections/${e(id)}/roll`, undefined, RollResponse),
+  /** D-23: grupo vigente (raíz, tamaño, K). Mismo cuerpo que /roll. */
+  getGroup: (id: string) => request(`/api/elections/${e(id)}/group`, undefined, RollResponse),
   vote: (id: string, body: { proof: SemaphoreProofInput }) => request(`/api/elections/${e(id)}/vote`, post(body), Receipt),
   /** Autodeclaración "ya voté". Petición SEPARADA del voto: no lleva la prueba ni la opción. */
   markVoted: (voterId: string, inviteToken: string) => request(`/api/voters/${e(voterId)}/voted`, post({ inviteToken }), MarkVotedResult),

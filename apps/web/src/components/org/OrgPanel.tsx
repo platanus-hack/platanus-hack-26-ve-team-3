@@ -20,6 +20,7 @@ import { hasAuditPackage, nextOrganizerAction } from "@/lib/client/phases";
 import type { Aggregates as AggregatesV1, Election as ElectionV1, ReviewSummary, VotersListResponse as VotersListV1 } from "@quorum/contracts";
 import { casesLabel, openWarnings, readinessLine, type Readiness } from "@/lib/client/reviews";
 import { CandidatesList } from "./CandidatesEditor";
+import { ContinuousCard } from "./ContinuousCard";
 import { ReviewsCard } from "./ReviewsCard";
 import { RoomCard, openProjector } from "@/components/room/RoomCard";
 import { ActionBar, PageHeader } from "@/components/ui/page-header";
@@ -82,7 +83,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           apiV1.getTally(electionId),
           apiV1.listVoters(electionId),
           // D-21: casos por revisar (solo con token y durante la inscripción).
-          token && e.status === "registration" ? apiV1.listReviews(electionId) : Promise.resolve(null),
+          token && (e.status === "registration" || (e.votingMode === "continuous" && e.status === "open")) ? apiV1.listReviews(electionId) : Promise.resolve(null),
         ]);
         if (cancelled) return;
         setReviews(rv.status === "fulfilled" && rv.value ? rv.value.reviews : null);
@@ -217,7 +218,10 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const phase = election.status;
   const action = nextOrganizerAction(phase, { candidates: (election.candidates?.length ?? 0) });
   const shownCounts = counts ?? (voters ? { invited: voters.filter((v) => v.state === "invited").length, registered: voters.filter((v) => v.state === "registered").length, voted: voters.filter((v) => v.state === "voted").length } : null);
-  const canAddVoters = phase === "draft" || phase === "registration";
+  // D-23: en modo continuo la inscripción sigue abierta mientras se vota.
+  const continuous = election.votingMode === "continuous";
+  const enrolling = phase === "registration" || (continuous && phase === "open");
+  const canAddVoters = phase === "draft" || enrolling;
   const pendingReviews = reviews?.filter((r) => r.status === "pending").length ?? 0;
   // "X de Y listos": terminaron la inscripción (identidad en el padrón) de los que entraron.
   const readiness: Readiness | null = counts ? { ready: counts.withIdentity, total: counts.total, pending: pendingReviews } : null;
@@ -227,7 +231,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   return (
     <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
       <PageHeader title={election.title} meta={<>Cierra {formatDateTime(election.endsAt)}</>}>
-        <PhaseTimeline phase={phase} />
+        <PhaseTimeline phase={phase} continuous={continuous} />
         <ActionBar>
           <Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "soft", size: "sm" }))}>
             Transparencia
@@ -275,6 +279,9 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </Card>
       ) : null}
 
+      {continuous && (phase === "draft" || phase === "open") ? (
+        <ContinuousCard election={election} hasToken={Boolean(token)} onChanged={(e) => (e ? (setElection(e), reload()) : reload())} />
+      ) : (
       <Card className="border-transparent shadow-elevated">
         <CardContent className="flex flex-col gap-4 pt-5 md:pt-6">
           <div>
@@ -346,6 +353,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           ) : null}
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardContent className="pt-5 md:pt-6">
@@ -366,7 +374,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </Alert>
       ) : null}
 
-      {phase === "registration" && reviews && (reviews.length > 0 || election.eligibility?.method === "event-badge") ? (
+      {enrolling && reviews && (reviews.length > 0 || election.eligibility?.method === "event-badge") ? (
         <ReviewsCard electionId={electionId} reviews={reviews} hasToken={Boolean(token)} onDecided={reload} />
       ) : null}
 
@@ -409,7 +417,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
                     <option value="wame">wame (enlaces wa.me para copiar)</option>
                   </Select>
                 </Field>
-                <Button onClick={sendInvites} loading={sending} disabled={phase !== "registration" && phase !== "draft"}>
+                <Button onClick={sendInvites} loading={sending} disabled={!canAddVoters}>
                   <Send aria-hidden="true" /> Enviar invitaciones ({voters.length})
                 </Button>
               </div>

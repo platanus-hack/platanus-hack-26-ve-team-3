@@ -28,6 +28,8 @@ const checkLabel: Record<string, string> = {
   tally_matches: "Recuento",
   anchor_matches: "Sello público",
   draw_matches: "Sorteo",
+  root_history: "Grupo de inscritos",
+  anonymity_set_min: "Mínimo de inscritos",
 };
 
 /** Pantalla grande para la sala: legible desde la última fila, alto contraste fijo (no sigue el tema), sin scroll. */
@@ -78,6 +80,8 @@ export function Projector({ electionId }: { electionId: string }) {
   }, [loadElection]);
 
   const phase = election?.status ?? null;
+  // D-23: en modo continuo la sala sigue abierta mientras se vota.
+  const continuousLive = election?.votingMode === "continuous" && (phase === "draft" || phase === "open");
 
   // Poll rápido según la fase: sala + inscritos en registration; agregados desde open.
   useEffect(() => {
@@ -85,7 +89,12 @@ export function Projector({ electionId }: { electionId: string }) {
     let cancelled = false;
     const tick = async () => {
       try {
-        if (phase === "registration" || phase === "draft") {
+        if (continuousLive) {
+          const [r, t] = await Promise.all([roomApi.status(electionId), phase === "open" ? apiV1.getTally(electionId) : Promise.resolve(null)]);
+          if (cancelled) return;
+          setRoom(r);
+          if (t) setTally(t);
+        } else if (phase === "registration" || phase === "draft") {
           const [r, v] = await Promise.all([roomApi.status(electionId), request(`/api/elections/${encodeURIComponent(electionId)}/voters`, undefined, VotersListV1).catch(() => null)]);
           if (cancelled) return;
           setRoom(r);
@@ -106,7 +115,7 @@ export function Projector({ electionId }: { electionId: string }) {
       cancelled = true;
       clearInterval(t);
     };
-  }, [phase, electionId, hasToken]);
+  }, [phase, electionId, hasToken, continuousLive]);
 
   // Resultado del verificador y sorteo: una vez por fase.
   useEffect(() => {
@@ -139,8 +148,9 @@ export function Projector({ electionId }: { electionId: string }) {
       <main className="flex min-h-0 flex-1 items-start overflow-auto px-[3vw] py-[3vh] md:items-stretch md:overflow-hidden">
         {error && !election ? <Big title="No se pudo cargar la votación" body={error} /> : null}
         {!election && !error ? <Big title="Cargando…" /> : null}
-        {election && (phase === "registration" || phase === "draft") ? <RegistrationView election={election} room={room} counts={counts} hasToken={hasToken} now={now} offset={offset} /> : null}
-        {election && tally && (phase === "open" || phase === "closed" || phase === "tallying") ? <LiveView tally={tally} phase={phase} electionId={electionId} origin={origin} now={now} /> : null}
+        {election && continuousLive ? <ContinuousView election={election} room={room} tally={tally} hasToken={hasToken} /> : null}
+        {election && !continuousLive && (phase === "registration" || phase === "draft") ? <RegistrationView election={election} room={room} counts={counts} hasToken={hasToken} now={now} offset={offset} /> : null}
+        {election && tally && !continuousLive && (phase === "open" || phase === "closed" || phase === "tallying") ? <LiveView tally={tally} phase={phase} electionId={electionId} origin={origin} now={now} /> : null}
         {election && tally && (phase === "auditable" || phase === "failed") ? <ResultView election={election} tally={tally} audit={audit} auditMissing={auditMissing} electionId={electionId} origin={origin} /> : null}
         {election && phase === "drawn" ? <DrawnView election={election} tally={tally} audit={audit} draw={draw} electionId={electionId} origin={origin} /> : null}
       </main>
@@ -226,6 +236,59 @@ function RegistrationView({ election, room, counts, hasToken, now, offset }: { e
         ) : null}
         <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#2C3A4E]">Entras con un nombre o apodo. Tu rostro no se guarda como foto.</p>
         {election.status === "draft" ? <p className="text-[clamp(1rem,1.5vw,1.8rem)] font-bold">La inscripción todavía no abre.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+/** D-23, modo continuo: QR de la sala + "27 inscritos · 19 votaron" en vivo (y el desglose por lotes cuando lo hay). */
+function ContinuousView({ election, room, tally, hasToken }: { election: ElectionV1; room: RoomStatus | null; tally: AggregatesV1 | null; hasToken: boolean }) {
+  const joinUrl = room?.joinUrl ?? null;
+  const enrolled = tally?.eligible ?? null;
+  const voted = tally?.totalVotes ?? null;
+  const k = election.minAnonymitySet ?? 5;
+  const hasBreakdown = tally?.options.some((o) => o.count !== null) ?? false;
+  return (
+    <div className="flex w-full flex-col gap-6 md:grid md:min-h-0 md:grid-cols-[auto_1fr] md:items-center md:gap-[4vw]">
+      <div className="flex min-h-0 flex-col items-center gap-[1.5vh]">
+        {room?.open && joinUrl ? (
+          <>
+            <QrCode value={joinUrl} label={`Código QR para inscribirse y votar: ${joinUrl}`} className="size-[min(84vw,62vh)] md:size-[min(62vh,44vw)] border-[6px] border-[#0B1626]" />
+            <p className="q-mono max-w-[84vw] md:max-w-[min(62vh,44vw)] break-all text-center text-[clamp(1rem,1.7vw,2rem)] font-bold" data-testid="projector-join-url">
+              {joinUrl}
+            </p>
+          </>
+        ) : (
+          <div className="flex size-[min(84vw,62vh)] md:size-[min(62vh,44vw)] items-center justify-center border-[6px] border-dashed border-[#0B1626]/40 p-8 text-center text-[clamp(1.1rem,2vw,2.2rem)] font-bold">
+            {election.status === "draft" ? "La votación aún no abre" : !room ? "Cargando sala…" : !room.open ? "La entrada está cerrada" : !hasToken ? "Abre el proyector desde el panel del organizador para mostrar el QR" : "Cargando QR…"}
+          </div>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-col gap-[2vh]">
+        <p className="text-[clamp(1.5rem,3vw,3.5rem)] font-bold leading-tight" data-testid="projector-instruction">
+          {election.eligibility?.method === "event-badge" ? "Escanea este código y luego tu credencial: te inscribes y votas al momento" : "Escanea con tu teléfono: te inscribes y votas al momento"}
+        </p>
+        {room?.roomCode && room.open ? (
+          <p className="text-[clamp(1.2rem,2.2vw,2.6rem)] font-semibold">
+            o entra y escribe el código{" "}
+            <span className="q-mono rounded-lg bg-[#0B1626] px-4 py-1 text-[clamp(2rem,5vw,6rem)] font-extrabold tracking-[0.2em] text-white" data-testid="projector-code">
+              {room.roomCode}
+            </span>
+          </p>
+        ) : null}
+        <p className="text-[clamp(2.6rem,7vw,8.5rem)] font-extrabold leading-none tabular-nums" aria-live="polite" data-testid="projector-live-counts">
+          {enrolled === null ? "—" : formatInt(enrolled)}
+          <span className="text-[0.45em] font-bold"> inscritos · </span>
+          {voted === null ? "—" : formatInt(voted)}
+          <span className="text-[0.45em] font-bold"> votaron</span>
+        </p>
+        {enrolled !== null && enrolled < k ? (
+          <p className="text-[clamp(1.2rem,2.2vw,2.6rem)] font-bold" data-testid="projector-k">
+            Los votos se habilitan con {formatInt(k)} inscritos (faltan {formatInt(k - enrolled)}).
+          </p>
+        ) : null}
+        {tally && hasBreakdown ? <Bars tally={tally} /> : null}
+        <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#2C3A4E]">Entras con un nombre o apodo. Tu rostro no se guarda como foto.</p>
       </div>
     </div>
   );
