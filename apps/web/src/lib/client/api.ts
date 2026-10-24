@@ -41,7 +41,8 @@ export function describeError(err: unknown): string {
       case "already_voted":
         return "Esta invitación ya fue usada para votar. Cada invitación vale un solo voto.";
       case "closed":
-        return "La elección ya está cerrada. No se aceptan más votos.";
+        // El servidor dice el motivo real (p. ej. "todavía nadie terminó de inscribirse"); el genérico confundía al organizador.
+        return err.message || "Esta acción no está disponible en la etapa actual de la votación.";
       case "forbidden":
         return "No tienes permiso para esta acción.";
       case "unavailable":

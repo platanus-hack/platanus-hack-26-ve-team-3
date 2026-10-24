@@ -89,7 +89,7 @@ export async function openRoom(electionId: string, input: OpenRoomInput): Promis
   return withLock(`engine:${electionId}`, () => withLock(`room:${electionId}`, async () => {
     const store = await getStore();
     const e = await requireElection(electionId);
-    if (e.status !== "registration") throw new HttpError("closed", `La sala abierta solo existe en fase de inscripción (estado ${e.status})`, 409);
+    if (e.status !== "registration") throw new HttpError("closed", e.status === "draft" ? "Primero abre la inscripción; después puedes abrir la sala y proyectar el QR." : "La sala solo existe durante la inscripción: la votación ya se abrió o ya terminó.", 409);
     const taken = await seatsTaken(electionId);
     if (input.maxSeats < taken) throw new HttpError("invalid_input", `maxSeats (${input.maxSeats}) es menor que los asientos ya ocupados (${taken})`);
     const now = Date.now();

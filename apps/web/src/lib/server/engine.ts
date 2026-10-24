@@ -93,9 +93,9 @@ export async function openElection(id: string, opts: { auto?: boolean } = {}): P
   return withLock(`engine:${id}`, () => withLock(`room:${id}`, () => withLock(`enroll:${id}`, async () => {
     const e = await requireElection(id);
     if (opts.auto && !scheduleDue(e, now().getTime())) return e;
-    if (e.status !== "registration") throw new HttpError("closed", `Solo se abre desde inscripción (estado ${e.status})`, 409);
+    if (e.status !== "registration") throw new HttpError("closed", e.status === "draft" ? "Primero abre la inscripción." : "La votación ya se abrió o ya terminó.", 409);
     const engine = await requireEngine(id);
-    if (engine.roll.length === 0) throw new HttpError("closed", "No hay identidades inscritas: no se puede congelar un padrón vacío", 409);
+    if (engine.roll.length === 0) throw new HttpError("closed", "Todavía nadie terminó de inscribirse. Abre la sala (Proyectar), deja que la gente escanee el QR y se inscriba, y luego abre la votación.", 409);
     const commitments = engine.roll.map((r) => r.commitment);
     const root = computeGroupRoot(commitments);
     // Sala abierta: se cierra sola al abrir la votación y su política queda fijada para el paquete de auditoría.
