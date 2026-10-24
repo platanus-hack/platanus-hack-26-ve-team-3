@@ -2,7 +2,15 @@
   "name": "@quorum/ui",
   "version": "0.0.1",
   "private": true,
-  "description": "Design tokens de Quórum (CSS custom properties). Fuente: docs/DESIGN_SYSTEM.md",
-  "exports": { "./tokens.css": "./tokens.css" },
-  "scripts": { "typecheck": "echo skip", "lint": "echo skip", "test": "echo skip", "build": "echo skip" }
+  "description": "Design tokens y marca de Quórum (CSS custom properties, logo y guía). Fuente: docs/DESIGN_SYSTEM.md y brand/README.md",
+  "exports": {
+    "./tokens.css": "./tokens.css",
+    "./brand/*": "./brand/*"
+  },
+  "scripts": {
+    "typecheck": "echo skip",
+    "lint": "echo skip",
+    "test": "echo skip",
+    "build": "echo skip"
+  }
 }
