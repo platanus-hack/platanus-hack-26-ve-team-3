@@ -52,10 +52,10 @@ Código de sala: <ROOMCODE>
 
 27 de 60 inscritos · cierra la inscripción en 12:41
 
-1. Escanea y elige un alias (no uses tu nombre real).
-2. Prueba de vida con la cámara (modo demo).
-3. Se crea tu wallet: sin semilla y sin pagar gas.
-4. Vota y luego comprueba "Mi voto está".
+1. Escanea y escribe tu nombre o apodo.
+2. Mira a la cámara: tu teléfono queda vinculado.
+3. Deja la página abierta: la boleta aparece sola.
+4. Toca tu opción y "Votar". Luego "Comprobar mi voto".
 
 Modo demo: comparamos un vector numérico de tu rostro
 para evitar inscripciones dobles. No guardamos fotos.
@@ -65,12 +65,14 @@ Votación ficticia. Fondo simulado. Sin premios.
 **Primera pantalla en el teléfono** (`/j/<roomCode>`):
 
 ```
-Bienvenida a la sala <ROOMCODE> — votación de demostración
-Elige un alias: [__________]  (no uses tu nombre real)
-☐ Entiendo que esto es una demo: la cámara se usa para una prueba
-  de vida y para evitar inscripciones dobles en esta sala. Se
-  compara un vector numérico, no se guarda la foto.
-[ Entrar ]
+Paso 1 de 2
+<título de la votación>
+Tu nombre o apodo: [__________]
+Usamos tu cámara para comprobar que eres una persona y que no te
+inscribes dos veces. No guardamos fotos. Al tocar Continuar, aceptas.
+Más detalles ▾
+[ Continuar ]
+(Paso 2: cámara a pantalla completa → "Vinculando este teléfono…" → "¡Listo!")
 ```
 
 Cuando se cierra la inscripción y alguien llega tarde:

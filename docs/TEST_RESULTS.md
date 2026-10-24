@@ -748,3 +748,20 @@ La primera pasada de Playwright con mocks (13:12:28) falló en `room.spec.ts` (2
 - `faceres.bin` (6,98 MB) es el 47 % del peso total. Cambiarlo por un descriptor más pequeño cambia las dimensiones y obliga a recalibrar `FACE_DEDUPE_THRESHOLD`: no se hizo.
 - Los `.bin` de los modelos viajan sin comprimir (`application/octet-stream`); con gzip se ahorrarían ≈ 1,4 MB por teléfono. Requiere decidir cómo servirlos comprimidos (Next/Vercel no comprimen ese tipo).
 - La prueba de vida activa (parpadeo/giro) con una cara real no se automatiza (cámara falsa sin rostro); se verifica la carga y salida de los modelos y el dedupe, no la interacción humana.
+
+## 2026-10-24 · Flujo simple del votante (`feat/flujo-simple`)
+
+Inscripción en 2 pantallas, voto en 1 (D-18). Salida real (America/Caracas), puertos 3341 (mocks) y 3318 (real):
+
+| Comando | Resultado |
+|---|---|
+| `pnpm typecheck` | verde (todos los paquetes) |
+| `pnpm lint` | verde, 0 errores |
+| `pnpm test` | **361 tests**: contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 27 · verifier 59 · web 153 |
+| `pnpm --filter @quorum/web build` | verde |
+| `PORT=3341 playwright test` smoke + phase2 + lab + room + voter-taps | **58 passed**, 4 skipped (capturas sin `SCREENSHOTS=1`) |
+| `pnpm --filter @quorum/web test:e2e:real` | **3 passed** (phase2.real, room.real, weight.real) |
+
+- Toques medidos (`e2e/voter-taps.spec.ts`, 360×740, chromium y mobile-360): **inscripción 2** (enfocar el campo + Continuar) + escribir el nombre + cámara; **voto 2** (opción + "Votar: 3"). Mismo test: sin "wallet/firma/EIP-712/Semaphore/credencial/nullifier/commitment/Kernel/on-chain" en el texto visible del flujo principal, texto base 18 px, 5 opciones ≥ 56 px sin scroll y el botón "Votar" sin tapar la última opción.
+- E2E real: 2 votantes completos con el flujo simple; el votante 1 cierra y reabre su navegador (perfil persistente: localStorage + IndexedDB) y la vinculación sigue; doble voto rechazado (409); "Ya votaste" desde `votedAt`.
+- Peso por teléfono (Pixel 5 emulado, sin precarga): **14,83 MB** (models 10,46 · zk 3,41 · js 0,93). El test bloquea el service worker y la precarga ("ahorro de datos") para medir cada archivo una vez: `/v` ahora precarga igual que `/j`.

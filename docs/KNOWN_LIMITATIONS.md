@@ -70,6 +70,7 @@ En la demo cualquiera que escanee el QR (`/j/<roomCode>`) puede inscribirse con 
 | Limitación | Detalle |
 |---|---|
 | **Claves en el navegador** | El signer de la smart wallet y la identidad Semaphore viven en `localStorage` (etiquetado demo). Un borrado del navegador, cambio de teléfono o modo incógnito = pérdida de la credencial y **no se puede votar**. No hay recuperación. |
+| **Credencial ligada al navegador (D-18)** | La identidad Semaphore se cifra con una clave AES-GCM **no extraíble** guardada en IndexedDB de ese navegador, para votar sin volver a firmar. Protege frente a quien copie el `localStorage` a otro equipo, **no** frente a código malicioso que corra en la misma página (XSS), que podría usar la clave sin exportarla. Al votante no se le menciona "wallet" ni "credencial": se le dice que el teléfono queda vinculado y que si borra los datos o cambia de teléfono no podrá votar. |
 | **Malware / XSS** | Quien controle el navegador del votante (extensión maliciosa, XSS en nuestro sitio) puede robar la credencial y votar en su lugar. |
 | **Wallet = dispositivo, no persona** | La firma del enlace rostro↔wallet prueba que esa wallet aceptó ese `faceBindingHash`; no prueba que la persona esté presente al votar. Al votar no se repite la prueba facial (en la v1). |
 | **Modo `eoa-demo`** | Si no hay ZeroDev configurado, se usa una clave local simple, sin cuenta inteligente ni patrocinio. Se etiqueta en pantalla. |

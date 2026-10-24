@@ -21,3 +21,9 @@
 - Seguridad: los 5 críticos y AT-01..AT-10 cubiertos con tests; límites en `docs/KNOWN_LIMITATIONS.md`.
 - Peso por teléfono: 14,89 MB (antes 17,49).
 - Pendiente: deploy (necesita base de datos compartida: hoy el store es JSON en disco), ensayo con teléfonos reales y cámara real, prueba de carga en el Wi-Fi del evento.
+
+## 2026-10-24 — flujo simple del votante (`feat/flujo-simple`, ≈13:45 VET)
+- Inscripción en 2 pantallas y voto en 1 (D-18). Toques medidos: inscripción 2 (+ nombre + cámara), voto 2. Sin "wallet/firma/credencial/nullifier…" en el flujo principal; todo eso en "Detalles técnicos" con la etiqueta demo.
+- Credencial cifrada con clave del dispositivo (AES-GCM no extraíble en IndexedDB); las inscripciones v2 se abren re-firmando en segundo plano.
+- Verde: typecheck, lint, 361 tests, build, 58 Playwright con mocks (smoke, phase2, lab, room, voter-taps) y 3 E2E reales. Peso por teléfono: 14,83 MB. Evidencia: `docs/TEST_RESULTS.md` § "Flujo simple del votante".
+- Pendiente: probar en teléfonos reales (iPhone Safari, Android de gama baja) la cámara automática, la vibración/sonido al abrir y el Wake Lock.
