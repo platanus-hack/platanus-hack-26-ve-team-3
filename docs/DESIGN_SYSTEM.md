@@ -2,6 +2,9 @@
 
 Producto confiable para organizaciones pequeñas, con estética de "UI kit azul": fondo niebla, tarjetas blancas con sombra azulada difusa, primario azul, botones píldora y cifras grandes. Oscuro: grafito con acentos azul/verde/rojo. No es un exchange ni un cripto-casino: sin neón, sin caras, estados honestos. Fuente de verdad de los tokens: `packages/ui/tokens.css` (paquete `@quorum/ui`), consumidos desde `apps/web/src/app/globals.css` vía `@theme inline` de Tailwind 4.
 
+## Marca
+Logo «Q verificada», variantes, ícono de app, conceptos descartados, paleta con roles y tipografía: `packages/ui/brand/` (guía en `packages/ui/brand/README.md`). En la app, `Logo` y `LogoMark` (`apps/web/src/components/ui/logo.tsx`).
+
 ## 1. Tokens
 
 ### Color (primitivos)
