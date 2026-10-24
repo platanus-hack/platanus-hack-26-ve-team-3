@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { devices, expect, test, type CDPSession, type Page } from "@playwright/test";
+import { FACE_MODEL_FILES } from "../src/lib/client/face-models";
 
 /**
  * Peso por teléfono (servidor real, Chromium emulando un Pixel 5, cámara FALSA de Chromium):
@@ -10,10 +11,11 @@ import { devices, expect, test, type CDPSession, type Page } from "@playwright/t
  * Escribe el resumen en `QUORUM_WEIGHT_OUT` si está definido.
  */
 
-type Group = "models" | "zk" | "js" | "otros";
+type Group = "models" | "tfjs" | "zk" | "js" | "otros";
 const groupOf = (url: string): Group => {
   const p = new URL(url).pathname;
   if (p.startsWith("/models/")) return "models";
+  if (p.startsWith("/tfjs/")) return "tfjs";
   if (p.startsWith("/zk/")) return "zk";
   if (p.endsWith(".js") || p.startsWith("/_next/")) return "js";
   return "otros";
@@ -23,7 +25,7 @@ async function meter(page: Page) {
   const cdp: CDPSession = await page.context().newCDPSession(page);
   await cdp.send("Network.enable");
   const urls = new Map<string, string>();
-  const totals: Record<Group, number> = { models: 0, zk: 0, js: 0, otros: 0 };
+  const totals: Record<Group, number> = { models: 0, tfjs: 0, zk: 0, js: 0, otros: 0 };
   const files = new Map<string, number>();
   cdp.on("Network.requestWillBeSent", (e) => urls.set(e.requestId, e.request.url));
   cdp.on("Network.loadingFinished", (e) => {
@@ -31,7 +33,7 @@ async function meter(page: Page) {
     if (!url || url.startsWith("data:")) return;
     totals[groupOf(url)] += e.encodedDataLength;
     const p = new URL(url).pathname;
-    if (p.startsWith("/models/") || p.startsWith("/zk/")) files.set(p, (files.get(p) ?? 0) + e.encodedDataLength);
+    if (/^\/(models|tfjs|zk)\//.test(p)) files.set(p, (files.get(p) ?? 0) + e.encodedDataLength);
   });
   return { totals, files };
 }
@@ -79,22 +81,28 @@ test("peso por teléfono: inscripción (Human real) + voto (Groth16) en un Pixel
   await page.goto(link);
   await page.getByRole("button", { name: "Continuar" }).click();
   await expect(page.getByTestId("face-capture")).toBeVisible();
-  await expect.poll(() => m.files.has("/models/liveness.bin") && m.files.has("/models/faceres.bin"), { timeout: 120_000 }).toBe(true);
+  await expect.poll(() => m.files.has("/models/liveness-u8.bin") && m.files.has("/models/insightface-u8.bin"), { timeout: 120_000 }).toBe(true);
   await page.waitForLoadState("networkidle");
   const modelsLoaded = [...m.files.keys()].filter((f) => f.startsWith("/models/")).sort();
+  // Solo los 8 archivos de la config, cada uno UNA vez y comprimido (gzip): ≈2,8 MB + WASM SIMD ≈0,14 MB.
+  // Antes (faceres + facemesh + float32/float16 sin comprimir): 10,7 MB.
+  expect(modelsLoaded).toEqual(FACE_MODEL_FILES.filter((f) => f.kind === "model").map((f) => f.path).sort());
+  for (const f of FACE_MODEL_FILES.filter((x) => x.kind !== "wasm")) expect(m.files.get(f.path) ?? 0, f.path).toBeLessThan(f.wire + 2_000);
+  expect(m.totals.models + m.totals.tfjs).toBeLessThan(3_100_000);
 
   // 1b) Con la config recortada Human sigue dando antispoof (real), liveness (live), descriptor y malla. Autoprueba con
   //     la imagen de calentamiento que trae Human (ver lib/client/human.ts), expuesta solo en builds de E2E.
   await expect.poll(() => page.evaluate(() => "__quorumHumanSelfTest" in window), { timeout: 120_000 }).toBe(true);
-  const st = await page.evaluate(() => (window as unknown as { __quorumHumanSelfTest?: { faces: number; real: number | null; live: number | null; embedding: number[]; meshPoints: number } }).__quorumHumanSelfTest);
+  const st = await page.evaluate(() => (window as unknown as { __quorumHumanSelfTest?: { faces: number; real: number | null; live: number | null; embedding: number[]; landmarks: number; backend: string } }).__quorumHumanSelfTest);
   expect(st, "autoprueba de Human").toBeTruthy();
   expect(st!.faces).toBeGreaterThanOrEqual(1);
   expect(st!.real).toEqual(expect.any(Number));
   expect(st!.live).toEqual(expect.any(Number));
   expect(st!.real!).toBeGreaterThanOrEqual(0);
   expect(st!.live!).toBeLessThanOrEqual(1);
-  expect(st!.embedding.length).toBeGreaterThanOrEqual(64);
-  expect(st!.meshPoints).toBeGreaterThanOrEqual(468); // parpadeo y giro salen de la malla, sin iris
+  expect(st!.embedding.length).toBe(256); // insightface-mobilenet-emore (uint8)
+  expect(st!.landmarks).toBeGreaterThanOrEqual(3); // ojos y nariz del detector: el giro sale de ahí (sin malla)
+  expect(st!.backend).toBe("wasm"); // por defecto (ver resolveBackend en lib/client/human.ts)
 
   // 1c) Dedupe 1:N REAL del servidor con un descriptor REAL de Human: el mismo rostro (aunque con ruido) no entra dos veces.
   const enroll = (v: (typeof roster)[number], descriptor: number[]) => request.post("/api/face/enroll", { data: { voterId: v.id, inviteToken: v.inviteToken, descriptor, consent: true } });
@@ -126,7 +134,7 @@ test("peso por teléfono: inscripción (Human real) + voto (Groth16) en un Pixel
     files: Object.fromEntries([...m.files.entries()].sort()),
     modelsLoaded,
   };
-  console.log(`[peso] total ${mb(total)} · models ${mb(m.totals.models)} · zk ${mb(m.totals.zk)} · js ${mb(m.totals.js)} · otros ${mb(m.totals.otros)}`);
+  console.log(`[peso] total ${mb(total)} · models ${mb(m.totals.models)} · tfjs ${mb(m.totals.tfjs)} · zk ${mb(m.totals.zk)} · js ${mb(m.totals.js)} · otros ${mb(m.totals.otros)}`);
   console.log(`[peso] modelos cargados: ${modelsLoaded.join(", ")}`);
   if (process.env.QUORUM_WEIGHT_OUT) writeFileSync(process.env.QUORUM_WEIGHT_OUT, JSON.stringify(summary, null, 2));
   await context.close();

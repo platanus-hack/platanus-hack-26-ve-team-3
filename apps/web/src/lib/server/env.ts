@@ -24,14 +24,23 @@ export const env = {
   get rpcUrl(): string | undefined {
     return str("BASE_SEPOLIA_RPC");
   },
-  get faceThreshold(): number {
-    const n = Number(str("FACE_THRESHOLD") ?? "0.6");
-    return Number.isFinite(n) ? n : 0.6;
+  /**
+   * Umbral 1:1 (face/verify). Por defecto según el modelo (dimensiones del descriptor): 256 → insightface-mobilenet-emore
+   * (uint8, el actual), 1024 → faceres (el anterior). `FACE_THRESHOLD` lo fija para todos.
+   * Calibración: docs/TEST_RESULTS.md («rostro rápido»).
+   */
+  faceThresholdFor(dims: number): number {
+    const n = Number(str("FACE_THRESHOLD") ?? (dims === 256 ? "0.45" : "0.6"));
+    return Number.isFinite(n) ? n : dims === 256 ? 0.45 : 0.6;
   },
-  /** Umbral de similitud coseno para rechazar un rostro ya inscrito en la misma elección (dedupe 1:N). */
-  get faceDedupeThreshold(): number {
-    const n = Number(str("FACE_DEDUPE_THRESHOLD") ?? "0.75");
-    return Number.isFinite(n) ? n : 0.75;
+  /**
+   * Umbral de similitud coseno para rechazar un rostro ya inscrito en la misma elección (dedupe 1:N). Por defecto según
+   * el modelo: 256 dimensiones → 0.70 (0 falsos duplicados en 319 300 pares de personas distintas; 98,5 % de detección
+   * del mismo rostro en la misma sesión), 1024 (faceres) → 0.75. `FACE_DEDUPE_THRESHOLD` lo fija para todos.
+   */
+  faceDedupeThresholdFor(dims: number): number {
+    const n = Number(str("FACE_DEDUPE_THRESHOLD") ?? (dims === 256 ? "0.70" : "0.75"));
+    return Number.isFinite(n) ? n : dims === 256 ? 0.7 : 0.75;
   },
   /** Clave del organizador para anclar en Base Sepolia. Solo servidor; sin ella el ancla queda deshabilitada. */
   get organizerPrivateKey(): `0x${string}` | undefined {

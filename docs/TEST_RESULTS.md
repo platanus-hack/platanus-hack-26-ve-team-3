@@ -765,3 +765,68 @@ Inscripción en 2 pantallas, voto en 1 (D-18). Salida real (America/Caracas), pu
 - Toques medidos (`e2e/voter-taps.spec.ts`, 360×740, chromium y mobile-360): **inscripción 2** (enfocar el campo + Continuar) + escribir el nombre + cámara; **voto 2** (opción + "Votar: 3"). Mismo test: sin "wallet/firma/EIP-712/Semaphore/credencial/nullifier/commitment/Kernel/on-chain" en el texto visible del flujo principal, texto base 18 px, 5 opciones ≥ 56 px sin scroll y el botón "Votar" sin tapar la última opción.
 - E2E real: 2 votantes completos con el flujo simple; el votante 1 cierra y reabre su navegador (perfil persistente: localStorage + IndexedDB) y la vinculación sigue; doble voto rechazado (409); "Ya votaste" desde `votedAt`.
 - Peso por teléfono (Pixel 5 emulado, sin precarga): **14,83 MB** (models 10,46 · zk 3,41 · js 0,93). El test bloquea el service worker y la precarga ("ahorro de datos") para medir cada archivo una vez: `/v` ahora precarga igual que `/j`.
+
+## 2026-10-24 · Rostro rápido (`feat/rostro-rapido`)
+
+Motivo: en iPhones reales (diagnóstico `/api/client-log`) cargar los modelos tardó hasta **273 s** con el 4G del evento, y la primera detección con `humangl` tardó **26 s** (compilación de shaders).
+
+### Bytes por teléfono (medido con `e2e/weight.real.spec.ts`, CDP `encodedDataLength`)
+| | Antes | Después |
+|---|---|---|
+| Modelos de la cámara | 10,46 MB (blazeface f32, facemesh, faceres, antispoof, liveness; sin comprimir) | **2,83 MB** (8 archivos, gzip) |
+| WASM de TF.js (SIMD) | — | 0,14 MB |
+| ZK / JS / otros | 3,41 / 0,93 / 0,09 MB | 3,41 / 0,93 / 0,04 MB |
+| **Total** | **14,89 MB** | **7,35 MB** |
+
+Modelos: blazeface float16 (idéntico a f32: mismos recuadros y descriptores en 800 caras), antispoof y liveness uint8 (|Δ| medio 0,001–0,003; 1–2 de 800 cruzan 0,5), **descriptor insightface-mobilenet-emore uint8** (256 dims) en lugar de faceres, **sin facemesh**. Todo guardado con gzip y servido con `Content-Encoding: gzip` (`scripts/build-face-models.mjs`, fuentes con SHA-256 fijado).
+
+### Calibración del descriptor (LFW, fotos públicas; nada se guarda en el repo)
+50 personas × 4 fotos + 600 personas con 1 foto; 319 300 pares de personas distintas, 300 pares de la misma persona (fotos de años distintos) y 600 pares «misma sesión» simulados (encuadre, escala, luz y leve giro distintos). Chromium + backend wasm, misma config que producción.
+
+| Modelo | Bytes (gzip) | d′ | Máx. distinto | Misma persona, otras fotos ≥ umbral | Misma sesión ≥ umbral |
+|---|---|---|---|---|---|
+| faceres float16 (antes), umbral 0.75 | 6,36 MB | 3,58 | 0,760 (2 pares ≥ 0,75) | 25 % | 99,0 % |
+| faceres uint8 | 2,4 MB | 2,49 | — | descartado (pierde separación) | — |
+| mobilefacenet (Human) | — | — | — | descartado: coseno ≈ 1,0 para todos (salida sin normalizar) | — |
+| insightface ghostnet-strides2 | — | 0,66–0,72 | — | descartado | — |
+| insightface-mobilenet-emore float16 | 6,1 MB | 3,59 | 0,642 | 10 % @0.70 | 98,5 % @0.70 |
+| **insightface-mobilenet-emore uint8, umbral 0.70** | **2,30 MB** | **3,64** | **0,693 (0 pares ≥ 0,70)** | **14 %** | **98,5 %** |
+
+Umbral por defecto: **0.70** para 256 dims (`env.faceDedupeThresholdFor`), 0.75 para faceres; `FACE_DEDUPE_THRESHOLD` fija uno para todos. 1:1 (`face/verify`, no lo usa la UI): 0.45 para 256 dims. Un descriptor de otra longitud que los inscritos → 400 (no se puede comparar). Malla vs sin malla no cambia el descriptor de faceres (d′ 3,58 vs 3,59).
+
+### Giro sin malla
+Desplazamiento de la nariz respecto del centro de los ojos (puntos de blazeface) / distancia entre ojos: correlación −0,93 con el yaw de la malla en 800 caras (0,3 rad ≈ 0,34). Prueba activa: 3 descriptores de frente → giro ≥ 0,3 respecto de la postura inicial → vuelve de frente y su descriptor debe coincidir (coseno ≥ 0,55) → promedio de 4. El parpadeo ya no existe (necesitaba la malla).
+
+### Tiempos por backend (headless, CPU de escritorio salvo donde se indica)
+Banco aislado (`detect` sobre un cuadro 640×480, 10 repeticiones):
+
+| Navegador | Backend | Config | Calentamiento | 1.ª detección | Mediana |
+|---|---|---|---|---|---|
+| Chromium (Pixel 7) | wasm | antes | 0,22 s | 73 ms | 64 ms |
+| Chromium | wasm | **ahora** | 0,18 s | 57 ms | 33 ms |
+| Chromium | humangl | antes / ahora | 7,8 / 4,8 s | 643 / 314 ms | 319 / 124 ms |
+| Chromium | webgl | antes / ahora | 7,2 / 3,7 s | 359 / 242 ms | 215 / 125 ms |
+| WebKit (iPhone 15) | wasm | antes / **ahora** | 0,13 / 0,08 s | 66 / 31 ms | 60 / 25 ms |
+| WebKit | humangl | antes / ahora | 0,32 / 0,90 s | 341 / 121 ms | 93 / 51 ms |
+| WebKit | webgl | antes / ahora | 0,31 / 0,22 s | 104 / 66 ms | 92 / 45 ms |
+| Chromium, CPU ×6 | wasm | antes / ahora | 0,67 / 0,45 s | 361 / 177 ms | 320 / 143 ms |
+| Chromium, CPU ×6 | humangl | antes / ahora | 6,5 / 3,9 s | 347 / 240 ms | 322 / 147 ms |
+
+En la app (servidor de producción, `client-log`): WebKit wasm iniciar 0,09 s + calentar 0,08 s; WebKit humangl 0,09 + 0,20 s; Chromium humangl/webgl calentar 3,6 s. Chromium «Slow 4G» (1,6 Mbps, 150 ms) + CPU ×4, pulsando Continuar de inmediato: descarga 13,9 s, iniciar 4,4 s (incluye cargar el JS de Human con CPU ×4), calentar 0,3 s, 1.ª detección 72 ms. WebGL en headless usa GPU por software: los números de la GPU del iPhone real solo salen del A/B con `?fb=`.
+
+### Batería (America/Caracas, salida real)
+| Hora | Comando | Resultado |
+|---|---|---|
+| 16:10:52 | `pnpm typecheck` | exit 0 |
+| 16:11:01 | `pnpm lint` | exit 0 |
+| 16:11:05 | `pnpm test` | contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 27 · verifier 59 · web 168 → **376, 0 fallos** |
+| 16:11:25 | `pnpm --filter @quorum/web build` | exit 0 |
+| 16:11:34 | `PORT=3433 playwright test room phase2 voter-taps smoke --workers=3` | **40 passed** |
+| 16:12:05 | `QUORUM_E2E_REAL_PORT=3435 pnpm --filter @quorum/web test:e2e:real` | **3 passed** (peso: total 7,35 MB · models 2,83 · tfjs 0,14) |
+
+La primera pasada de Playwright con mocks falló entera (500 en /v): `room.ts` importaba `human.ts` y el SSR resolvía `human.node.js` (`@tensorflow/tfjs-node`). Se separó la descarga en `face-download.ts` (sin Human) y se repitió: verde.
+
+### Pendiente
+- A/B real en iPhone/Android con `?fb=wasm|humangl|webgl` (requiere desplegar esta rama).
+- La prueba de vida activa con una cara real no se automatiza (cámara falsa sin rostro).
+- Licencia de los pesos de InsightFace (MS1M): ver KNOWN_LIMITATIONS.

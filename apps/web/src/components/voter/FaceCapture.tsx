@@ -5,13 +5,12 @@ import { CameraOff, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiClientError, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { actionSatisfied, averageDescriptors, clientLog, humanSelfTest, loadHuman, pickAction, type HumanInstance, type LivenessAction } from "@/lib/client/human";
+import { CAPTURES, clientLog, DESCRIPTOR_DIMS, formatMB, humanSelfTest, humanTimings, LivenessTracker, loadHuman, onDownloadProgress, yawProxy, type DownloadProgress, type HumanInstance } from "@/lib/client/human";
 import { cn } from "@/lib/client/cn";
 
 /** Umbrales mínimos de antispoof (`face.real`) y liveness (`face.live`) de Human (threat model M5). Siguen siendo demo. */
 const REAL_MIN = 0.5;
 const LIVE_MIN = 0.5;
-const CAPTURES = 3;
 
 /**
  * Sólo pruebas automatizadas (Playwright no tiene cámara). Se fija al compilar; en producción es `false` y el código muere.
@@ -20,12 +19,10 @@ const CAPTURES = 3;
  */
 const E2E_FAKE_FACE = process.env.NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE === "1";
 
-type Phase = "loading" | "slow" | "look" | "spoof" | "action" | "hold" | "checking" | "error";
+type Phase = "loading" | "slow" | "look" | "spoof" | "action" | "back" | "checking" | "error";
 type ErrorKind = "camera-denied" | "no-camera" | "duplicate" | "other";
 
-const actionText: Record<LivenessAction, string> = { blink: "Parpadea", turn: "Gira un poco la cabeza" };
-
-function instruction(phase: Phase, action: LivenessAction): string {
+function instruction(phase: Phase): string {
   switch (phase) {
     case "loading":
       return "Preparando la cámara…";
@@ -36,9 +33,9 @@ function instruction(phase: Phase, action: LivenessAction): string {
     case "spoof":
       return "Mira a la cámara, con buena luz";
     case "action":
-      return actionText[action];
-    case "hold":
-      return "Quédate quieto…";
+      return "Gira un poco la cabeza";
+    case "back":
+      return "Vuelve a mirar a la cámara";
     case "checking":
       return "Comprobando…";
     default:
@@ -65,7 +62,7 @@ function platform(): "ios" | "android" | "other" {
 function syntheticDescriptor(voterId: string): number[] {
   let seed = 2166136261;
   for (const ch of voterId) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
-  return Array.from({ length: 128 }, () => {
+  return Array.from({ length: DESCRIPTOR_DIMS }, () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return Number((seed / 2 ** 31 - 1).toFixed(6));
   });
@@ -73,8 +70,9 @@ function syntheticDescriptor(voterId: string): number[] {
 
 /**
  * Paso 2 de la inscripción: cámara a pantalla completa, óvalo guía y UNA instrucción a la vez.
- * Pipeline (Human, en el navegador): rostro → presencia (`face.real`/`face.live` ≥ umbral) → acción (parpadeo o giro)
- * → 3 descriptores → promedio → `POST /api/face/enroll` (dedupe 1:N en el servidor). Todo automático: sin botón de captura.
+ * Pipeline (Human, en el navegador; ver LivenessTracker): de frente con presencia (`face.real`/`face.live` ≥ umbral)
+ * → 3 descriptores → «gira un poco la cabeza» → «vuelve a mirar» (4.º descriptor, debe coincidir) → promedio →
+ * `POST /api/face/enroll` (dedupe 1:N en el servidor). Todo automático: sin botón de captura.
  * Nunca se envían ni guardan imágenes: sólo el descriptor numérico.
  */
 export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserve, onCancel }: { voterId: string; inviteToken: string; onEnrolled: (faceBindingHash: `0x${string}`) => void; onObserve: () => void; onCancel: () => void }) {
@@ -86,8 +84,8 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
   const enrollingRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("loading");
-  const [action, setAction] = useState<LivenessAction>("blink");
   const [captured, setCaptured] = useState(0);
+  const [download, setDownload] = useState<DownloadProgress | null>(null);
   const [faceOk, setFaceOk] = useState(false);
   const [error, setError] = useState<{ kind: ErrorKind; message: string } | null>(null);
 
@@ -151,70 +149,63 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
       void video.play().catch(() => undefined);
       clientLog("camera:ready");
       // Primero la cámara (el permiso se pide de inmediato), luego los modelos mientras la persona se ve en pantalla.
+      // Normalmente ya vienen descargados desde el paso 1 (precarga en /j y /v). Sin tiempo límite fijo: la descarga
+      // solo se corta si deja de llegar bytes (STALL_MS) y se muestra el progreso real en MB.
       const t0 = performance.now();
       const slowTimer = window.setTimeout(() => !stale() && setPhase("slow"), 6000);
+      let lastLogAt = performance.now();
+      const unsub = onDownloadProgress((p) => {
+        if (stale()) return;
+        setDownload(p);
+        // Diagnóstico con red lenta: cuánto lleva cada 10 s (solo bytes, nada personal).
+        if (!p.done && performance.now() - lastLogAt > 10_000) {
+          lastLogAt = performance.now();
+          clientLog("camera:downloading", { loadedKB: Math.round(p.loaded / 1000), total: Math.round(p.total / 1000), ms: Math.round(performance.now() - t0) });
+        }
+      });
       let human: HumanInstance;
       try {
-        human = await Promise.race([
-          loadHuman(),
-          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("El reconocimiento facial tardó demasiado en cargar. Revisa tu conexión e intenta de nuevo.")), 90_000)),
-        ]);
+        human = await loadHuman();
       } finally {
         clearTimeout(slowTimer);
+        unsub();
       }
       if (stale()) return;
-      clientLog("camera:models-ready", { ms: Math.round(performance.now() - t0) });
+      clientLog("camera:models-ready", { ms: Math.round(performance.now() - t0), ...humanTimings });
       humanRef.current = human;
       if (E2E_FAKE_FACE) (window as unknown as { __quorumHumanSelfTest?: unknown }).__quorumHumanSelfTest = humanSelfTest();
 
-      const chosen = pickAction();
-      setAction(chosen);
       setPhase("look");
-      const descriptors: number[][] = [];
-      let actionSeen = false;
-      let lastCaptureAt = 0;
-
+      const tracker = new LivenessTracker();
+      const tLook = performance.now();
       let firstDetect = true;
+      const logged = new Set<string>(["look"]);
       const loop = async () => {
         if (stale() || !humanRef.current || !videoRef.current) return;
-        if (firstDetect) {
-          firstDetect = false;
-          const td = performance.now();
-          const r0 = await humanRef.current.detect(videoRef.current);
-          clientLog("camera:first-detect", { ms: Math.round(performance.now() - td), faces: r0.face.length });
-        }
+        const td = performance.now();
         const result = await humanRef.current.detect(videoRef.current);
         if (stale()) return;
-        const face = result.face[0];
-        const gestures = result.gesture.map((g) => String(g.gesture));
-        const present = Boolean(face && (face.real ?? 0) >= REAL_MIN && (face.live ?? 0) >= LIVE_MIN);
-        if (face && face.score > 0.5 && !present) {
-          // Antispoof/liveness por debajo del umbral: no avanzamos ni capturamos (M5).
-          setFaceOk(false);
-          if (!actionSeen) setPhase("spoof");
-        } else if (face && face.score > 0.5) {
-          setFaceOk(true);
-          if (!actionSeen) {
-            setPhase("action");
-            if (actionSatisfied(chosen, face, gestures)) {
-              actionSeen = true;
-              setPhase("hold");
-            }
-          } else if (face.embedding && face.embedding.length >= 64) {
-            const now = performance.now();
-            if (now - lastCaptureAt > 350) {
-              descriptors.push(Array.from(face.embedding));
-              lastCaptureAt = now;
-              setCaptured(descriptors.length);
-            }
-          }
-        } else {
-          setFaceOk(false);
-          if (!actionSeen) setPhase("look");
+        if (firstDetect) {
+          firstDetect = false;
+          clientLog("camera:first-detect", { ms: Math.round(performance.now() - td), faces: result.face.length, backend: humanTimings.backend });
         }
-        if (descriptors.length >= CAPTURES) {
+        const face = result.face[0];
+        const seen = Boolean(face && face.score > 0.5);
+        // Antispoof/liveness por debajo del umbral: no se avanza ni se captura (M5).
+        const present = Boolean(seen && (face!.real ?? 0) >= REAL_MIN && (face!.live ?? 0) >= LIVE_MIN);
+        const stage = tracker.feed({ t: performance.now(), face: seen, present, yaw: face ? yawProxy(face) : null, embedding: face?.embedding && face.embedding.length >= 64 ? Array.from(face.embedding) : null });
+        setFaceOk(present);
+        setCaptured(tracker.captures.length);
+        setPhase(stage === "turn" ? "action" : stage === "back" ? "back" : stage === "spoof" ? "spoof" : "look");
+        // Primera vez en cada etapa (sin inundar el log si oscila entre «look» y «spoof»).
+        if (!logged.has(stage)) {
+          logged.add(stage);
+          clientLog("camera:stage", { step: stage, ms: Math.round(performance.now() - tLook) });
+        }
+        if (stage === "done" && tracker.result) {
           stopAll();
-          await enroll(averageDescriptors(descriptors));
+          clientLog("camera:liveness-done", { ms: Math.round(performance.now() - tLook), total: Math.round(performance.now() - t0) });
+          await enroll(tracker.result);
           return;
         }
         rafRef.current = requestAnimationFrame(() => void loop());
@@ -247,8 +238,9 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const text = instruction(phase, action);
-  const ovalTone = phase === "checking" || phase === "hold" ? "border-success" : faceOk ? "border-white" : "border-white/60";
+  const text = instruction(phase);
+  const ovalTone = phase === "checking" || phase === "back" ? "border-success" : faceOk ? "border-white" : "border-white/60";
+  const downloading = (phase === "loading" || phase === "slow") && download && !download.done && download.loaded < download.total;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black text-white" data-testid="face-capture" role="dialog" aria-modal="true" aria-label="Comprobación con la cámara">
@@ -281,9 +273,14 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onObserv
               {phase === "loading" || phase === "slow" || phase === "checking" ? <span className="q-spinner mr-2 align-middle" aria-hidden="true" /> : null}
               {text}
             </p>
-            {phase === "hold" ? (
+            {downloading ? (
+              <p className="rounded-md bg-black/60 px-3 py-1 text-base font-semibold tabular-nums text-white/90" data-testid="face-download">
+                Descargando {formatMB(download.loaded)} de {formatMB(download.total)} MB
+              </p>
+            ) : null}
+            {phase === "look" || phase === "action" || phase === "back" ? (
               <div className="flex gap-2" aria-hidden="true">
-                {Array.from({ length: CAPTURES }, (_, i) => (
+                {Array.from({ length: CAPTURES + 1 }, (_, i) => (
                   <span key={i} className={cn("size-3 rounded-full", i < captured ? "bg-success" : "bg-white/40")} />
                 ))}
               </div>

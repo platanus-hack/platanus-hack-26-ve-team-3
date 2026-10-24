@@ -4,6 +4,8 @@
  */
 import { JoinRoomResult, OpenRoomResult, RoomAlias, RoomPublicInfo, RoomStatus, type OpenRoomInput } from "@quorum/contracts";
 import { ApiClientError, request } from "./api";
+import { FACE_MODEL_FILES } from "./face-models";
+import { downloadFaceModels, HEAVY_CACHE } from "./face-download";
 import { orgAuthHeaders } from "./orgStore";
 
 const e = encodeURIComponent;
@@ -118,40 +120,31 @@ export function invitePathFrom(inviteUrl: string, inviteToken: string): string {
 
 /* ---------- Precarga de lo pesado (modelos de Human y artefactos ZK) ---------- */
 
-/** Lo que el teléfono descargará sí o sí en la inscripción y el voto (config de `human.ts` + `browserArtifacts`). */
-export const HEAVY_ASSETS = [
-  "/models/blazeface.json",
-  "/models/blazeface.bin",
-  "/models/facemesh.json",
-  "/models/facemesh.bin",
-  "/models/faceres.json",
-  "/models/faceres.bin",
-  "/models/antispoof.json",
-  "/models/antispoof.bin",
-  "/models/liveness.json",
-  "/models/liveness.bin",
-  "/zk/semaphore-10.wasm",
-  "/zk/semaphore-10.zkey",
-] as const;
+/** Artefactos Groth16 del voto (se descargan DESPUÉS de los de la cámara, que se usan antes). */
+const ZK_ASSETS = ["/zk/semaphore-10.wasm", "/zk/semaphore-10.zkey"] as const;
 
-export const HEAVY_CACHE = "quorum-heavy-v1"; // igual que public/sw.js
+/** Lo que el teléfono descargará sí o sí en la inscripción y el voto (`human.ts` + `browserArtifacts`). */
+export const HEAVY_ASSETS = [...FACE_MODEL_FILES.filter((f) => f.kind !== "wasm").map((f) => f.path), ...ZK_ASSETS] as const;
+
+export { HEAVY_CACHE };
 
 /**
- * Precarga lo pesado mientras la persona escribe su alias, sin bloquear nada:
- *  1. Con service worker disponible (HTTPS o localhost): registra `/sw.js` y llena Cache Storage UNO A UNO con lo que
- *     falte; desde ahí Human y snarkjs lo leen del caché (cache-first en el SW), aunque el teléfono tenga poca caché HTTP.
- *  2. Sin service worker (p. ej. http://IP-de-la-red): `<link rel="prefetch">` → caché HTTP del navegador
- *     (servidos con `Cache-Control: public, max-age=31536000, immutable`, ver next.config.ts).
- * Respeta "ahorro de datos". Devuelve el modo usado (para tests y depuración).
+ * Precarga lo pesado en cuanto se abre /j o /v, sin bloquear nada, y en orden de uso:
+ *  1. Modelos de la cámara (+ WASM): `downloadFaceModels` (UNA descarga compartida con la cámara, con progreso real).
+ *     Con service worker (HTTPS o localhost) queda además en Cache Storage; sin él, en la caché HTTP inmutable.
+ *  2. Artefactos ZK del voto: Cache Storage uno a uno, o `<link rel="prefetch">` sin service worker.
+ * Respeta "ahorro de datos" (entonces la cámara descarga lo suyo al abrirse). Devuelve el modo usado (tests/depuración).
  */
 export async function prefetchHeavyAssets(doc: Document = document): Promise<"saveData" | "service-worker" | "link-prefetch"> {
   const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
   if (conn?.saveData) return "saveData";
-  if ("serviceWorker" in navigator && typeof caches !== "undefined" && window.isSecureContext) {
+  const swCapable = "serviceWorker" in navigator && typeof caches !== "undefined" && window.isSecureContext;
+  if (swCapable) await navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
+  await downloadFaceModels().catch(() => undefined);
+  if (swCapable) {
     try {
-      await navigator.serviceWorker.register("/sw.js", { scope: "/" });
       const cache = await caches.open(HEAVY_CACHE);
-      for (const href of HEAVY_ASSETS) {
+      for (const href of ZK_ASSETS) {
         if (await cache.match(href)) continue;
         const res = await fetch(href, { cache: "default" });
         if (res.ok) await cache.put(href, res);
@@ -161,7 +154,7 @@ export async function prefetchHeavyAssets(doc: Document = document): Promise<"sa
       /* cae a link prefetch */
     }
   }
-  for (const href of HEAVY_ASSETS) {
+  for (const href of ZK_ASSETS) {
     if (doc.head.querySelector(`link[rel="prefetch"][href="${href}"]`)) continue;
     const l = doc.createElement("link");
     l.rel = "prefetch";
