@@ -14,6 +14,7 @@ import { POST as kapsoWebhook } from "@/app/api/webhooks/kapso/route";
 import { extractIncoming } from "../kapso";
 import { POST as createElection } from "@/app/api/elections/route";
 import { POST as publish } from "@/app/api/elections/[id]/publish/route";
+import { POST as addVoters } from "@/app/api/elections/[id]/voters/route";
 import { call, freshStore, sampleElection } from "./helpers";
 
 describe("crypto y manifiesto", () => {
@@ -152,35 +153,48 @@ describe("webhook Kapso", () => {
     expect(extractIncoming(meta)).toEqual([{ from: "584121234567", text: "hola", profileName: "Ana" }]);
   });
 
-  it("opt-in QUORUM <id> crea al votante por teléfono y responde con el enlace (dry-run); batch y dedupe", async () => {
+  it("A6: opt-in QUORUM <id> NO crea votantes; solo reenvía el enlace a quien el organizador cargó con ese teléfono (dry-run); batch y dedupe", async () => {
     const store = freshStore();
     const created = await call(createElection, { body: sampleElection() });
     const id = created.json.id as string;
-    await call(publish, { params: { id }, headers: { authorization: `Bearer ${created.json.organizerToken}` } });
+    const auth = { authorization: `Bearer ${created.json.organizerToken}` };
+    await call(publish, { params: { id }, headers: auth });
 
-    const body = JSON.stringify({
-      batch: true,
-      events: [
-        { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: `QUORUM ${id}` } }, contact: { name: "Ana" } } },
-        { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: "hola" } } } },
-        { event: "whatsapp.message.received", data: { message: { from: "584129999999", text: { body: "QUORUM el_inexistente" } } } },
-      ],
-    });
-    const r = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-1" } });
-    expect(r.status).toBe(200);
+    const optIn = (from: string, key: string) => {
+      const body = JSON.stringify({
+        batch: true,
+        events: [
+          { event: "whatsapp.message.received", data: { message: { from, text: { body: `QUORUM ${id}` } }, contact: { name: "Ana" } } },
+          { event: "whatsapp.message.received", data: { message: { from, text: { body: "hola" } } } },
+          { event: "whatsapp.message.received", data: { message: { from: "584129999999", text: { body: "QUORUM el_inexistente" } } } },
+        ],
+      });
+      return { body, headers: { ...signed(body), "x-idempotency-key": key } };
+    };
+
+    // Número desconocido: se ignora y NO aparece ningún votante.
+    const unknown = optIn("584121234567", "evt-0");
+    const r0 = await call(kapsoWebhook, { rawBody: unknown.body, headers: unknown.headers });
+    expect(r0.status).toBe(200);
+    expect(r0.json).toEqual({ ok: true, received: 3, sent: 0, ignored: 3, failed: 0 });
+    expect(await store.listVoters(id)).toHaveLength(0);
+
+    // El organizador carga a Ana con su teléfono → el opt-in le reenvía su enlace.
+    const added = await call(addVoters, { params: { id }, headers: auth, body: { voters: [{ displayName: "Ana", phoneE164: "+584121234567" }] } });
+    expect(added.status).toBe(201);
+    const known = optIn("584121234567", "evt-1");
+    const r = await call(kapsoWebhook, { rawBody: known.body, headers: known.headers });
     expect(r.json).toEqual({ ok: true, received: 3, sent: 1, ignored: 2, failed: 0 });
-
     const voters = await store.listVoters(id);
     expect(voters).toHaveLength(1);
-    expect(voters[0].phoneE164).toBe("+584121234567");
-    expect(voters[0].displayName).toBe("Ana");
+    expect(voters[0].source).toBe("invite");
     expect(voters[0].inviteStatus).toBe("sent");
 
-    // Mismo mensaje otra vez: no duplica votante; misma idempotency key → duplicate
-    const dup = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-1" } });
+    // Misma idempotency key → duplicate; otra key → reenvía sin duplicar votante
+    const dup = await call(kapsoWebhook, { rawBody: known.body, headers: known.headers });
     expect(dup.json.duplicate).toBe(true);
-    const again = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-2" } });
-    expect(again.json.sent).toBe(1);
+    const again = optIn("584121234567", "evt-2");
+    expect((await call(kapsoWebhook, { rawBody: again.body, headers: again.headers })).json.sent).toBe(1);
     expect(await store.listVoters(id)).toHaveLength(1);
   });
 });
