@@ -7,7 +7,8 @@ function str(name: string, fallback?: string): string | undefined {
 
 export const env = {
   get appUrl(): string {
-    return (str("APP_URL") ?? "http://localhost:3000").replace(/\/$/, "");
+    // En Render, RENDER_EXTERNAL_URL trae la URL pública del servicio (sirve para el joinUrl del QR).
+    return (str("APP_URL") ?? str("RENDER_EXTERNAL_URL") ?? "http://localhost:3000").replace(/\/$/, "");
   },
   get dataDir(): string {
     return str("DATA_DIR") ?? ".data";
