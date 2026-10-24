@@ -33,11 +33,10 @@ for (const w of WIDTHS) {
     test(`entrar ${w}`, async ({ page }) => {
       await at(page, w, "registration");
       await page.goto(`/j/${CODE}`);
-      await page.getByLabel("Alias").fill("Vecina del 4B");
-      await page.getByRole("checkbox").check();
+      await page.getByLabel("Tu nombre o apodo").fill("Vecina del 4B");
       await shot(page, "sala-01-entrar", w);
-      await page.getByLabel("Alias").fill("0412 555 1234");
-      await page.getByRole("button", { name: "Entrar a la sala" }).click();
+      await page.getByLabel("Tu nombre o apodo").fill("0412 555 1234");
+      await page.getByRole("button", { name: "Continuar" }).click();
       await expect(page.getByText(/No uses tu teléfono/)).toBeVisible();
       await shot(page, "sala-02-alias-invalido", w);
     });

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { qrPath } from "@/components/room/QrCode";
-import { CONSENT_POINTS, RoomJoin } from "@/components/room/RoomJoin";
+import { ROOM_CONSENT_EXTRA, RoomJoin } from "@/components/room/RoomJoin";
+import { CONSENT_DETAILS, CONSENT_SHORT } from "@/components/voter/Consent";
 import { RoomCard } from "@/components/room/RoomCard";
 import { ApiClientError } from "@/lib/client/api";
 import { formatDate } from "@/lib/client/format";
@@ -85,26 +86,31 @@ describe("errores del join y estado de la sala", () => {
 });
 
 describe("RoomJoin (/j/[roomCode])", () => {
-  it("muestra título, X de N lugares y el consentimiento honesto", async () => {
+  it("paso 1 de 2 en una pantalla: título, X de N lugares, nombre o apodo, consentimiento corto + Más detalles, un botón", async () => {
     mockFetch(() => ({ status: 200, body: info() }));
     render(<RoomJoin roomCode="abc234" />);
     expect(await screen.findByText("Asamblea ficticia (fixture)")).toBeTruthy();
+    expect(screen.getByTestId("step-indicator").textContent).toContain("Paso 1 de 2");
     expect(screen.getByTestId("room-seats").textContent).toContain("3 de 60 lugares");
-    const consent = screen.getByTestId("room-consent").textContent ?? "";
+    expect(screen.getByLabelText("Tu nombre o apodo")).toBeTruthy();
+    expect(screen.getByTestId("voter-consent").textContent).toContain(CONSENT_SHORT);
+    const consent = screen.getByTestId("consent-details").textContent ?? "";
     expect(consent).toContain("se borra al abrir la votación");
     expect(consent).toContain("no revela cuál inscrito emitió cada boleta");
     expect(consent).toContain("El servidor sí ve el contenido");
-    for (const p of CONSENT_POINTS) expect(p).not.toMatch(/anónim|secreto|100 ?%/i);
+    expect(consent).toContain(ROOM_CONSENT_EXTRA[0]);
+    for (const p of [CONSENT_SHORT, ...CONSENT_DETAILS, ...ROOM_CONSENT_EXTRA]) expect(p).not.toMatch(/anónim|secreto|100 ?%|wallet|credencial/i);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
-  it("valida alias y consentimiento antes de llamar al servidor", async () => {
+  it("valida el nombre o apodo antes de llamar al servidor", async () => {
     const calls = mockFetch(() => ({ status: 200, body: info() }));
     render(<RoomJoin roomCode="ABC234" />);
     await screen.findByText("Asamblea ficticia (fixture)");
-    fireEvent.change(screen.getByLabelText("Alias"), { target: { value: "04125551234" } });
-    fireEvent.click(screen.getByRole("button", { name: "Entrar a la sala" }));
+    fireEvent.change(screen.getByLabelText("Tu nombre o apodo"), { target: { value: "04125551234" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     expect(await screen.findByText(/No uses tu teléfono/)).toBeTruthy();
-    expect(screen.getByText(/necesitamos tu consentimiento/)).toBeTruthy();
     expect(calls.some((c) => c.url.endsWith("/join"))).toBe(false);
   });
 
@@ -116,9 +122,8 @@ describe("RoomJoin (/j/[roomCode])", () => {
     );
     render(<RoomJoin roomCode="ABC234" />);
     await screen.findByText("Asamblea ficticia (fixture)");
-    fireEvent.change(screen.getByLabelText("Alias"), { target: { value: " Ana " } });
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Entrar a la sala" }));
+    fireEvent.change(screen.getByLabelText("Tu nombre o apodo"), { target: { value: " Ana " } });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/v/tok-123"));
     const join = calls.find((c) => c.url.endsWith("/join"));
     expect(JSON.parse(String(join?.init?.body))).toEqual({ displayName: "Ana" });
@@ -130,7 +135,8 @@ describe("RoomJoin (/j/[roomCode])", () => {
     localStorage.setItem("quorum.room.ABC234", JSON.stringify({ roomCode: "ABC234", electionId: "el-1", voterId: "vt-1", displayName: "Ana", inviteToken: "tok-1", invitePath: "/v/tok-1", joinedAt: "x", consentAt: "x" }));
     mockFetch(() => ({ status: 200, body: info() }));
     render(<RoomJoin roomCode="ABC234" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+    const resume = await screen.findByTestId("room-resume");
+    fireEvent.click(within(resume).getByRole("button", { name: "Continuar" }));
     expect(push).toHaveBeenCalledWith("/v/tok-1");
   });
 
@@ -141,7 +147,7 @@ describe("RoomJoin (/j/[roomCode])", () => {
     const obs = screen.getByTestId("observer-mode");
     expect(obs.querySelector('a[href="/e/el-1/live"]')).toBeTruthy();
     expect(obs.querySelector('a[href="/e/el-1/draw"]')).toBeTruthy();
-    expect(screen.queryByLabelText("Alias")).toBeNull();
+    expect(screen.queryByLabelText("Tu nombre o apodo")).toBeNull();
   });
 
   it("votación ya comenzó → observador; 410 al entrar muestra el texto del servidor", async () => {
@@ -153,9 +159,8 @@ describe("RoomJoin (/j/[roomCode])", () => {
     mockFetch((url) => (url.endsWith("/join") ? { status: 410, body: { error: "La sala expiró", code: "room_closed" } } : { status: 200, body: info() }));
     render(<RoomJoin roomCode="ABC234" />);
     await screen.findByText("Asamblea ficticia (fixture)");
-    fireEvent.change(screen.getByLabelText("Alias"), { target: { value: "Ana" } });
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Entrar a la sala" }));
+    fireEvent.change(screen.getByLabelText("Tu nombre o apodo"), { target: { value: "Ana" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     expect(await screen.findByText(/La sala expiró\./)).toBeTruthy();
     expect(screen.getByTestId("observer-mode")).toBeTruthy();
   });
@@ -164,11 +169,10 @@ describe("RoomJoin (/j/[roomCode])", () => {
     mockFetch((url) => (url.endsWith("/join") ? { status: 429, body: { error: "Demasiadas solicitudes", code: "forbidden" } } : { status: 200, body: info() }));
     render(<RoomJoin roomCode="ABC234" />);
     await screen.findByText("Asamblea ficticia (fixture)");
-    fireEvent.change(screen.getByLabelText("Alias"), { target: { value: "Ana" } });
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Entrar a la sala" }));
+    fireEvent.change(screen.getByLabelText("Tu nombre o apodo"), { target: { value: "Ana" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     expect(await screen.findByText("Espera un momento")).toBeTruthy();
-    expect(screen.getByLabelText("Alias")).toBeTruthy();
+    expect(screen.getByLabelText("Tu nombre o apodo")).toBeTruthy();
   });
 
   it("código inexistente → sala no encontrada", async () => {

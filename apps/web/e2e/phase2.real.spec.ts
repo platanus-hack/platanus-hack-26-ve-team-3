@@ -1,4 +1,7 @@
-import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { chromium, expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 /**
  * Fase 2 · E2E REAL, sin mocks: servidor de producción propio (`playwright.real.config.ts`), store JSON temporal,
@@ -12,7 +15,7 @@ const TITLE = "Condominio Las Acacias (ficticio): ¿cuántos proyectos vecinales
 const VOTERS = ["Vecina Ana (ficticia)", "Vecino Bruno (ficticio)"] as const;
 const PROJECTS = ["Huerto comunitario", "Iluminación del estacionamiento", "Pintura de áreas comunes"] as const;
 
-type Voter = { name: string; link: string; context: BrowserContext; page: Page; nullifier?: string };
+type Voter = { name: string; link: string; context: BrowserContext; page: Page; nullifier?: string; profileDir?: string };
 
 /** Pulsa la acción de fase del panel y espera a que el SERVIDOR reporte la fase nueva (la línea de tiempo lista todas). */
 async function confirmPhase(org: Page, electionId: string, label: string, status: string) {
@@ -28,35 +31,36 @@ async function newVoterPage(browser: Browser, name: string, link: string): Promi
   return { name, link, context, page: await context.newPage() };
 }
 
+/** Perfil persistente de Chromium (IndexedDB incluido): la clave del dispositivo sobrevive a cerrar el navegador. */
+async function persistentVoter(name: string, link: string, profileDir: string): Promise<Voter> {
+  const context = await chromium.launchPersistentContext(profileDir, { locale: "es-VE", timezoneId: "America/Caracas" });
+  return { name, link, context, page: context.pages()[0] ?? (await context.newPage()), profileDir };
+}
+
+/** Inscripción del flujo simple: Continuar → rostro (simulado sólo en E2E, sin botón) → vinculación en segundo plano. */
 async function register(v: Voter) {
   const { page } = v;
   await page.goto(v.link);
   await expect(page.getByRole("heading", { name: TITLE })).toBeVisible();
-  await page.getByRole("button", { name: "Inscribirme" }).click();
-  await page.getByLabel("Nombre").fill(v.name);
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: /continuar a la prueba de vida/i }).click();
-  await page.getByTestId("e2e-fake-face").click();
-  // Wallet real de @quorum/wallet en modo eoa-demo (sin NEXT_PUBLIC_ZERODEV_PROJECT_ID), etiquetada como demo.
-  await expect(page.getByTestId("wallet-kind")).toContainText(/demo/i);
-  await page.getByRole("button", { name: /crear wallet y firmar/i }).click();
-  await page.getByRole("button", { name: /enlazar wallet y crear credencial/i }).click();
-  await expect(page.getByRole("heading", { name: "Inscripción completa" })).toBeVisible({ timeout: 30_000 });
-  // La clave del signer eoa-demo vive en localStorage (sobrevive al cerrar la pestaña) y la credencial está cifrada.
+  await expect(page.getByTestId("step-indicator")).toContainText("Paso 1 de 2");
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+  // Wallet real de @quorum/wallet en modo eoa-demo (sin NEXT_PUBLIC_ZERODEV_PROJECT_ID), etiquetada demo en Detalles técnicos.
+  await page.getByText("Detalles técnicos").click();
+  await expect(page.getByTestId("link-mode")).toContainText(/demo/i);
+  // La clave del signer eoa-demo vive en localStorage y la credencial está cifrada con la clave del dispositivo (v3).
   expect(await page.evaluate(() => localStorage.getItem("quorum.wallet.eoaDemo.v1"))).toMatch(/^0x[0-9a-f]{64}$/);
 }
 
+/** Voto: la boleta aparece directa (sin volver a la wallet); tocar la opción y "Votar: <opción>". */
 async function vote(v: Voter, option: string) {
   const { page } = v;
   await page.goto(v.link);
-  await page.getByRole("button", { name: "Ir a votar" }).click();
-  await page.getByRole("button", { name: /crear wallet y firmar/i }).click();
-  await page.getByRole("radio", { name: new RegExp(`${option}$`) }).check();
-  await page.getByRole("button", { name: /revisar y confirmar/i }).click();
-  await page.getByRole("button", { name: /enviar mi voto/i }).click();
+  await page.getByRole("radio", { name: new RegExp(`${option}$`) }).click();
+  await page.getByRole("button", { name: `Votar: ${option}` }).click();
 }
 
-test("fase 2 real: crear → candidatos → publicar → 2 votantes (rostro, wallet, credencial) → votar con prueba → doble voto rechazado → cerrar → verificar → mi voto está → sorteo recomputado", async ({ browser, page: org, request }) => {
+test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simple: Continuar → rostro → teléfono vinculado) → votar con prueba → doble voto rechazado → cerrar → verificar → mi voto está → sorteo recomputado", async ({ browser, page: org, request }) => {
   // ---------- Organizador: crear la votación con el asistente ----------
   await org.goto("/org/new");
   await org.getByLabel("Título de la votación").fill(TITLE);
@@ -95,14 +99,15 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (rostro, wal
   }
 
   // ---------- Votantes: cada uno en su propio navegador ----------
-  const voters = [await newVoterPage(browser, VOTERS[0], links[0]), await newVoterPage(browser, VOTERS[1], links[1])];
+  const profileDir = mkdtempSync(path.join(tmpdir(), "quorum-e2e-perfil-"));
+  const voters = [await persistentVoter(VOTERS[0], links[0], profileDir), await newVoterPage(browser, VOTERS[1], links[1])];
   for (const v of voters) await register(v);
 
-  // Tras cerrar y reabrir el navegador del votante (misma persistencia), la wallet y la credencial siguen ahí.
-  const state = await voters[0].context.storageState();
+  // Tras cerrar y reabrir el navegador del votante (mismo perfil: localStorage + IndexedDB), la vinculación sigue ahí.
   await voters[0].context.close();
-  voters[0].context = await browser.newContext({ storageState: state, locale: "es-VE", timezoneId: "America/Caracas" });
-  voters[0].page = await voters[0].context.newPage();
+  voters[0] = await persistentVoter(VOTERS[0], links[0], profileDir);
+  await voters[0].page.goto(voters[0].link);
+  await expect(voters[0].page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible();
 
   // ---------- Organizador: congelar padrón y abrir ----------
   await org.reload();
@@ -119,6 +124,7 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (rostro, wal
     const receipt = v.page.getByTestId("receipt");
     await expect(receipt).toBeVisible({ timeout: 90_000 });
     await expect(receipt).toContainText("incluido");
+    await expect(v.page.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible();
     v.nullifier = (await v.page.getByTestId("receipt-inclusion-id").textContent())!.trim();
     expect(v.nullifier).toMatch(/^\d+$/);
   }
@@ -139,7 +145,7 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (rostro, wal
     .toMatch(/T04:00:00\.000Z$/); // inicio del día en Caracas (granularidad de día, AT-10)
   await voters[0].page.goto(voters[0].link);
   await expect(voters[0].page.getByTestId("voted-at")).toContainText("Votaste el");
-  await expect(voters[0].page.getByRole("button", { name: "Ir a votar" })).toHaveCount(0);
+  await expect(voters[0].page.getByTestId("ballot")).toHaveCount(0);
   // (c) Un campo `onchain` se rechaza (solo ancla on-chain).
   const withOnchain = await request.post(`/api/elections/${electionId}/vote`, { data: { ...JSON.parse(voteBodies[0]), onchain: { txHash: `0x${"ab".repeat(32)}` } } });
   expect(withOnchain.status()).toBe(400);

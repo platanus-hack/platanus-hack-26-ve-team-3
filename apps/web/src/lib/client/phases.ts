@@ -2,7 +2,7 @@
 import type { ElectionStatus as ElectionPhase } from "@quorum/contracts";
 
 export const PHASE_LINE: { id: Exclude<ElectionPhase, "draft" | "failed">; label: string; hint: string }[] = [
-  { id: "registration", label: "Inscripción", hint: "Rostro + wallet + credencial" },
+  { id: "registration", label: "Inscripción", hint: "Rostro + teléfono vinculado" },
   { id: "open", label: "Votación", hint: "Padrón congelado; voto en vivo" },
   { id: "closed", label: "Cerrada", hint: "No se aceptan más boletas" },
   { id: "tallying", label: "Escrutinio", hint: "Recuento y paquete de auditoría" },

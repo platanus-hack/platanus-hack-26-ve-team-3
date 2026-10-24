@@ -3,10 +3,10 @@ import { devices, expect, test, type CDPSession, type Page } from "@playwright/t
 
 /**
  * Peso por teléfono (servidor real, Chromium emulando un Pixel 5, cámara FALSA de Chromium):
- * inscripción con la prueba de vida REAL (Human carga sus modelos y abre la cámara) + voto con prueba Groth16.
+ * inscripción con la prueba de vida REAL (abre la cámara y Human carga sus modelos) + voto con prueba Groth16.
  * Suma los bytes transferidos por la red (CDP `encodedDataLength`, lo que de verdad viaja por el wifi), por grupo.
  * La cámara falsa no muestra un rostro: tras medir la carga de Human se comprueba su autoprueba (real/live/descriptor/
- * malla), el dedupe 1:N real con ese descriptor, y se completa la inscripción con "Simular rostro".
+ * malla), el dedupe 1:N real con ese descriptor, y se completa la inscripción con el rostro simulado de E2E (`window.__quorumFakeFace`).
  * Escribe el resumen en `QUORUM_WEIGHT_OUT` si está definido.
  */
 
@@ -65,18 +65,20 @@ test("peso por teléfono: inscripción (Human real) + voto (Groth16) en un Pixel
   const link = roster[0].inviteUrl;
   expect((await request.post(`/api/elections/${id}/publish`, { headers: auth })).status()).toBe(200);
 
-  const context = await browser.newContext({ ...devices["Pixel 5"], locale: "es-VE", timezoneId: "America/Caracas", permissions: ["camera"] });
+  // Sin service worker: la precarga de /v (y de /j) lo usaría y sus descargas no se verían en la sesión CDP de la página.
+  // Bloqueado, la precarga cae a <link rel="prefetch"> y todo lo que baja el teléfono se cuenta aquí.
+  const context = await browser.newContext({ ...devices["Pixel 5"], locale: "es-VE", timezoneId: "America/Caracas", permissions: ["camera"], serviceWorkers: "block" });
   const page = await context.newPage();
+  // Pipeline REAL de la cámara (sin el rostro simulado automático de E2E); se termina con window.__quorumFakeFace().
+  await page.addInitScript(() => sessionStorage.setItem("quorum.e2e.realFace", "1"));
+  // Sin precarga ("ahorro de datos"): cada archivo se mide UNA vez, cuando de verdad se usa (misma base que antes).
+  await page.addInitScript(() => Object.defineProperty(navigator, "connection", { value: { saveData: true } }));
   const m = await meter(page);
 
   // 1) Prueba de vida REAL: Human descarga sus modelos y abre la cámara (falsa).
   await page.goto(link);
-  await page.getByRole("button", { name: "Inscribirme" }).click();
-  await page.getByLabel("Nombre").fill("Vecina de prueba (ficticia)");
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: /continuar a la prueba de vida/i }).click();
-  await page.getByRole("button", { name: /iniciar prueba de vida/i }).click();
-  await expect(page.getByRole("button", { name: /en curso/i })).toBeVisible();
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await expect(page.getByTestId("face-capture")).toBeVisible();
   await expect.poll(() => m.files.has("/models/liveness.bin") && m.files.has("/models/faceres.bin"), { timeout: 120_000 }).toBe(true);
   await page.waitForLoadState("networkidle");
   const modelsLoaded = [...m.files.keys()].filter((f) => f.startsWith("/models/")).sort();
@@ -107,22 +109,12 @@ test("peso por teléfono: inscripción (Human real) + voto (Groth16) en un Pixel
   expect((await enroll(roster[2], other)).status()).toBe(201);
 
   // 2) Completar la inscripción (la cámara falsa no tiene rostro) y votar con prueba real.
-  await page.goto(link);
-  await page.getByRole("button", { name: "Inscribirme" }).click();
-  await page.getByLabel("Nombre").fill("Vecina de prueba (ficticia)");
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: /continuar a la prueba de vida/i }).click();
-  await page.getByTestId("e2e-fake-face").click();
-  await page.getByRole("button", { name: /crear wallet y firmar/i }).click();
-  await page.getByRole("button", { name: /enlazar wallet y crear credencial/i }).click();
-  await expect(page.getByRole("heading", { name: "Inscripción completa" })).toBeVisible({ timeout: 30_000 });
+  await page.evaluate(() => (window as unknown as { __quorumFakeFace: () => Promise<void> }).__quorumFakeFace());
+  await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
   expect((await request.post(`/api/elections/${id}/open`, { headers: auth })).status()).toBe(200);
-  await page.goto(link);
-  await page.getByRole("button", { name: "Ir a votar" }).click();
-  await page.getByRole("button", { name: /crear wallet y firmar/i }).click();
-  await page.getByRole("radio", { name: /Sí$/ }).check();
-  await page.getByRole("button", { name: /revisar y confirmar/i }).click();
-  await page.getByRole("button", { name: /enviar mi voto/i }).click();
+  // La página en espera pasa sola a la boleta (polling), sin volver a la wallet.
+  await page.getByRole("radio", { name: /Sí$/ }).click({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Votar: Sí" }).click();
   await expect(page.getByTestId("receipt")).toBeVisible({ timeout: 120_000 });
   await page.waitForLoadState("networkidle");
 

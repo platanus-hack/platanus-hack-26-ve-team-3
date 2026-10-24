@@ -1,0 +1,84 @@
+import { expect, test, type Page } from "@playwright/test";
+import { MockV1 } from "./mocks/v1";
+
+/**
+ * Flujo simple del votante (pedido de producto): cuenta las interacciones REALES (eventos `click` con `isTrusted`,
+ * los que produce un toque) de quien escanea el QR. Objetivo:
+ *   inscripción ≤ 2 toques + escribir el nombre o apodo + permitir la cámara;  voto ≤ 2 toques.
+ * También: sin jerga técnica en el flujo principal, texto base ≥ 18 px y boleta de 5 opciones sin scroll a 360×740.
+ * Contra MOCKS del contrato (e2e/mocks/v1.ts); la prueba Semaphore sí se genera de verdad en el navegador.
+ */
+const CODE = "K7M3QP";
+const FORBIDDEN = /\bwallet|\bfirma|EIP-712|Semaphore|credencial|nullifier|commitment|Kernel|on-chain/i;
+
+async function taps(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __taps: number }).__taps);
+}
+
+/** Texto visible del flujo principal (los <details> cerrados, como "Detalles técnicos", no se renderizan). */
+async function expectPlainLanguage(page: Page) {
+  const text = await page.locator("main").innerText();
+  expect(text).not.toMatch(FORBIDDEN);
+}
+
+test.use({ viewport: { width: 360, height: 740 } });
+
+test("votante: inscripción en ≤ 2 toques (+ nombre + cámara) y voto en ≤ 2 toques, en lenguaje simple", async ({ page }) => {
+  test.setTimeout(90_000);
+  const mock = new MockV1("registration");
+  mock.room = { code: CODE, open: true, seatsTaken: 12, maxSeats: 60, expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(), closedReason: null };
+  await mock.install(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __taps: number };
+    w.__taps = 0;
+    document.addEventListener("click", (e) => e.isTrusted && (w.__taps += 1), true);
+  });
+
+  /* ---------- Inscripción ---------- */
+  await page.goto(`/j/${CODE}`);
+  await expect(page.getByTestId("step-indicator")).toContainText("Paso 1 de 2");
+  await expectPlainLanguage(page);
+  const base = await page.locator("main > div").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(base).toBeGreaterThanOrEqual(18);
+
+  await page.getByLabel("Tu nombre o apodo").click(); // toque 1 (enfocar el campo)
+  await page.keyboard.type("Vecina del 4B"); // escribir
+  await page.getByRole("button", { name: "Continuar" }).click(); // toque 2
+  // Paso 2: la cámara arranca sola (aquí, rostro simulado de E2E sin botón) y la vinculación corre en segundo plano.
+  await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+  const registrationTaps = await taps(page);
+  expect(registrationTaps).toBeLessThanOrEqual(2);
+  await expectPlainLanguage(page);
+  expect(mock.joins).toEqual(["Vecina del 4B"]);
+  expect(mock.commitment).toMatch(/^\d+$/);
+
+  /* ---------- Voto ---------- */
+  mock.phase = "open";
+  const options = page.getByRole("radio");
+  await expect(options).toHaveCount(5, { timeout: 15_000 }); // la boleta aparece sola
+  await expectPlainLanguage(page);
+  // 5 opciones sin scroll: todas dentro de la pantalla, cada una ≥ 56 px.
+  for (let i = 0; i < 5; i++) {
+    const box = (await options.nth(i).boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(56);
+    expect(box.y + box.height).toBeLessThanOrEqual(740);
+  }
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  const before = await taps(page);
+  await options.nth(2).click(); // toque 1: elegir "3"
+  const vote = page.getByRole("button", { name: "Votar: 3" });
+  const voteBox = (await vote.boundingBox())!;
+  const lastOption = (await options.nth(4).boundingBox())!;
+  expect(voteBox.y + voteBox.height).toBeLessThanOrEqual(740); // el botón se ve sin hacer scroll…
+  expect(lastOption.y + lastOption.height).toBeLessThanOrEqual(voteBox.y); // …y no tapa la última opción
+  await vote.click(); // toque 2: votar (es la confirmación)
+  await expect(page.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible({ timeout: 60_000 });
+  const votingTaps = (await taps(page)) - before;
+  expect(votingTaps).toBeLessThanOrEqual(2);
+  await expectPlainLanguage(page);
+  expect((mock.voteBodies[0] as { proof: { message: string } }).proof.message).toBe("2");
+
+  test.info().annotations.push({ type: "toques", description: `inscripción ${registrationTaps} · voto ${votingTaps}` });
+  console.log(`[toques] inscripción ${registrationTaps} (+ escribir nombre + cámara) · voto ${votingTaps}`);
+});

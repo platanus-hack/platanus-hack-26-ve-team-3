@@ -11,12 +11,12 @@ const pillars = [
   {
     icon: <Vote aria-hidden="true" />,
     title: "Votar",
-    body: "Te inscribes con tu rostro (modo demo) y una wallet; tu navegador crea una credencial. Al votar genera una prueba de que estás en el padrón. La prueba no revela quién emitió cada boleta; el servidor ve el contenido de la boleta.",
+    body: "Escaneas el QR, escribes tu nombre o apodo y miras a la cámara (modo demo): tu teléfono queda vinculado. Al votar, tu teléfono genera una prueba de que estás inscrito. La prueba no revela quién emitió cada boleta; el servidor ve el contenido de la boleta.",
   },
   {
     icon: <FileCheck2 aria-hidden="true" />,
     title: "Verificar",
-    body: "Recibes un nullifier que no contiene tu opción y con el que compruebas que tu boleta sigue en el registro. En vivo sólo se publican agregados.",
+    body: "Recibes un comprobante que no contiene tu opción y con el que compruebas que tu boleta sigue en el registro. En vivo sólo se publican agregados.",
   },
   {
     icon: <ShieldCheck aria-hidden="true" />,

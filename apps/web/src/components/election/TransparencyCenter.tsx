@@ -281,6 +281,9 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
                 <li>Secreto del contenido frente al servidor, ni resistencia a coacción.</li>
                 <li>Que el padrón sea correcto: lo decide el organizador. La comprobación de rostro es de demostración y no impide todos los duplicados.</li>
                 <li>Completitud del registro sin ancla on-chain evaluada.</li>
+                <li data-testid="link-mode-limit">
+                  Vinculación del teléfono en <span className="font-semibold text-warning-strong">modo demo</span>: smart wallet demo (Kernel/ZeroDev, Base Sepolia testnet, sin gas) o, sin proveedor, wallet demo (eoa-demo). La clave vive solo en el navegador del votante; si se borra, no puede votar.
+                </li>
                 <li>No es un sistema electoral certificado. «Verificado» sólo lo muestra el verificador, nunca un dato del servidor.</li>
               </ul>
             </div>

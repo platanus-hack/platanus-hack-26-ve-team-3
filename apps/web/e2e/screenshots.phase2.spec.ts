@@ -35,38 +35,7 @@ for (const w of WIDTHS) {
       await shot(page, "01-landing", w);
     });
 
-    test(`votante: inscripción y voto ${w}`, async ({ page }) => {
-      test.setTimeout(120_000);
-      const mock = await at(page, w, "registration");
-      await page.goto(`/v/${E2E.token}`);
-      await expect(page.getByRole("heading", { name: E2E.title })).toBeVisible();
-      await shot(page, "02-votante-invitacion", w);
-      await page.getByRole("button", { name: "Inscribirme" }).click();
-      await page.getByLabel("Nombre").fill("Vecina Ana (ficticia)");
-      await page.getByRole("checkbox").check();
-      await shot(page, "03-votante-datos-consentimiento", w);
-      await page.getByRole("button", { name: /continuar a la prueba de vida/i }).click();
-      await expect(page.getByText("modo demo · no certificada")).toBeVisible();
-      await shot(page, "04-votante-rostro", w);
-      await page.getByTestId("e2e-fake-face").click();
-      await expect(page.getByTestId("wallet-kind")).toBeVisible();
-      await shot(page, "05-votante-wallet", w);
-      await page.getByRole("button", { name: /crear wallet y firmar/i }).click();
-      await expect(page.getByRole("button", { name: /enlazar wallet y crear credencial/i })).toBeVisible();
-      await shot(page, "06-votante-credencial", w);
-      await page.getByRole("button", { name: /enlazar wallet y crear credencial/i }).click();
-      await expect(page.getByRole("heading", { name: "Inscripción completa" })).toBeVisible({ timeout: 20_000 });
-      await shot(page, "07-votante-inscrito", w);
-      mock.phase = "open";
-      await page.getByRole("button", { name: /ir a votar/i }).click({ timeout: 15_000 });
-      await page.getByRole("button", { name: /crear wallet y firmar/i }).click();
-      await page.getByRole("radio", { name: /3$/ }).check();
-      await shot(page, "08-votante-boleta", w);
-      await page.getByRole("button", { name: /revisar y confirmar/i }).click();
-      await page.getByRole("button", { name: /enviar mi voto/i }).click();
-      await expect(page.getByTestId("receipt")).toBeVisible({ timeout: 60_000 });
-      await shot(page, "09-votante-comprobante", w);
-    });
+    // El flujo del votante (antes 02–09) se captura ahora en e2e/screenshots.flujo-simple.spec.ts (flujo-simple-*.png).
 
     test(`en vivo ${w}`, async ({ page }) => {
       await at(page, w, "open");

@@ -47,7 +47,7 @@ export default defineConfig({
         timeout: 120_000,
         stdout: "ignore",
         stderr: "pipe",
-        // Fase 2: Playwright no tiene cámara. Este flag (sólo E2E) muestra "Simular rostro" en la prueba de vida.
+        // Fase 2: Playwright no tiene cámara. Este flag (sólo E2E) envía SOLO un rostro simulado en el paso 2 (sin botón visible).
         // E2E hermético aunque `.env.local` tenga claves (Next no pisa variables ya definidas, aunque estén vacías):
         // sin ancla ni registro on-chain (cerrar no envía tx), sin ZeroDev (wallet eoa-demo, sin red), sin RPC.
         env: {

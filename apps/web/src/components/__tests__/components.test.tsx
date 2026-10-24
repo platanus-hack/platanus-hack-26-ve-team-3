@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuditResult } from "@quorum/contracts";
 import { AuditChecklist, checkStatus, overallStatus } from "@/components/AuditChecklist";
@@ -9,7 +9,6 @@ import { PhaseTimeline } from "@/components/election/PhaseTimeline";
 import { judgeInclusion } from "@/components/election/MyVoteCheck";
 import { CandidatesEditor, candidateId } from "@/components/org/CandidatesEditor";
 import { VoteReceiptCard } from "@/components/voter/VoteReceiptCard";
-import { WalletStep } from "@/components/voter/wallet";
 import { verifyPackageInBrowser } from "@/lib/client/zk";
 
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
@@ -81,27 +80,20 @@ describe("MyVoteCheck · judgeInclusion", () => {
   });
 });
 
-describe("VoteReceiptCard", () => {
-  it("muestra el nullifier y nunca la opción", () => {
-    render(<VoteReceiptCard electionId="e1" electionTitle="Votación ficticia" receipt={{ inclusionId: "77", nullifier: "77", index: 0, state: "incluido" }} />);
+describe("VoteReceiptCard (comprobante simple)", () => {
+  it("check grande y 'Tu voto fue contado'; el código técnico sólo en Detalles técnicos; nunca la opción; etiqueta demo", () => {
+    render(<VoteReceiptCard electionId="e1" walletMode="eoa-demo" receipt={{ inclusionId: "77", nullifier: "77", index: 0, state: "incluido" }} />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Tu voto fue contado");
     expect(screen.getByTestId("receipt-inclusion-id").textContent).toBe("77");
+    expect(screen.getByTestId("receipt-inclusion-id").closest("details")).toBeTruthy(); // dentro del desplegable
+    expect(screen.getByTestId("link-mode").textContent).toMatch(/demo/);
+    expect(screen.getByRole("link", { name: "Comprobar mi voto" }).getAttribute("href")).toBe("/e/e1?comprobar=1#mi-voto");
+    expect(screen.getByRole("link", { name: "Ver resultados en vivo" }).getAttribute("href")).toBe("/e/e1/live");
     expect(screen.getByTestId("receipt").textContent).not.toMatch(/opción elegida|Reparar/);
   });
-});
-
-describe("WalletStep real (@quorum/wallet) sin NEXT_PUBLIC_ZERODEV_PROJECT_ID", () => {
-  it("está etiquetado como demo, guarda la clave en localStorage y entrega {address, signature, mode:'eoa-demo'} por onDone", async () => {
-    localStorage.clear();
-    const onDone = vi.fn();
-    render(<WalletStep electionId="e1" voterId="v1" faceBindingHash={`0x${"ab".repeat(32)}`} onDone={onDone} />);
-    expect(screen.getByTestId("wallet-kind").textContent).toMatch(/demo/i);
-    fireEvent.click(screen.getByRole("button", { name: /crear wallet y firmar/i }));
-    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
-    const r = onDone.mock.calls[0][0];
-    expect(r.mode).toBe("eoa-demo");
-    expect(r.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
-    expect(r.signature).toMatch(/^0x[0-9a-f]{130}$/);
-    expect(localStorage.getItem("quorum.wallet.eoaDemo.v1")).toMatch(/^0x[0-9a-f]{64}$/);
+  it("recibido (sin inclusión confirmada) no dice 'contado'", () => {
+    render(<VoteReceiptCard electionId="e1" receipt={{ inclusionId: "7", nullifier: "7", state: "recibido" }} />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Tu voto fue recibido");
   });
 });
 

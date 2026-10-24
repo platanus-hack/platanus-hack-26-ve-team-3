@@ -23,7 +23,7 @@ const checkLabel: Record<string, string> = {
   group_root: "Padrón",
   chain_integrity: "Cadena",
   proofs_valid: "Pruebas",
-  nullifiers_unique: "Un voto por credencial",
+  nullifiers_unique: "Un voto por inscrito",
   tally_matches: "Recuento",
   anchor_matches: "Ancla on-chain",
   draw_matches: "Sorteo",
@@ -191,14 +191,14 @@ function RegistrationView({ election, room, counts, hasToken, now }: { election:
             {room ? formatInt(room.seatsTaken) : "—"}
             <span className="text-[0.45em] font-bold"> de {room?.maxSeats !== null && room?.maxSeats !== undefined ? formatInt(room.maxSeats) : "—"} inscritos</span>
           </p>
-          {ready !== null ? <p className="mt-2 text-[clamp(1.1rem,2vw,2.4rem)] font-semibold">{formatInt(ready)} ya completaron rostro y credencial</p> : null}
+          {ready !== null ? <p className="mt-2 text-[clamp(1.1rem,2vw,2.4rem)] font-semibold">{formatInt(ready)} ya vincularon su teléfono</p> : null}
         </div>
         {left ? (
           <p className="text-[clamp(1.4rem,3vw,3.6rem)] font-bold tabular-nums" data-testid="projector-countdown">
             La entrada cierra en {left}
           </p>
         ) : null}
-        <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#2C3A4E]">Entras con un alias. El descriptor facial (demo) se borra al abrir la votación.</p>
+        <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#2C3A4E]">Entras con un nombre o apodo. El descriptor facial (demo) se borra al abrir la votación.</p>
         {election.status === "draft" ? <p className="text-[clamp(1rem,1.5vw,1.8rem)] font-bold">La inscripción todavía no abre.</p> : null}
       </div>
     </div>

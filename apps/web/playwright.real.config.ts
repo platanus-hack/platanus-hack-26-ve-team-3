@@ -14,7 +14,7 @@ import { defineConfig, devices } from "@playwright/test";
  *    queda "no evaluado" (la UI lo muestra "no verificable");
  *  - sin NEXT_PUBLIC_ZERODEV_PROJECT_ID → wallet `eoa-demo` (sin red);
  *  - invitaciones en dry-run, sin AI Gateway, FACE_KEY de prueba aleatoria (obligatoria con NODE_ENV=production);
- *  - NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE=1 → "Simular rostro" (Playwright no tiene cámara).
+ *  - NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE=1 → rostro simulado automático en el paso 2 (Playwright no tiene cámara).
  * Compila en `.next-e2e-real` para no pisar el build normal (las NEXT_PUBLIC_* se fijan al compilar).
  */
 const PORT = Number(process.env.QUORUM_E2E_REAL_PORT ?? 3318);

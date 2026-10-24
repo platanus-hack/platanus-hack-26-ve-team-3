@@ -11,7 +11,7 @@ const openRoom = (m: MockV1, seats = 60, taken = 0) => {
 };
 
 test.describe("sala abierta · /j/[roomCode]", () => {
-  test("alias + consentimiento → /v/<token>; la inscripción salta directo a la prueba de vida; recargar /j retoma", async ({ page }) => {
+  test("nombre o apodo + Continuar → /v/<token> abre directo la cámara y queda inscrito; recargar /j retoma", async ({ page }) => {
     const mock = new MockV1("registration");
     openRoom(mock, 60, 26);
     await mock.install(page);
@@ -28,27 +28,28 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     expect(cached).toHaveLength(12);
     expect(cached.some((p) => p.includes("iris"))).toBe(false);
 
-    await page.getByLabel("Alias").fill("0412 555 1234");
-    await page.getByRole("button", { name: "Entrar a la sala" }).click();
+    await page.getByLabel("Tu nombre o apodo").fill("0412 555 1234");
+    await page.getByRole("button", { name: "Continuar" }).click();
     await expect(page.getByText(/No uses tu teléfono/)).toBeVisible();
     expect(mock.joins).toHaveLength(0);
 
-    await page.getByLabel("Alias").fill("Vecina del 4B");
-    await page.getByRole("checkbox").check();
-    await page.getByRole("button", { name: "Entrar a la sala" }).click();
+    await page.getByLabel("Tu nombre o apodo").fill("Vecina del 4B");
+    await page.getByRole("button", { name: "Continuar" }).click();
     await page.waitForURL(`**/v/${E2E.token}`);
     expect(mock.joins).toEqual(["Vecina del 4B"]);
     const stored = await page.evaluate((c) => localStorage.getItem(`quorum.room.${c}`), CODE);
     expect(JSON.parse(stored!).inviteToken).toBe(E2E.token);
 
-    await page.getByRole("button", { name: "Inscribirme" }).click();
-    await expect(page.getByText("modo demo · no certificada")).toBeVisible(); // ya aceptó en /j: no se repite el formulario
+    // Ya aceptó en /j: no se repite el consentimiento; el paso 2 (rostro) arranca solo y la vinculación también.
+    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+    expect(mock.commitment).toMatch(/^\d+$/);
 
     await page.goto(`/j/${CODE}`);
     await expect(page.getByTestId("room-resume")).toContainText("Vecina del 4B");
-    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByTestId("room-resume").getByRole("button", { name: "Continuar" }).click();
     await page.waitForURL(`**/v/${E2E.token}`);
     expect(mock.joins).toHaveLength(1);
+    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible();
   });
 
   test("sala llena → modo observador (ver en vivo, verificar, sorteo)", async ({ page }) => {
@@ -61,7 +62,7 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     await expect(obs.getByRole("link", { name: /Ver en vivo/ })).toHaveAttribute("href", `/e/${E2E.electionId}/live`);
     await expect(obs.getByRole("link", { name: /Verificar el escrutinio/ })).toHaveAttribute("href", `/e/${E2E.electionId}#verificar`);
     await expect(obs.getByRole("link", { name: /Recomputar el sorteo/ })).toHaveAttribute("href", `/e/${E2E.electionId}/draw`);
-    await expect(page.getByLabel("Alias")).toHaveCount(0);
+    await expect(page.getByLabel("Tu nombre o apodo")).toHaveCount(0);
   });
 
   test("la votación ya comenzó → observador; se llenó mientras escribía (409) → observador", async ({ page }) => {
@@ -77,10 +78,9 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     mock.phase = "registration";
     openRoom(mock, 5, 4);
     await page.goto(`/j/${CODE}`);
-    await page.getByLabel("Alias").fill("Ana");
-    await page.getByRole("checkbox").check();
+    await page.getByLabel("Tu nombre o apodo").fill("Ana");
     mock.room!.seatsTaken = 5; // alguien tomó el último lugar
-    await page.getByRole("button", { name: "Entrar a la sala" }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
     await expect(page.getByText("La sala está llena")).toBeVisible();
     await expect(page.getByTestId("observer-mode")).toBeVisible();
   });

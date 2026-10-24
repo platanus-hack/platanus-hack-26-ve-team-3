@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { StatusPill, type HonestStatus } from "@/components/StatusPill";
 import { Alert } from "@/components/ui/alert";
@@ -43,6 +43,7 @@ export function MyVoteCheck({ electionId, verified }: { electionId: string; veri
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // El comprobante vive en localStorage (sólo cliente): se lee tras montar para no romper la hidratación.
   useEffect(() => {
@@ -51,6 +52,8 @@ export function MyVoteCheck({ electionId, verified }: { electionId: string; veri
     const t = window.setTimeout(() => {
       setValue(r.nullifier);
       setFromReceipt(true);
+      // Desde el comprobante ("Comprobar mi voto" → ?comprobar=1#mi-voto): comprobar sin pedir otro toque.
+      if (new URLSearchParams(window.location.search).get("comprobar") === "1") window.setTimeout(() => formRef.current?.requestSubmit(), 50);
     }, 0);
     return () => clearTimeout(t);
   }, [electionId]);
@@ -96,7 +99,7 @@ export function MyVoteCheck({ electionId, verified }: { electionId: string; veri
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={check} className="flex flex-col gap-3" noValidate>
+        <form ref={formRef} onSubmit={check} className="flex flex-col gap-3" noValidate>
           <Field label="Nullifier" htmlFor={inputId} hint={fromReceipt ? "Tomado del comprobante guardado en este navegador." : "Pégalo desde tu comprobante."}>
             <Input
               id={inputId}

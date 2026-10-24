@@ -75,6 +75,10 @@ export class MockV1 {
   /** Respuesta de GET /audit (para el proyector); `null` → 404. */
   auditBody: unknown = null;
   anchorTx: string | null = null;
+  /** `POST /face/enroll` responde 409 `duplicate_identity` (rostro ya inscrito). */
+  faceDuplicate = false;
+  /** Retrasos artificiales (ms) para capturar estados intermedios ("Vinculando…", "Enviando tu voto…"). */
+  delays: Partial<Record<"wallet" | "vote", number>> = {};
 
   constructor(phase: Phase) {
     this.phase = phase;
@@ -157,8 +161,10 @@ export class MockV1 {
         voter: { id: E2E.voterId, displayName: "Vecina Ana (ficticia)", walletAddress: this.wallet?.walletAddress ?? null, livenessPassedAt: null, votedAt: null },
       });
     if (p.startsWith("/api/invite/")) return this.json(route, { error: "invitación no existe", code: "not_found" }, 404);
+    if (p === "/api/face/enroll" && m === "POST" && this.faceDuplicate) return this.json(route, { error: "Este rostro ya está inscrito en esta votación", code: "duplicate_identity" }, 409);
     if (p === "/api/face/enroll" && m === "POST") return this.json(route, { ok: true, faceBindingHash: `0x${"5a".repeat(32)}`, voteNonce: `0x${"01".repeat(32)}` });
     if (p === `/api/voters/${E2E.voterId}/wallet` && m === "POST") {
+      if (this.delays.wallet) await new Promise((r) => setTimeout(r, this.delays.wallet));
       this.wallet = body as never;
       return this.json(route, { id: E2E.voterId, walletAddress: body.walletAddress });
     }
@@ -213,6 +219,7 @@ export class MockV1 {
     if (p === `${E}/roll`)
       return this.json(route, { electionId: E2E.electionId, status: this.phase, frozen: true, groupRoot: "0", scope: "0", merkleTreeDepth: 10, commitments: [validPkg.commitments[0], ...(this.commitment ? [this.commitment] : []), validPkg.commitments[1]] });
     if (p === `${E}/vote` && m === "POST") {
+      if (this.delays.vote) await new Promise((r) => setTimeout(r, this.delays.vote));
       this.voteBodies.push(body);
       const proof = body.proof as { nullifier: string };
       this.nullifier = proof.nullifier;

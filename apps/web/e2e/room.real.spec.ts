@@ -3,7 +3,7 @@ import { expect, test, type Browser } from "@playwright/test";
 /**
  * Sala abierta contra el SERVIDOR REAL (`next start`, DATA_DIR temporal, sin claves on-chain). Sin mocks.
  * crear elección → abrir inscripción → abrir sala desde el panel (tope 2) → 2 personas entran por /j → llegan a /v/<token>
- * → la tercera encuentra la sala llena → modo observador. El proyector (con token) muestra el QR del joinUrl.
+ * → paso 2 automático: quedan inscritos → la tercera encuentra la sala llena → modo observador. El proyector (con token) muestra el QR del joinUrl.
  */
 const TITLE = "Asamblea de prueba E2E (ficticia): ¿pintamos el pasillo?";
 
@@ -55,16 +55,16 @@ test("sala real: 2 entran por /j y llegan a /v/<token>; la sala llena ofrece mod
     const p = await ctx.newPage();
     await p.goto(`/j/${code.toLowerCase()}`);
     await expect(p.getByRole("heading", { name: TITLE })).toBeVisible();
-    await p.getByLabel("Alias").fill(alias);
-    await p.getByRole("checkbox").check();
-    await p.getByRole("button", { name: "Entrar a la sala" }).click();
+    await expect(p.getByTestId("step-indicator")).toContainText("Paso 1 de 2");
+    await p.getByLabel("Tu nombre o apodo").fill(alias);
+    await p.getByRole("button", { name: "Continuar" }).click();
     await p.waitForURL(/\/v\/[^/]+$/);
     const token = p.url().split("/v/")[1];
     const stored = JSON.parse((await p.evaluate((c) => localStorage.getItem(`quorum.room.${c}`), code))!) as { inviteToken: string };
     expect(stored.inviteToken).toBe(token);
-    // /v/<token> carga la invitación real (fase inscripción) y ofrece inscribirse.
-    await expect(p.getByRole("heading", { name: TITLE })).toBeVisible();
-    await expect(p.getByRole("button", { name: "Inscribirme" })).toBeVisible();
+    // /v/<token> (invitación real, fase inscripción): ya aceptó en /j → paso 2 directo (rostro simulado sólo en E2E) y
+    // vinculación en segundo plano contra el servidor real (FaceBinding verificado + commitment).
+    await expect(p.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
     await ctx.close();
   }
 
@@ -76,7 +76,7 @@ test("sala real: 2 entran por /j y llegan a /v/<token>; la sala llena ofrece mod
   await p3.goto(`/j/${code}`);
   await expect(p3.getByText("La sala está llena")).toBeVisible();
   await expect(p3.getByTestId("observer-mode")).toBeVisible();
-  await expect(p3.getByLabel("Alias")).toHaveCount(0);
+  await expect(p3.getByLabel("Tu nombre o apodo")).toHaveCount(0);
   // Y el servidor lo confirma si alguien insiste por API: 409 room_full.
   const forced = await request.post(`/api/rooms/${code}/join`, { data: { displayName: "Insistente" } });
   expect(forced.status()).toBe(409);
