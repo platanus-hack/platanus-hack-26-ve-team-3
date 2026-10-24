@@ -1,0 +1,8 @@
+{
+  "name": "@quorum/ui",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Design tokens de Quórum (CSS custom properties). Fuente: docs/DESIGN_SYSTEM.md",
+  "exports": { "./tokens.css": "./tokens.css" },
+  "scripts": { "typecheck": "echo skip", "lint": "echo skip", "test": "echo skip", "build": "echo skip" }
+}
