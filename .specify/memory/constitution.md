@@ -1,50 +1,18 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Quórum — Constitución del proyecto (modo hackathon)
 
-## Core Principles
-
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
-
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
-
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
-
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
-
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
-
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
-
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
-
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
-
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
-
-## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
-
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
-
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+1. Entregar software que funciona, no mocks: cada pantalla habla con una API real o muestra un fixture etiquetado.
+2. Un solo recorrido crítico primero: organizar → invitar → identificar (rostro + wallet) → votar → cerrar → verificar → detectar manipulación.
+3. Límites de seguridad en el servidor: la UI y el LLM nunca otorgan permisos ni declaran `verificado`.
+4. Validar toda entrada externa con esquemas Zod (`@quorum/contracts`).
+5. Nunca inventar respuestas de API, resultados de tests ni integraciones.
+6. Cada feature tiene criterios de aceptación medibles (`docs/ACCEPTANCE.md`).
+7. Arquitectura comprensible: monorepo pnpm, Next.js App Router, verificador en paquete aparte.
+8. Tests automáticos para el comportamiento crítico (voto, cierre, verificación, adversariales).
+9. `main` siempre desplegable; CI verde para mergear.
+10. Cambios pequeños y revisables; un PR por carril.
+11. Paralelizar solo tareas independientes con propiedad de archivos explícita.
+12. Reservar tiempo para integración (H+20–26) y demo (H+33–36).
+13. Nunca commitear secretos ni datos personales (teléfonos, rostros, cédulas).
+14. Aprobación humana en la página de la oficina para acciones destructivas o externas (deploy, WhatsApp real, merge).
+15. Demostrar valor real en tres minutos: voto privado, verificación independiente, fraude detectado.
+16. Política de claims: sin "anónimo", "ZK", "100% seguro" ni política real salvo prueba implementada (spec §12).
