@@ -30,9 +30,9 @@ function HeroCopy() {
       </div>
       <Glass className="max-w-lg px-5 py-4">
         <dl className="grid grid-cols-3 gap-2">
-          <StatItem value="2" label="toques para votar" />
-          <StatItem value="0" label="fotos guardadas" />
-          <StatItem value="1" label="voto por persona" />
+          <StatItem from={0} value={2} label="toques para votar" delay={300} />
+          <StatItem from={256} value={0} label="datos biométricos al cerrar" delay={500} />
+          <StatItem from={0} value={1} label="voto por persona" delay={700} />
         </dl>
       </Glass>
     </div>

@@ -326,8 +326,38 @@ body {
 .q-flow-timer {
   animation: q-flow-timer linear forwards;
 }
+@keyframes q-flow-hl {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+    background-size: 0% 100%;
+  }
+  40% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.q-flow-hl {
+  background-image: linear-gradient(var(--color-primary-soft), var(--color-primary-soft));
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  animation: q-flow-hl 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+@keyframes q-pop {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.25);
+  }
+}
+.q-pop {
+  animation: q-pop 0.4s ease-out backwards;
+}
 @media (prefers-reduced-motion: reduce) {
   .q-flow-in,
+  .q-flow-hl,
+  .q-pop,
   .q-flow-ring,
   .q-flow-link {
     animation: none;

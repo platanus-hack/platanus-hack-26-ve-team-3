@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Blocks, Check, Fingerprint, ListChecks, ScanFace, ShieldCheck, Wallet, X } from "lucide-react";
+import { Blocks, Check, Fingerprint, ListChecks, Lock, ScanFace, ShieldCheck, Wallet, X } from "lucide-react";
 import { Glass } from "@/components/ui/glass";
 import { cn } from "@/lib/client/cn";
 
@@ -172,11 +172,15 @@ export function Stage({ step, header = false, playing = false }: { step: number;
           {step === 0 ? <FaceStage /> : step === 1 ? <AccountStage /> : step === 2 ? <RollStage /> : step === 3 ? <VoteStage /> : step === 4 ? <ChainStage /> : <VerifyStage />}
         </div>
         <div className="border-t border-border bg-card/70 p-5 md:px-7">
-          <p className="q-eyebrow">Por dentro</p>
-          <ul className="mt-2 flex flex-col gap-1.5">
+          <p className="q-eyebrow flex items-center gap-1.5 text-primary-ink">
+            <Lock aria-hidden="true" className="size-3.5" /> Por dentro
+          </p>
+          <ul className="mt-3 flex flex-col gap-2">
             {s.how.map((h, i) => (
-              <li key={h} className="q-flow-in flex gap-2 text-small text-foreground" style={{ animationDelay: `${600 + i * 180}ms` }}>
-                <span aria-hidden="true" className="mt-[0.4rem] size-1.5 shrink-0 rounded-full bg-primary" />
+              <li key={h} className="q-flow-hl flex items-start gap-2.5 rounded-md px-2.5 py-1.5 text-small font-medium text-foreground" style={{ animationDelay: `${700 + i * 450}ms` }}>
+                <span aria-hidden="true" className="q-pop mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground" style={{ animationDelay: `${900 + i * 450}ms` }}>
+                  <Check className="size-2.5" strokeWidth={3.5} />
+                </span>
                 {h}
               </li>
             ))}

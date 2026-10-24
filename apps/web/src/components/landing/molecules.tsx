@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ResultsCard } from "@/components/results/ResultsCard";
 import { Glass } from "@/components/ui/glass";
+import { CountTo } from "./count";
 import { cn } from "@/lib/client/cn";
 
 export function FloatingChip({ icon, children, className }: { icon: React.ReactNode; children: React.ReactNode; className?: string }) {
@@ -12,11 +13,13 @@ export function FloatingChip({ icon, children, className }: { icon: React.ReactN
   );
 }
 
-export function StatItem({ value, label }: { value: string; label: string }) {
+export function StatItem({ value, from, label, delay }: { value: number; from: number; label: string; delay?: number }) {
   return (
     <div className="flex flex-col-reverse justify-end">
       <dt className="mt-1 text-small text-muted-foreground">{label}</dt>
-      <dd className="q-num text-title font-semibold leading-none">{value}</dd>
+      <dd className="q-num text-title font-semibold leading-none tabular-nums">
+        <CountTo from={from} to={value} delay={delay} />
+      </dd>
     </div>
   );
 }
