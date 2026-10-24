@@ -7,11 +7,11 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCountdown, formatInt, formatPercent } from "@/lib/client/format";
 import { ProgressRow } from "@/components/ui/progress-row";
+import { SERIES } from "@/components/results/series";
 
 const HIDDEN_NOTE = "Desglose oculto hasta 5 votos";
 
 /* Paleta categórica desde tokens (--color-chart-1..10), cambia sola con el tema. */
-const SERIES = Array.from({ length: 10 }, (_, i) => `var(--color-chart-${i + 1})`);
 
 const TOOLTIP_STYLE = {
   borderRadius: 12,
@@ -42,7 +42,7 @@ function TileShell({ title, children, note }: { title: string; children: React.R
 export function StatTile({ metric, data }: { metric: "turnout" | "totalVotes" | "leadingShare"; data: Aggregates }) {
   const def = {
     turnout: { title: "Participación", value: formatPercent(data.turnout), note: `${formatInt(data.totalVotes)} de ${formatInt(data.eligible)} elegibles` },
-    totalVotes: { title: "Votos incluidos", value: formatInt(data.totalVotes), note: "Nunca votos individuales" },
+    totalVotes: { title: "Votos", value: formatInt(data.totalVotes), note: "Solo totales" },
     leadingShare: { title: "Opción líder", value: data.leadingShare === null ? "—" : formatPercent(data.leadingShare), note: data.leadingShare === null ? HIDDEN_NOTE : "Opción con más votos" },
   }[metric];
   return (

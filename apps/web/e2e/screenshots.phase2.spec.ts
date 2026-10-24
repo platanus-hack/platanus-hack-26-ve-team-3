@@ -51,7 +51,7 @@ for (const w of WIDTHS) {
       await page.goto(`/e/${E2E.electionId}`);
       await page.getByRole("button", { name: "Verificar ahora" }).click();
       await expect(page.getByTestId("audit-verdict")).toContainText("verificado", { timeout: 30_000 });
-      await page.getByLabel("Nullifier").fill(E2E.fixtureNullifier);
+      await page.getByLabel("Código del comprobante").fill(E2E.fixtureNullifier);
       await page.getByRole("button", { name: "Comprobar" }).click();
       await expect(page.getByTestId("my-vote-result")).toBeVisible();
       await shot(page, "11-transparencia-verificar-ahora", w);

@@ -12,7 +12,10 @@ export function Badge({ className, tone = "neutral", ...props }: React.HTMLAttri
   return <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-small font-semibold", t, className)} {...props} />;
 }
 
-/** Etiqueta para datos de ejemplo. */
-export function FixtureTag({ children = "ejemplo" }: { children?: React.ReactNode }) {
-  return <Badge tone="neutral">{children}</Badge>;
+export function FixtureTag({ children = "ejemplo", className }: { children?: React.ReactNode; className?: string }) {
+  return (
+    <Badge tone="neutral" className={className}>
+      {children}
+    </Badge>
+  );
 }

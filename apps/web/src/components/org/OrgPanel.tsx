@@ -7,12 +7,11 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { PhaseTimeline } from "@/components/election/PhaseTimeline";
-import { describeError, type InvitesResponse } from "@/lib/client/api";
+import { orgMessage, type InvitesResponse } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { cn } from "@/lib/client/cn";
 import { copyText } from "@/lib/client/download";
 import { formatDateTime, formatInt, formatPercent } from "@/lib/client/format";
 import { appendVoters, consumeTokenReveal, loadOrgToken, loadVoters, rememberElection, saveOrgToken, type StoredVoter } from "@/lib/client/orgStore";
@@ -23,11 +22,16 @@ import { CandidatesList } from "./CandidatesEditor";
 import { ContinuousCard } from "./ContinuousCard";
 import { ReviewsCard } from "./ReviewsCard";
 import { RoomCard, openProjector } from "@/components/room/RoomCard";
-import { ActionBar, PageHeader } from "@/components/ui/page-header";
+import { PageHeader } from "@/components/ui/page-header";
 import { Stat, StatGrid } from "@/components/ui/stat";
+import { ConfirmInline } from "@/components/ui/confirm-inline";
+import { ChoiceChips } from "@/components/ui/choice-chips";
+import { Disclosure } from "@/components/ui/disclosure";
 
 type Channel = "dry-run" | "wame";
 const stateLabel = { invited: "Invitado", registered: "Inscrito", voted: "Votó" } as const;
+const statLabel = { invited: "Invitados", registered: "Inscritos", voted: "Votaron" } as const;
+const NEEDS_KEY = "Necesitas tu clave de organizador.";
 
 /**
  * Panel del organizador v1: fase actual y UN botón por fase (abrir inscripción → congelar padrón y abrir votación →
@@ -94,10 +98,10 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           setVotersError(null);
         } else {
           setVoters(null);
-          setVotersError(describeError(v.reason));
+          setVotersError(orgMessage(v.reason));
         }
       } catch (err) {
-        if (!cancelled) setError(describeError(err));
+        if (!cancelled) setError(orgMessage(err));
       }
     })();
     return () => {
@@ -142,7 +146,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       setConfirming(false);
       reload();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setActing(false);
     }
@@ -157,7 +161,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       const res = await apiV1.sendInvites(electionId, { electionId, voterIds: ids, channel });
       setInviteResults(res.results);
     } catch (e) {
-      setInviteError(describeError(e));
+      setInviteError(orgMessage(e));
     } finally {
       setSending(false);
     }
@@ -183,7 +187,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       setNewList("");
       reload();
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setAdding(false);
     }
@@ -210,7 +214,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   if (!election) {
     return (
       <div className="q-container py-10">
-        <LoadingState label="Cargando panel del organizador…" lines={5} />
+        <LoadingState label="Cargando…" lines={5} />
       </div>
     );
   }
@@ -232,28 +236,30 @@ export function OrgPanel({ electionId }: { electionId: string }) {
     <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
       <PageHeader title={election.title} meta={<>Cierra {formatDateTime(election.endsAt)}</>}>
         <PhaseTimeline phase={phase} continuous={continuous} />
-        <ActionBar>
-          <Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "soft", size: "sm" }))}>
-            Transparencia
-          </Link>
-          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "soft", size: "sm" }))}>
+        <nav aria-label="Ver la votación" className="flex flex-wrap gap-x-5">
+          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={buttonVariants({ variant: "link" })}>
             En vivo
           </Link>
-          <Button variant="soft" size="sm" onClick={() => openProjector(electionId)}>
-            Proyectar
-          </Button>
-        </ActionBar>
+          <Link href={`/e/${encodeURIComponent(electionId)}`} className={buttonVariants({ variant: "link" })}>
+            Transparencia
+          </Link>
+          {phase !== "registration" ? (
+            <Button variant="link" onClick={() => openProjector(electionId)}>
+              Proyectar
+            </Button>
+          ) : null}
+        </nav>
       </PageHeader>
 
       {reveal ? (
-        <Alert tone="warning" title="Tu token de organizador: guárdalo">
+        <Alert tone="warning" title="Guarda tu clave de organizador">
           <p>Se muestra una sola vez. Lo necesitas para abrir, cerrar y sortear.</p>
           <p className="q-mono mt-2 break-all rounded-md border border-border bg-card p-2 text-foreground" data-testid="org-token">
             {reveal}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Button size="sm" variant="secondary" onClick={() => copy(reveal, "token")}>
-              <Copy aria-hidden="true" /> {copied === "token" ? "Copiado" : "Copiar token"}
+              <Copy aria-hidden="true" /> {copied === "token" ? "Copiado" : "Copiar clave"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setReveal(null)}>
               Ya lo guardé
@@ -265,15 +271,15 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       {!token ? (
         <Card>
           <CardHeader>
-            <CardTitle>Token del organizador</CardTitle>
+            <CardTitle>Clave de organizador</CardTitle>
             <CardDescription>El que recibiste al crear la votación.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <Field label="Token" htmlFor="org-token-input">
+            <Field label="Clave" htmlFor="org-token-input">
               <Input id="org-token-input" type="password" autoComplete="off" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} className="q-mono" />
             </Field>
             <Button onClick={applyToken} disabled={!tokenInput.trim()}>
-              <KeyRound aria-hidden="true" /> Usar token
+              <KeyRound aria-hidden="true" /> Usar clave
             </Button>
           </CardContent>
         </Card>
@@ -307,22 +313,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
                 ) : null}
               </>
             ) : (
-              <div className="q-fade-in flex flex-col gap-3 rounded-md bg-muted p-4">
-                {warnings.map((w) => (
-                  <p key={w} className="text-small font-semibold text-warning-strong" data-testid="open-warning">
-                    {w}
-                  </p>
-                ))}
-                <p className="text-body">{action.confirm} ¿Seguimos?</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="secondary" onClick={() => setConfirming(false)} disabled={acting}>
-                    Cancelar
-                  </Button>
-                  <Button onClick={act} loading={acting}>
-                    Sí, {action.label.toLowerCase()}
-                  </Button>
-                </div>
-              </div>
+              <ConfirmInline message={`${action.confirm} ¿Seguimos?`} confirmLabel={`Sí, ${action.label.toLowerCase()}`} onConfirm={act} onCancel={() => setConfirming(false)} loading={acting} warnings={warnings} warningTestId="open-warning" />
             )
           ) : (
             <p className="text-small text-muted-foreground">
@@ -335,7 +326,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
                     : "No hay nada pendiente."}
             </p>
           )}
-          {!token && action ? <p className="text-small text-muted-foreground">Necesitas el token del organizador.</p> : null}
+          {!token && action ? <p className="text-small text-muted-foreground">{NEEDS_KEY}</p> : null}
           {hasAuditPackage(phase) ? (
             <div className="flex flex-col gap-1 text-small">
               <a href={`/api/elections/${encodeURIComponent(electionId)}/artifacts`} download className="inline-flex min-h-tap items-center gap-2 font-semibold underline underline-offset-4">
@@ -360,9 +351,9 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           <StatGrid className="md:grid-cols-4">
             <Stat label="Participación" value={tally ? formatPercent(tally.turnout) : "—"} hint={tally ? `${formatInt(tally.totalVotes)} de ${formatInt(tally.eligible)}` : undefined} />
             {shownCounts ? (
-              (["invited", "registered", "voted"] as const).map((k) => <Stat key={k} label={stateLabel[k]} value={formatInt(shownCounts[k])} />)
+              (["invited", "registered", "voted"] as const).map((k) => <Stat key={k} label={statLabel[k]} value={formatInt(shownCounts[k])} />)
             ) : (
-              <p className="col-span-2 self-center text-small text-muted-foreground md:col-span-3">{token ? "No se pudo leer la lista de participantes." : "Requiere el token del organizador."}</p>
+              <p className="col-span-2 self-center text-small text-muted-foreground md:col-span-3">{token ? "No se pudo leer la lista de participantes." : NEEDS_KEY}</p>
             )}
           </StatGrid>
         </CardContent>
@@ -378,7 +369,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         <ReviewsCard electionId={electionId} reviews={reviews} hasToken={Boolean(token)} onDecided={reload} />
       ) : null}
 
-      {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} onPhaseChange={reload} eligibility={election.eligibility} onElectionChange={setElection} readiness={readiness} /> : null}
+      {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} eligibility={election.eligibility} onElectionChange={setElection} /> : null}
 
       {(election.candidates?.length ?? 0) > 0 ? (
         <Card>
@@ -403,22 +394,26 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {votersError && token ? (
-            <Alert tone="warning" title="No se pudo leer GET /voters">
+            <Alert tone="warning" title="No se pudo cargar la lista de participantes">
               {votersError}
             </Alert>
           ) : null}
           {voters && voters.length === 0 ? <EmptyState title="Aún no hay participantes">Agrégalos abajo, uno por línea.</EmptyState> : null}
           {voters && voters.length > 0 ? (
             <>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <Field label="Canal" htmlFor="channel">
-                  <Select id="channel" value={channel} onChange={(e) => setChannel(e.target.value as Channel)}>
-                    <option value="dry-run">Sin envío (prueba)</option>
-                    <option value="wame">wame (enlaces wa.me para copiar)</option>
-                  </Select>
-                </Field>
-                <Button onClick={sendInvites} loading={sending} disabled={!canAddVoters}>
-                  <Send aria-hidden="true" /> Enviar invitaciones ({voters.length})
+              <div className="flex flex-col gap-3">
+                <ChoiceChips
+                  name="channel"
+                  legend="Invitaciones"
+                  choices={[
+                    { value: "dry-run", label: "Solo generar enlaces" },
+                    { value: "wame", label: "Enlaces de WhatsApp" },
+                  ]}
+                  value={channel}
+                  onChange={setChannel}
+                />
+                <Button variant="secondary" full onClick={sendInvites} loading={sending} disabled={!canAddVoters}>
+                  <Send aria-hidden="true" /> Generar enlaces ({voters.length})
                 </Button>
               </div>
               {inviteError ? (
@@ -454,9 +449,8 @@ export function OrgPanel({ electionId }: { electionId: string }) {
             </>
           ) : null}
           {canAddVoters ? (
-            <details className="rounded-md border border-border p-3">
-              <summary className="cursor-pointer font-semibold">Agregar participantes</summary>
-              <div className="mt-3 flex flex-col gap-3">
+            <Disclosure title="Agregar participantes" bodyClassName="flex flex-col gap-3">
+              <div className="flex flex-col gap-3">
                 <Field label="Una por línea: Nombre, +58412… (teléfono opcional)" htmlFor="newList">
                   <Textarea id="newList" value={newList} onChange={(e) => setNewList(e.target.value)} />
                 </Field>
@@ -464,7 +458,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
                   Registrar
                 </Button>
               </div>
-            </details>
+            </Disclosure>
           ) : (
             <p className="text-small text-muted-foreground">El padrón está congelado: no se pueden agregar participantes.</p>
           )}

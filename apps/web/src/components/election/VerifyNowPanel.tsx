@@ -80,7 +80,7 @@ export function VerifyNowPanel({ source, serverAudit, onVerified }: { source: Pa
             {source.kind === "fixture" ? <Badge tone="neutral">{source.label}</Badge> : null}
           </div>
           <CardDescription>
-            Tu navegador recalcula padrón, pruebas y recuento sin confiar en el servidor.
+            Tu teléfono recalcula el resultado sin confiar en el servidor.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -88,7 +88,7 @@ export function VerifyNowPanel({ source, serverAudit, onVerified }: { source: Pa
             <ShieldQuestion aria-hidden="true" /> {phase === "done" || phase === "error" ? "Verificar de nuevo" : "Verificar ahora"}
           </Button>
           <p role="status" aria-live="polite" className="text-small text-muted-foreground">
-            {phase === "downloading" ? "Descargando el paquete…" : phase === "verifying" ? "Ejecutando el verificador en tu navegador (incluye las pruebas Groth16)…" : phase === "done" && run ? `Verificación ejecutada en ${run.ms} ms en tu navegador.` : ""}
+            {phase === "downloading" ? "Descargando el paquete…" : phase === "verifying" ? "Comprobando en tu navegador… (puede tardar unos segundos)" : phase === "done" && run ? `Verificación ejecutada en ${run.ms} ms en tu navegador.` : ""}
           </p>
           {run?.inputDigest ? (
             <p className="text-small">

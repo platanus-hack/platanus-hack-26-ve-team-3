@@ -66,8 +66,8 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     await expect(page.getByText("La sala está llena")).toBeVisible();
     const obs = page.getByTestId("observer-mode");
     await expect(obs.getByRole("link", { name: /Ver en vivo/ })).toHaveAttribute("href", `/e/${E2E.electionId}/live`);
-    await expect(obs.getByRole("link", { name: /Verificar el escrutinio/ })).toHaveAttribute("href", `/e/${E2E.electionId}#verificar`);
-    await expect(obs.getByRole("link", { name: /Recomputar el sorteo/ })).toHaveAttribute("href", `/e/${E2E.electionId}/draw`);
+    await expect(obs.getByRole("link", { name: /Comprobar el resultado/ })).toHaveAttribute("href", `/e/${E2E.electionId}#verificar`);
+    await expect(obs.getByRole("link", { name: /Ver el sorteo/ })).toHaveAttribute("href", `/e/${E2E.electionId}/draw`);
     await expect(page.getByLabel("Tu nombre o apodo")).toHaveCount(0);
   });
 
@@ -112,7 +112,6 @@ test.describe("panel del organizador · tarjeta Sala abierta", () => {
     await card.getByTestId("start-in-5").click();
     await expect(start).toContainText(/La votación empieza en 0[45]:\d\d/);
     expect(mock.schedules).toEqual([{ addSeconds: 300 }, { inSeconds: 300 }]);
-    await expect(card.getByTestId("start-now")).toBeVisible();
     await expect(card.getByTestId("room-join-url")).toHaveText(new RegExp(`/j/${CODE}$`));
     await expect(card.getByTestId("room-open")).toContainText("Ampliar");
 

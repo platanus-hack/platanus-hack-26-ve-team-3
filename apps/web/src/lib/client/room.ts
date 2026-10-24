@@ -54,11 +54,11 @@ export function roomGate(info: { open: boolean; seatsTaken: number; maxSeats: nu
 }
 
 export const gateCopy: Record<Exclude<RoomGate, "open">, { title: string; body: string }> = {
-  full: { title: "La sala está llena", body: "No quedan lugares. Puedes seguir la votación sin votar." },
-  manual: { title: "La sala está cerrada", body: "El organizador cerró la entrada. Puedes seguir la votación sin votar." },
-  expired: { title: "La sala expiró", body: "Se acabó el tiempo de entrada. Puedes seguir la votación sin votar." },
-  "election-opened": { title: "La votación ya comenzó", body: "Ya no se puede entrar. Puedes seguirla sin votar." },
-  "election-closed": { title: "La votación terminó", body: "Ya no se puede entrar. Puedes ver los resultados." },
+  full: { title: "La sala está llena", body: "No quedan lugares." },
+  manual: { title: "La sala está cerrada", body: "El organizador cerró la entrada." },
+  expired: { title: "La sala expiró", body: "Se acabó el tiempo de entrada." },
+  "election-opened": { title: "La votación ya comenzó", body: "Ya no se puede entrar." },
+  "election-closed": { title: "La votación terminó", body: "Ya no se puede entrar." },
 };
 
 /* ---------- Memoria del teléfono: si recarga o vuelve a escanear, retoma su flujo ---------- */

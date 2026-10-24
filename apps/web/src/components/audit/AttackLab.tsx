@@ -8,8 +8,10 @@ import { RotateCcw } from "lucide-react";
 import { AuditChecklist, notEvaluated, overallStatus } from "@/components/AuditChecklist";
 import { LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
+import { Disclosure } from "@/components/ui/disclosure";
 import { FixtureTag } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/StatusPill";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { describeError } from "@/lib/client/api";
 import { cn } from "@/lib/client/cn";
@@ -26,15 +28,7 @@ import { ShareAlteration } from "./ShareAlteration";
 import { VerdictBanner } from "./VerdictBanner";
 import { PageHeader } from "@/components/ui/page-header";
 
-type Run = {
-  alteration: AlterationId;
-  anchor: AnchorMode;
-  changes: Change[];
-  bytes: Uint8Array;
-  plainBytes: Uint8Array;
-  verification: BrowserVerification;
-  evaluation: Evaluation | null;
-};
+type Run = { alteration: AlterationId; anchor: AnchorMode; changes: Change[]; bytes: Uint8Array; plainBytes: Uint8Array; verification: BrowserVerification; evaluation: Evaluation | null };
 
 const ANCHOR_MODES: { id: AnchorMode; title: string; hint: string }[] = [
   { id: "none", title: "Sin ancla", hint: "Solo el paquete." },
@@ -130,13 +124,21 @@ export function AttackLab() {
     if (run) void tamper(run.alteration, mode);
   }
 
+  function reset() {
+    setRun(null);
+    const el = document.getElementById("lab-alteraciones");
+    el?.scrollIntoView({ block: "start" });
+    el?.focus({ preventScroll: true });
+  }
+
   const realOk = original ? canUseRealAnchor(original, publicAnchorRpc) : false;
+  const listProps = { anchor, run, busy, onTamper: tamper };
   const base = baseline[anchor];
 
   return (
     <div className="q-fade-in q-container flex max-w-5xl flex-col gap-6 py-6 md:py-10">
       <PageHeader title="Altera una copia. Mira qué falla." description="Cada botón cambia una copia del paquete y corre el verificador aquí. El original no se toca.">
-        {loaded?.isFixture ? <FixtureTag /> : null}
+        {loaded?.isFixture ? <FixtureTag className="self-start" /> : null}
         <Link href="/audit" className="w-fit text-small font-semibold text-primary-ink underline underline-offset-4">
           Ir al auditor
         </Link>
@@ -145,7 +147,9 @@ export function AttackLab() {
       <Card>
         <CardHeader>
           <CardTitle>1. Paquete original</CardTitle>
-          <CardDescription>{initialId ? "Paquete publicado de la elección indicada en la URL." : "Sin id en la URL: se carga el paquete de ejemplo. Puedes cargar el de una elección real."}</CardDescription>
+          <CardDescription>
+            {initialId ? "Paquete publicado de la elección indicada en la URL." : "Sin id en la URL: se carga el paquete de ejemplo. Puedes cargar el de una elección real."}
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {!loaded && !loadError ? <LoadingState label="Descargando el paquete…" /> : null}
@@ -175,12 +179,9 @@ export function AttackLab() {
               Las alteraciones se comparan contra este punto de partida; los checks que ya fallaban en el original no cuentan como detección.
             </Alert>
           ) : null}
-          <details className="rounded-md border border-border p-3">
-            <summary className="min-h-tap cursor-pointer content-center font-semibold">Cambiar de paquete</summary>
-            <div className="mt-3">
-              <PackageLoader initialId={initialId} onLoaded={onLoaded} allowFixture />
-            </div>
-          </details>
+          <Disclosure title="Cambiar de paquete" className="text-body">
+            <PackageLoader initialId={initialId} onLoaded={onLoaded} allowFixture />
+          </Disclosure>
         </CardContent>
       </Card>
 
@@ -203,7 +204,15 @@ export function AttackLab() {
                       disabled && "cursor-not-allowed opacity-50",
                     )}
                   >
-                    <input type="radio" name="anchor" value={m.id} checked={anchor === m.id} disabled={disabled} onChange={() => changeAnchor(m.id)} className="mt-1 size-4 accent-[var(--color-primary)]" />
+                    <input
+                      type="radio"
+                      name="anchor"
+                      value={m.id}
+                      checked={anchor === m.id}
+                      disabled={disabled}
+                      onChange={() => changeAnchor(m.id)}
+                      className="mt-1 size-4 accent-[var(--color-primary)]"
+                    />
                     <span className="flex flex-col">
                       <span className="font-semibold">
                         {m.title} {m.id === "sim" ? <FixtureTag>simulación</FixtureTag> : null}
@@ -219,66 +228,95 @@ export function AttackLab() {
       ) : null}
 
       {original ? (
-        <Card>
+        <Card id="lab-alteraciones" tabIndex={-1} className="scroll-mt-20 outline-none">
           <CardHeader>
             <CardTitle>3. Elige una alteración</CardTitle>
             <CardDescription>Un toque altera la copia y la verifica.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Alteraciones disponibles">
-              {ALTERATIONS.map((a) => {
-                const why = unavailableReason(original, a.id);
-                const exp = expectedFor(a, anchor);
-                const active = run?.alteration === a.id;
-                return (
-                  <li key={a.id}>
-                    <button
-                      type="button"
-                      data-testid={`alt-${a.id}`}
-                      disabled={!!why || busy !== null}
-                      aria-pressed={active}
-                      aria-describedby={`alt-${a.id}-desc`}
-                      onClick={() => tamper(a.id)}
-                      className={cn(
-                        "flex h-full min-h-tap w-full cursor-pointer flex-col items-start gap-1 rounded-md border p-3 text-left transition-[background-color,border-color] duration-150 hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60",
-                        active ? "border-danger bg-danger-soft" : "border-border bg-card",
-                      )}
-                    >
-                      <span className="flex w-full items-center justify-between gap-2 text-body font-bold">
-                        {a.title}
-                        {busy === a.id ? <span className="q-spinner" aria-label="verificando" /> : null}
-                      </span>
-                      <span id={`alt-${a.id}-desc`} className="line-clamp-2 text-small text-muted-foreground">
-                        {why ?? a.body}
-                      </span>
-                      <span className="text-[0.75rem] text-subtle">
-                        Falla:{" "}
-                        {exp.length ? exp.map((n) => <code key={n} className="q-mono mr-1 rounded bg-muted px-1">{n}</code>) : <strong className="text-warning-strong">nada (no detectable sin ancla)</strong>}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+          <CardContent className="flex flex-col gap-3">
+            <AlterationList ids={MAIN_ALTERATIONS} label="Alteraciones principales" original={original} {...listProps} />
+            <Disclosure title="Más alteraciones" className="text-body" testId="more-alterations">
+              <AlterationList ids={MORE_ALTERATIONS} label="Más alteraciones" original={original} {...listProps} />
+            </Disclosure>
           </CardContent>
         </Card>
       ) : null}
 
       <div id="lab-result" className="scroll-mt-20">
-        {run && original ? <LabResult run={run} source={loaded?.source ?? null} onReset={() => setRun(null)} /> : null}
+        {run && original ? <LabResult run={run} source={loaded?.source ?? null} onReset={reset} /> : null}
       </div>
     </div>
   );
 }
 
+const MAIN_ALTERATIONS: AlterationId[] = ["ballot-message", "tally-inflate", "nullifier-dup", "drop-rechain"];
+const MORE_ALTERATIONS = ALTERATIONS.map((a) => a.id).filter((id) => !MAIN_ALTERATIONS.includes(id));
+
+type ListProps = { ids: AlterationId[]; label: string; original: LabPackage; anchor: AnchorMode; run: Run | null; busy: AlterationId | null; onTamper: (id: AlterationId) => void };
+
+function AlterationList({ ids, label, original, anchor, run, busy, onTamper }: ListProps) {
+  return (
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label={label}>
+      {ids.map((id) => {
+        const a = alterationById(id)!;
+        const why = unavailableReason(original, a.id);
+        const exp = expectedFor(a, anchor);
+        const active = run?.alteration === a.id;
+        return (
+          <li key={a.id}>
+            <button
+              type="button"
+              data-testid={`alt-${a.id}`}
+              disabled={!!why || busy !== null}
+              aria-pressed={active}
+              aria-describedby={`alt-${a.id}-desc`}
+              onClick={() => onTamper(a.id)}
+              className={cn(
+                "flex h-full min-h-tap w-full cursor-pointer flex-col items-start gap-1 rounded-md border p-3 text-left transition-[background-color,border-color] duration-150 hover:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60",
+                active ? "border-danger bg-danger-soft" : "border-border bg-card",
+              )}
+            >
+              <span className="flex w-full items-center justify-between gap-2 text-body font-bold">
+                {a.title}
+                {busy === a.id ? (
+                  <>
+                    <span className="q-spinner" aria-hidden="true" />
+                    <span className="sr-only" role="status">
+                      Verificando…
+                    </span>
+                  </>
+                ) : null}
+              </span>
+              <span id={`alt-${a.id}-desc`} className="text-small text-muted-foreground">
+                {why ?? a.body}
+              </span>
+              <span className="text-[0.75rem] text-subtle">
+                Falla:{" "}
+                {exp.length ? (
+                  exp.map((n) => (
+                    <code key={n} className="q-mono mr-1 rounded bg-muted px-1">
+                      {n}
+                    </code>
+                  ))
+                ) : (
+                  <strong className="text-warning-strong">nada (no detectable sin ancla)</strong>
+                )}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function MiniStatus({ v }: { v: BrowserVerification }) {
   const s = statusOf(v);
-  const cls = s === "verificado" ? "text-success-strong" : s === "fallo detectado" ? "text-danger-strong" : "text-warning-strong";
   const pending = v.ok && s === "verificado" ? notEvaluated(v.result) : [];
   return (
-    <span className={cn("font-bold uppercase", cls)}>
-      {s}
-      {pending.length ? <span className="block text-small font-semibold normal-case text-warning-strong">parcial: sin evaluar {pending.join(", ")}</span> : null}
+    <span className="flex flex-col items-start gap-1">
+      <StatusPill status={s} size="sm" />
+      {pending.length ? <span className="text-small font-semibold text-warning-strong">Parcial: sin evaluar {pending.join(", ")}</span> : null}
     </span>
   );
 }
@@ -326,8 +364,10 @@ function LabResult({ run, source, onReset }: { run: Run; source: LoadedBytes["so
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <AlterationDiff changes={run.changes} />
-          {v.inputDigest ? <ShareAlteration key={v.inputDigest} source={source} alteration={run.alteration} anchor={run.anchor} digest={v.inputDigest} plainBytes={run.plainBytes} alteredBytes={run.bytes} /> : null}
-          <Button variant="secondary" onClick={onReset} className="w-full sm:w-fit">
+          {v.inputDigest ? (
+            <ShareAlteration key={v.inputDigest} source={source} alteration={run.alteration} anchor={run.anchor} digest={v.inputDigest} plainBytes={run.plainBytes} alteredBytes={run.bytes} />
+          ) : null}
+          <Button variant="ghost" onClick={onReset} className="w-full sm:w-fit">
             <RotateCcw aria-hidden="true" /> Volver a elegir
           </Button>
         </CardContent>
@@ -346,7 +386,10 @@ function EvaluationNote({ ev, anchor, note, version }: { ev: Evaluation; anchor:
     "no-detectable": {
       tone: "warning",
       title: "No detectado, como advierte el guion",
-      body: anchor === "none" ? "Sin ancla, un paquete rehecho de punta a punta es coherente por dentro. Cambia a «Ancla simulada» o «Ancla real» para ver cómo el ancla lo delata." : "En este modo no se espera detección.",
+      body:
+        anchor === "none"
+          ? "Sin ancla, un paquete rehecho de punta a punta es coherente por dentro. Cambia a «Ancla simulada» o «Ancla real» para ver cómo el ancla lo delata."
+          : "En este modo no se espera detección.",
     },
     "no-detectado": { tone: "danger", title: "El verificador NO detectó esta alteración", body: `Se esperaba que fallara ${list(ev.expected)}. Esto debe reportarse al equipo del verificador.` },
     "no-evaluado": { tone: "warning", title: "No evaluado por este verificador", body: `La versión ${version} no emite ${list(ev.missing)}; no puede evaluar esta alteración.` },

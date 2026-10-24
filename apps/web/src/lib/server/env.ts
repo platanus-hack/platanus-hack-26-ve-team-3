@@ -80,5 +80,4 @@ export const env = {
 
 /** TTL del nonce de voto emitido por face/enroll y face/verify. */
 export const VOTE_NONCE_TTL_MS = 2 * 60 * 1000;
-/** Con menos de este número de votos no se desglosa por opción. */
-export const MIN_VOTES_FOR_BREAKDOWN = 5;
+export { MIN_VOTES_FOR_BREAKDOWN } from "@quorum/contracts";

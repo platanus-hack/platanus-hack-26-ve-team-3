@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CameraOff, Check, ChevronLeft, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ApiClientError, describeError } from "@/lib/client/api";
+import { ApiClientError, voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { CAPTURES, clientLog, DESCRIPTOR_DIMS, formatMB, humanSelfTest, humanTimings, LivenessTracker, loadHuman, onDownloadProgress, TURN_DELTA, yawProxy, type DownloadProgress, type HumanInstance } from "@/lib/client/human";
 import { cn } from "@/lib/client/cn";
@@ -141,7 +142,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onPendin
       } catch (e) {
         enrollingRef.current = false;
         const duplicate = e instanceof ApiClientError && e.code === "duplicate_identity";
-        setError({ kind: duplicate ? "duplicate" : "other", message: duplicate ? "Este rostro ya está inscrito en esta votación." : describeError(e) });
+        setError({ kind: duplicate ? "duplicate" : "other", message: duplicate ? "Este rostro ya está inscrito en esta votación." : voterMessage(e) });
         setPhase("error");
       }
     },
@@ -246,7 +247,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onPendin
       stopAll();
       const kind = e instanceof DOMException ? classifyCameraError(e) : "other";
       clientLog("camera:error", { kind, error: e instanceof Error ? e.message.slice(0, 200) : "?" });
-      setError({ kind, message: e instanceof Error ? e.message : "Error desconocido" });
+      setError({ kind, message: "No se pudo abrir la cámara. Inténtalo de nuevo." });
       setPhase("error");
     }
   }, [enroll, stopAll]);
@@ -274,7 +275,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onPendin
   const busy = phase === "loading" || phase === "slow" || phase === "checking";
   const downloading = (phase === "loading" || phase === "slow") && download && !download.done && download.loaded < download.total;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col bg-[#111122] text-white" data-testid="face-capture" role="dialog" aria-modal="true" aria-label="Comprobación con la cámara">
       <div className="flex items-center justify-between gap-2 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
         <p className="rounded-full bg-white/10 px-3 py-1 text-small font-semibold text-white/80">Paso 2 de 2</p>
@@ -333,7 +334,8 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onPendin
       </div>
 
       {phase === "error" && error ? <FaceError error={error} onRetry={() => (E2E_FAKE_FACE && error.kind !== "duplicate" && error.kind !== "camera-denied" ? void fakeFace() : void start())} onObserve={onObserve} /> : null}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

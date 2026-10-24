@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RoomStatus } from "@quorum/contracts";
 import { StatusPill } from "@/components/StatusPill";
-import { describeError, request } from "@/lib/client/api";
+import { orgMessage, request } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { countdownText, formatStartTime, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { formatInt, formatPercent, shortHash } from "@/lib/client/format";
@@ -135,17 +135,15 @@ export function Projector({ electionId }: { electionId: string }) {
   }, [phase, electionId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white text-[#0B1626]" data-testid="projector" data-phase={phase ?? "loading"}>
-      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 md:flex-nowrap border-b-4 border-[#0B1626] px-[3vw] py-[1.6vh]">
-        <h1 className="min-w-0 truncate text-[clamp(1.5rem,3.2vw,3.5rem)] font-extrabold leading-tight">{election?.title ?? "Cargando…"}</h1>
-        <div className="flex shrink-0 items-center gap-4">
-          {hasToken && phase === "registration" ? <ProjectorStartControls electionId={electionId} onChanged={() => void loadElection()} /> : null}
-          {phase ? <span className="rounded-full border-4 border-[#0B1626] px-5 py-1 text-[clamp(1rem,1.8vw,2rem)] font-bold">{phaseLabel[phase]}</span> : null}
-          {stale ? <span className="text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold text-[#8A1F1F]">sin conexión: último dato</span> : null}
-        </div>
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white text-[#111122]" data-testid="projector" data-phase={phase ?? "loading"}>
+      <header className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b-4 border-[#111122] px-4 py-3 md:flex-nowrap md:px-[3vw] md:py-[1.6vh]">
+        <h1 className="line-clamp-2 min-w-0 flex-1 font-display text-[clamp(1.25rem,3.2vw,3.5rem)] font-bold leading-tight tracking-tight md:truncate">{election?.title ?? "Cargando…"}</h1>
+        {phase ? <span className="shrink-0 rounded-full border-2 border-[#111122] px-3 py-1 text-small font-bold md:border-4 md:px-5 md:text-[clamp(1rem,1.8vw,2rem)]">{phaseLabel[phase]}</span> : null}
+        {stale ? <span className="w-full text-small font-bold text-[#B4233C] md:w-auto md:text-[clamp(0.9rem,1.2vw,1.4rem)]">sin conexión: último dato</span> : null}
+        {hasToken && phase === "registration" ? <ProjectorStartControls electionId={electionId} onChanged={() => void loadElection()} /> : null}
       </header>
 
-      <main className="flex min-h-0 flex-1 items-start overflow-auto px-[3vw] py-[3vh] md:items-stretch md:overflow-hidden">
+      <main className="flex min-h-0 flex-1 items-start overflow-auto px-4 py-6 md:items-stretch md:overflow-hidden md:px-[3vw] md:py-[3vh]">
         {error && !election ? <Big title="No se pudo cargar la votación" body={error} /> : null}
         {!election && !error ? <Big title="Cargando…" /> : null}
         {election && continuousLive ? <ContinuousView election={election} room={room} tally={tally} hasToken={hasToken} /> : null}
@@ -154,7 +152,7 @@ export function Projector({ electionId }: { electionId: string }) {
         {election && tally && (phase === "auditable" || phase === "failed") ? <ResultView election={election} tally={tally} audit={audit} auditMissing={auditMissing} electionId={electionId} origin={origin} /> : null}
         {election && phase === "drawn" ? <DrawnView election={election} tally={tally} audit={audit} draw={draw} electionId={electionId} origin={origin} /> : null}
       </main>
-      <footer className="hidden items-center justify-between md:flex gap-4 border-t-2 border-[#0B1626]/30 px-[3vw] py-[1vh] text-[clamp(0.85rem,1.1vw,1.25rem)] font-semibold text-[#2C3A4E]">
+      <footer className="hidden items-center justify-between md:flex gap-4 border-t-2 border-[#111122]/30 px-[3vw] py-[1vh] text-[clamp(0.85rem,1.1vw,1.25rem)] font-semibold text-[#3A383F]">
         <span>Quórum · el resultado lo confirma el verificador independiente, no el organizador.</span>
         <span>Sin datos individuales: sólo agregados.</span>
       </footer>
@@ -183,13 +181,13 @@ function RegistrationView({ election, room, counts, hasToken, now, offset }: { e
       <div className="flex min-h-0 flex-col items-center gap-[1.5vh]">
         {room?.open && joinUrl ? (
           <>
-            <QrCode value={joinUrl} label={`Código QR para entrar a la sala: ${joinUrl}`} className="size-[min(84vw,62vh)] md:size-[min(62vh,44vw)] border-[6px] border-[#0B1626]" />
-            <p className="q-mono max-w-[84vw] md:max-w-[min(62vh,44vw)] break-all text-center text-[clamp(1rem,1.7vw,2rem)] font-bold" data-testid="projector-join-url">
-              {joinUrl}
+            <QrCode value={joinUrl} label={`Código QR para entrar a la sala: ${joinUrl}`} className="size-[min(84vw,62vh)] md:size-[min(62vh,44vw)] border-[6px] border-[#111122]" />
+            <p className="q-mono max-w-[84vw] break-words text-center text-[clamp(0.95rem,1.7vw,2rem)] font-bold md:max-w-[min(62vh,44vw)]" data-testid="projector-join-url">
+              <UrlText url={joinUrl} />
             </p>
           </>
         ) : (
-          <div className="flex size-[min(84vw,62vh)] md:size-[min(62vh,44vw)] items-center justify-center border-[6px] border-dashed border-[#0B1626]/40 p-8 text-center text-[clamp(1.1rem,2vw,2.2rem)] font-bold">
+          <div className="flex size-[min(84vw,62vh)] md:size-[min(62vh,44vw)] items-center justify-center border-[6px] border-dashed border-[#111122]/40 p-8 text-center text-[clamp(1.1rem,2vw,2.2rem)] font-bold">
             {!room ? "Cargando sala…" : !room.open ? (room.closedReason === "expired" ? "La sala expiró" : room.closedReason === "election-opened" ? "La votación comenzó" : room.maxSeats === null ? "La sala aún no está abierta" : "La sala está cerrada") : !hasToken ? "Abre el proyector desde el panel del organizador para mostrar el QR" : "Cargando QR…"}
           </div>
         )}
@@ -201,7 +199,7 @@ function RegistrationView({ election, room, counts, hasToken, now, offset }: { e
         {room?.roomCode ? (
           <p className="text-[clamp(1.2rem,2.2vw,2.6rem)] font-semibold">
             o entra y escribe el código{" "}
-            <span className="q-mono rounded-lg bg-[#0B1626] px-4 py-1 text-[clamp(2rem,5vw,6rem)] font-extrabold tracking-[0.2em] text-white" data-testid="projector-code">
+            <span className="q-mono rounded-lg bg-[#111122] px-4 py-1 text-[clamp(2rem,5vw,6rem)] font-extrabold tracking-[0.2em] text-white" data-testid="projector-code">
               {room.roomCode}
             </span>
           </p>
@@ -234,7 +232,7 @@ function RegistrationView({ election, room, counts, hasToken, now, offset }: { e
             La entrada cierra en {left}
           </p>
         ) : null}
-        <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#2C3A4E]">Entras con un nombre o apodo. Tu rostro no se guarda como foto.</p>
+        <p className="text-[clamp(1rem,1.5vw,1.8rem)] text-[#3A383F]">Entras con un nombre o apodo. Tu rostro no se guarda como foto.</p>
         {election.status === "draft" ? <p className="text-[clamp(1rem,1.5vw,1.8rem)] font-bold">La inscripción todavía no abre.</p> : null}
       </div>
     </div>
@@ -307,17 +305,17 @@ function ProjectorStartControls({ electionId, onChanged }: { electionId: string;
       setConfirm(false);
       onChanged();
     } catch (e) {
-      setErr(describeError(e));
+      setErr(orgMessage(e));
     } finally {
       setBusy(false);
     }
   }
-  const btn = "min-h-11 rounded-lg border-[3px] border-[#0B1626] px-4 text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold disabled:opacity-50";
+  const btn = "min-h-12 flex-1 rounded-full border-2 border-[#111122] px-5 text-body font-bold disabled:opacity-50 md:flex-none md:text-[clamp(0.9rem,1.2vw,1.4rem)]";
   return (
-    <div className="flex flex-wrap items-center gap-2" data-testid="projector-start-controls">
+    <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:shrink-0 md:flex-nowrap" data-testid="projector-start-controls">
       {confirm ? (
         <>
-          <button type="button" className={`${btn} bg-[#0B1626] text-white`} disabled={busy} onClick={() => run(() => apiV1.open(electionId))}>
+          <button type="button" className={`${btn} bg-[#111122] text-white`} disabled={busy} onClick={() => run(() => apiV1.open(electionId))}>
             Sí, abrir la votación ahora
           </button>
           <button type="button" className={btn} disabled={busy} onClick={() => setConfirm(false)}>
@@ -326,7 +324,7 @@ function ProjectorStartControls({ electionId, onChanged }: { electionId: string;
         </>
       ) : (
         <>
-          <button type="button" className={`${btn} bg-[#0B1626] text-white`} disabled={busy} onClick={() => setConfirm(true)}>
+          <button type="button" className={`${btn} bg-[#111122] text-white`} disabled={busy} onClick={() => setConfirm(true)}>
             Abrir ahora
           </button>
           <button type="button" className={btn} disabled={busy} onClick={() => run(() => apiV1.schedule(electionId, { addSeconds: 300 }))}>
@@ -335,7 +333,7 @@ function ProjectorStartControls({ electionId, onChanged }: { electionId: string;
         </>
       )}
       {err ? (
-        <p role="alert" className="w-full text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold text-[#8A1F1F]">
+        <p role="alert" className="w-full text-[clamp(0.9rem,1.2vw,1.4rem)] font-bold text-[#B4233C]">
           {err}
         </p>
       ) : null}
@@ -354,8 +352,8 @@ function Bars({ tally, highlight }: { tally: AggregatesV1; highlight?: string | 
             {o.label}
             {highlight === o.id ? " ★" : ""}
           </span>
-          <span className="h-[clamp(1rem,3.6vh,3rem)] rounded-md bg-[#E3E7EE]">
-            <span className="block h-full rounded-md bg-[#182B45]" style={{ width: `${((o.count ?? 0) / max) * 100}%` }} />
+          <span className="h-[clamp(1rem,3.6vh,3rem)] overflow-hidden rounded-full bg-[#E8E5E5]">
+            <span className={`q-grow block h-full rounded-full ${highlight === o.id ? "bg-[#FF714E]" : "bg-[#111122]"}`} style={{ width: `${((o.count ?? 0) / max) * 100}%` }} />
           </span>
           <span className="min-w-[5ch] text-right text-[clamp(1.1rem,2.2vw,2.6rem)] font-extrabold tabular-nums">
             {o.count === null ? "—" : `${formatInt(o.count)}${total ? ` · ${formatPercent(o.count / total)}` : ""}`}
@@ -398,12 +396,28 @@ function LiveView({ tally, phase, electionId, origin, now }: { tally: Aggregates
   );
 }
 
+function UrlText({ url }: { url: string }) {
+  const parts = url.replace(/^https?:\/\//, "").split(/(?=\/)/);
+  return (
+    <>
+      {parts.map((p, i) => (
+        <span key={i}>
+          {i > 0 ? <wbr /> : null}
+          {p}
+        </span>
+      ))}
+    </>
+  );
+}
+
 function PhoneQr({ url, caption }: { url: string; caption: string }) {
   return (
     <div className="flex flex-col items-center gap-2 self-center">
-      <QrCode value={url} label={`${caption}: ${url}`} className="size-[min(60vw,34vh)] md:size-[min(34vh,24vw)] border-4 border-[#0B1626]" />
+      <QrCode value={url} label={`${caption}: ${url}`} className="size-[min(60vw,34vh)] md:size-[min(34vh,24vw)] border-4 border-[#111122]" />
       <p className="text-center text-[clamp(1.1rem,2vw,2.2rem)] font-extrabold">{caption}</p>
-      <p className="q-mono max-w-[80vw] md:max-w-[min(34vh,24vw)] break-all text-center text-[clamp(0.8rem,1vw,1.2rem)]">{url}</p>
+      <p className="q-mono max-w-[80vw] break-words text-center text-[clamp(0.8rem,1vw,1.2rem)] md:max-w-[min(34vh,24vw)]">
+        <UrlText url={url} />
+      </p>
     </div>
   );
 }
@@ -451,7 +465,7 @@ function VerifierBlock({ election, audit, auditMissing }: { election: ElectionV1
           Sello público del resultado: {txUrl ? <a href={txUrl} target="_blank" rel="noreferrer" className="q-mono font-bold underline">{shortHash(tx, 12, 8)}</a> : <span className="q-mono font-bold">{shortHash(tx, 12, 8)}</span>}
         </p>
       ) : anchorText ? (
-        <p className="text-[clamp(0.85rem,1.2vw,1.4rem)] text-[#2C3A4E]">Ancla: {anchorText}</p>
+        <p className="text-[clamp(0.85rem,1.2vw,1.4rem)] text-[#3A383F]">Ancla: {anchorText}</p>
       ) : null}
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarClock, Copy, DoorClosed, DoorOpen, MonitorUp, Play } from "lucide-react";
+import { CalendarClock, Copy, DoorClosed, DoorOpen, MonitorUp } from "lucide-react";
 import type { Election, RoomStatus } from "@quorum/contracts";
 import { checkLabel, DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, methodLabel, type EligibilityDraft } from "@/components/org/EligibilityPicker";
 import { Alert } from "@/components/ui/alert";
@@ -9,15 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
-import { describeError } from "@/lib/client/api";
+import { orgMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { countdownText, formatStartTime, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { copyText } from "@/lib/client/download";
 import { formatInt } from "@/lib/client/format";
 import { loadOrgToken } from "@/lib/client/orgStore";
-import { casesLabel, openWarnings, readinessLine, type Readiness } from "@/lib/client/reviews";
 import { roomApi } from "@/lib/client/room";
 import { remaining, useNow } from "./useNow";
+import { ConfirmInline } from "@/components/ui/confirm-inline";
 
 const POLL_MS = 3000;
 const closedLabel: Record<NonNullable<RoomStatus["closedReason"]>, string> = {
@@ -38,7 +38,7 @@ export function openProjector(electionId: string) {
  * Tarjeta "Sala abierta" del panel (fase `registration`): tope y minutos, Abrir / Ampliar / Cerrar, código y enlace,
  * botón "Proyectar". Datos de `GET/POST/DELETE /api/elections/:id/room` con Bearer.
  */
-export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onElectionChange, readiness }: { electionId: string; hasToken: boolean; onPhaseChange?: () => void; eligibility?: Election["eligibility"]; onElectionChange?: (e: Election) => void; readiness?: Readiness | null }) {
+export function RoomCard({ electionId, hasToken, eligibility, onElectionChange }: { electionId: string; hasToken: boolean; eligibility?: Election["eligibility"]; onElectionChange?: (e: Election) => void }) {
   const now = useNow(1000);
   const { offset, record } = useServerClock();
   const [status, setStatus] = useState<RoomStatus | null>(null);
@@ -46,7 +46,6 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
   const [seats, setSeats] = useState("60");
   const [minutes, setMinutes] = useState("15");
   const [busy, setBusy] = useState<"open" | "close" | "schedule" | "start" | null>(null);
-  const [confirmStart, setConfirmStart] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -58,7 +57,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
       setStatus(value);
       setLoadError(null);
     } catch (e) {
-      setLoadError(describeError(e));
+      setLoadError(orgMessage(e));
     }
   }, [electionId, record]);
 
@@ -87,7 +86,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
     try {
       setStatus(await roomApi.open(electionId, { maxSeats, expiresInMin }));
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setBusy(null);
     }
@@ -100,7 +99,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
       setStatus(await roomApi.close(electionId));
       setConfirmClose(false);
     } catch (e) {
-      setActionError(describeError(e));
+      setActionError(orgMessage(e));
     } finally {
       setBusy(null);
     }
@@ -115,23 +114,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
       record(sample);
       await refresh();
     } catch (e) {
-      setActionError(describeError(e));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  /** "Abrir ahora": la misma transición de siempre (`POST /open`), sin esperar la hora. */
-  async function startNow() {
-    setBusy("start");
-    setActionError(null);
-    try {
-      await apiV1.open(electionId);
-      setConfirmStart(false);
-      onPhaseChange?.();
-    } catch (e) {
-      setActionError(describeError(e));
-      void refresh();
+      setActionError(orgMessage(e));
     } finally {
       setBusy(null);
     }
@@ -163,7 +146,7 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
         <CardDescription>
           {isBadge
             ? "El público escanea el QR del proyector y su credencial. Cada credencial vale una vez."
-            : "El público entra con el QR y un alias. Padrón abierto: la cámara es la única barrera contra duplicados."}
+            : "Entran con el QR y un apodo. La cámara evita que alguien se inscriba dos veces."}
         </CardDescription>
         <p className="text-small" data-testid="room-eligibility">
           <span className="text-muted-foreground">¿Quién puede votar? </span>
@@ -214,56 +197,30 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
                       La votación empieza en {countdownText(startLeft)}
                     </p>
                     <p className="text-small text-muted-foreground">
-                      A las {formatStartTime(startsAt)}, sin que toques nada: se congela el padrón, se cierra la sala y los teléfonos inscritos muestran la boleta.
+                      A las {formatStartTime(startsAt)} se abre sola y aparece la boleta en los teléfonos.
                     </p>
                   </>
                 ) : startsAt && startLeft !== null ? (
                   <p className="text-small font-semibold" data-testid="start-countdown">
-                    Llegó la hora programada ({formatStartTime(startsAt)}). Si nadie terminó la inscripción, la votación no puede abrir: el padrón estaría vacío.
+                    Llegó la hora ({formatStartTime(startsAt)}). Abre la votación cuando haya alguien inscrito.
                   </p>
                 ) : (
                   <p className="text-small text-muted-foreground" data-testid="start-countdown">
-                    Sin hora programada: la votación empieza cuando toques «Abrir ahora».
+                    Sin hora: la abres tú desde «Siguiente paso».
                   </p>
                 )}
               </div>
             </div>
             {hasToken ? (
-              <div className="flex flex-wrap gap-2">
-                {confirmStart ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-md border border-danger/50 p-2">
-                    {(readiness ? openWarnings(readiness) : []).map((w) => (
-                      <span key={w} className="w-full text-small font-semibold" data-testid="start-now-warning">
-                        {w}
-                      </span>
-                    ))}
-                    <span className="text-small">Se congela el padrón y se cierra la sala. ¿Abrir la votación ahora?</span>
-                    <Button size="sm" variant="danger" onClick={startNow} loading={busy === "start"} data-testid="start-now-confirm">
-                      Sí, abrir ahora
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setConfirmStart(false)}>
-                      Cancelar
-                    </Button>
-                  </div>
-                ) : (
-                  <Button size="sm" onClick={() => setConfirmStart(true)} disabled={busy !== null} data-testid="start-now">
-                    <Play aria-hidden="true" /> Abrir ahora
-                  </Button>
-                )}
-                {readiness && !confirmStart ? (
-                  <span className="inline-flex items-center text-small text-muted-foreground" data-testid="start-readiness">
-                    {readinessLine(readiness)}
-                    {readiness.pending > 0 ? <strong className="ml-1 text-warning-strong">· {casesLabel(readiness.pending)}</strong> : null}
-                  </span>
-                ) : null}
-                <Button size="sm" variant="secondary" onClick={() => reschedule({ inSeconds: 300 })} disabled={busy !== null} data-testid="start-in-5">
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="sm" variant="secondary" full onClick={() => reschedule({ inSeconds: 300 })} disabled={busy !== null} data-testid="start-in-5">
                   <CalendarClock aria-hidden="true" /> Empezar en 5 min
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => reschedule({ addSeconds: 300 })} disabled={busy !== null} data-testid="start-plus-5">
+                <Button size="sm" variant="secondary" full onClick={() => reschedule({ addSeconds: 300 })} disabled={busy !== null} data-testid="start-plus-5">
                   +5 min
                 </Button>
                 {startsAt ? (
-                  <Button size="sm" variant="ghost" onClick={() => reschedule({ votingStartsAt: null })} disabled={busy !== null}>
+                  <Button size="sm" variant="link" className="col-span-2 justify-self-center" onClick={() => reschedule({ votingStartsAt: null })} disabled={busy !== null}>
                     Quitar la hora
                   </Button>
                 ) : null}
@@ -284,44 +241,35 @@ export function RoomCard({ electionId, hasToken, onPhaseChange, eligibility, onE
         ) : null}
 
         {!hasToken ? (
-          <p className="text-small text-muted-foreground">Abrir, ampliar o cerrar la sala requiere el token del organizador.</p>
+          <p className="text-small text-muted-foreground">Necesitas tu clave de organizador.</p>
         ) : (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <Field label="Tope de personas" htmlFor="room-seats" hint={`1 a 500${status?.seatsTaken ? `, al menos ${status.seatsTaken}` : ""}`} error={seats && !seatsOk ? "Tope fuera de rango" : null}>
               <Input id="room-seats" type="number" inputMode="numeric" min={Math.max(1, status?.seatsTaken ?? 1)} max={500} value={seats} onChange={(e) => setSeats(e.target.value)} />
             </Field>
-            <Field label="Minutos abierta" htmlFor="room-minutes" hint="1 a 180, desde ahora" error={minutes && !minutesOk ? "Minutos fuera de rango" : null}>
+            <Field label="Minutos abierta" htmlFor="room-minutes" hint={isOpen ? "Ampliar reinicia los minutos y mantiene el mismo QR" : "1 a 180, desde ahora"} error={minutes && !minutesOk ? "Minutos fuera de rango" : null}>
               <Input id="room-minutes" type="number" inputMode="numeric" min={1} max={180} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
             </Field>
-            <Button onClick={open} loading={busy === "open"} disabled={!seatsOk || !minutesOk || busy !== null} data-testid="room-open">
+            <Button variant={isOpen ? "secondary" : "primary"} onClick={open} loading={busy === "open"} disabled={!seatsOk || !minutesOk || busy !== null} data-testid="room-open">
               <DoorOpen aria-hidden="true" /> {isOpen ? "Ampliar" : "Abrir sala"}
             </Button>
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => openProjector(electionId)} data-testid="room-project">
+        <div className="flex flex-col gap-2">
+          <Button variant="secondary" full onClick={() => openProjector(electionId)} data-testid="room-project">
             <MonitorUp aria-hidden="true" /> Proyectar
           </Button>
           {hasToken && isOpen ? (
             confirmClose ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-md border border-danger/50 p-2">
-                <span className="text-small">Nadie más podrá entrar con este código. ¿Cerrar?</span>
-                <Button size="sm" variant="danger" onClick={close} loading={busy === "close"}>
-                  Sí, cerrar sala
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmClose(false)}>
-                  Cancelar
-                </Button>
-              </div>
+              <ConfirmInline message="Nadie más podrá entrar con este código." confirmLabel="Sí, cerrar sala" tone="danger" onConfirm={close} onCancel={() => setConfirmClose(false)} loading={busy === "close"} />
             ) : (
-              <Button variant="ghost" onClick={() => setConfirmClose(true)}>
+              <Button variant="link" className="self-center" onClick={() => setConfirmClose(true)}>
                 <DoorClosed aria-hidden="true" /> Cerrar sala
               </Button>
             )
           ) : null}
         </div>
-        {isOpen ? <p className="text-small text-muted-foreground">&quot;Ampliar&quot; conserva el mismo código y QR: cambia el tope y reinicia los minutos desde ahora. Si la hora de inicio estaba en el cierre de la sala (lo normal), se mueve con él.</p> : null}
         {actionError ? (
           <Alert tone="danger" title="La acción sobre la sala falló">
             {actionError}
@@ -359,7 +307,7 @@ function EligibilityEditor({ electionId, eligibility, onSaved }: { electionId: s
       onSaved(await apiV1.setEligibility(electionId, parsed.value));
       setSaved(true);
     } catch (e) {
-      setError(describeError(e));
+      setError(orgMessage(e));
     } finally {
       setBusy(false);
     }

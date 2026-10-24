@@ -32,7 +32,9 @@ async function openLab(page: Page, query = "") {
 }
 
 async function tamper(page: Page, id: string) {
-  await page.getByTestId(`alt-${id}`).click();
+  const button = page.getByTestId(`alt-${id}`);
+  if (!(await button.isVisible())) await page.getByTestId("more-alterations").locator("summary").click();
+  await button.click();
   const result = page.getByTestId("lab-result");
   await expect(result).toHaveAttribute("data-alteration", id, { timeout: 30_000 });
   await expect(page.getByTestId(`alt-${id}`)).toBeEnabled({ timeout: 30_000 });
@@ -120,6 +122,7 @@ test.describe("compartir alteración → el público la verifica en su teléfono
     await openLab(page);
     await tamper(page, "nullifier-dup");
     await page.getByTestId("share-open").click();
+    await page.getByTestId("share-more").locator("summary").click();
     await page.getByTestId("share-embedded").click();
     const url = await page.evaluate(() => navigator.clipboard.readText()).catch(() => "");
     test.skip(!url.includes("#"), "portapapeles no disponible en este navegador");
@@ -146,6 +149,7 @@ test.describe("/audit · auditor independiente", () => {
 
   test("JSON pegado: sin forma de paquete ⇒ no verificable (no es evidencia de manipulación); paquete con campo extra ⇒ fallo; JSON ilegible ⇒ no verificable; nunca verde", async ({ page }) => {
     await page.goto("/audit");
+    await page.getByText("Otras formas").click();
     await page.getByText("Pegar el JSON del paquete").click();
     await page.getByLabel("JSON del paquete").fill('{"hola":"mundo"}');
     await page.getByRole("button", { name: "Usar este JSON" }).click();

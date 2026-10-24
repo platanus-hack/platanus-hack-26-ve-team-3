@@ -90,6 +90,21 @@ export function voterMessage(err: unknown): string {
   return (code && VOTER_FALLBACK[code]) || "No pudimos completar la verificación en este teléfono. Inténtalo de nuevo.";
 }
 
+const ORG_INTERNAL = /HTTP \d{3}|\/api\/|Datos inválidos|ZodError|fetch failed/i;
+
+const ORG_FALLBACK: Partial<Record<ApiErrorCode, string>> = {
+  network: "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
+  unavailable: "El servicio no está disponible. Inténtalo en unos segundos.",
+  invalid_input: "Revisa los datos e inténtalo de nuevo.",
+};
+
+export function orgMessage(err: unknown): string {
+  const msg = voterMessage(err);
+  if (!ORG_INTERNAL.test(msg)) return msg;
+  const code = err instanceof ApiClientError ? err.code : null;
+  return (code && ORG_FALLBACK[code]) || "Algo salió mal. Inténtalo de nuevo.";
+}
+
 export async function request<T>(path: string, init: RequestInit | undefined, schema: z.ZodType<T> | null): Promise<T> {
   let res: Response;
   try {

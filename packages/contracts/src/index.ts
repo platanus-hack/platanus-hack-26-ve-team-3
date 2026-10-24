@@ -332,6 +332,8 @@ export const Receipt = z.object({
 });
 
 /** Agregados públicos: nunca votos individuales. Con menos de 5 votos no se desglosa por opción. */
+export const MIN_VOTES_FOR_BREAKDOWN = 5;
+
 export const Aggregates = z.object({
   electionId: z.string(), turnout: z.number().min(0).max(1), totalVotes: z.number().int().min(0), eligible: z.number().int().min(0),
   leadingShare: z.number().min(0).max(1).nullable(), closesAt: z.string().datetime(), status: ElectionStatus,

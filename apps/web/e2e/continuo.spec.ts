@@ -59,7 +59,6 @@ test.describe("modo continuo (mocks)", () => {
     await page.getByRole("button", { name: "Continuar" }).click();
     await page.getByRole("button", { name: "Continuar" }).click();
     await expect(page.getByTestId("review-voting-mode")).toContainText("Al instante");
-    await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: /publicar/i }).click();
     await expect.poll(() => mock.createBodies.length).toBe(1);
     expect((mock.createBodies[0] as { votingMode: string }).votingMode).toBe("continuous");

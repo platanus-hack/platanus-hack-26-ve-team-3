@@ -5,11 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { AuditChecklist } from "@/components/AuditChecklist";
-import { EmptyState, LoadingState } from "@/components/states";
+import { LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
 import { FixtureTag } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { describeError } from "@/lib/client/api";
 import { downloadJson } from "@/lib/client/download";
 import { isLabPackage, type AnchorRead } from "@/lib/client/lab/alter";
@@ -111,7 +111,7 @@ export function AuditVerifier() {
 
   return (
     <div className="q-fade-in q-container flex max-w-4xl flex-col gap-6 py-6 md:py-10">
-      <PageHeader title={jury ? "Verificar la copia del jurado" : "Verificar escrutinio"} description="El verificador corre en este navegador sobre el paquete público. El veredicto sale de él, no de nuestro servidor.">
+      <PageHeader title={jury ? "Verificar la copia del jurado" : "Verificar escrutinio"} description="Comprueba el resultado en tu navegador. El veredicto no depende de nuestro servidor.">
         <Link href="/audit/lab" className="w-fit text-small font-semibold text-primary-ink underline underline-offset-4">
           Probar alterando una copia
         </Link>
@@ -121,7 +121,12 @@ export function AuditVerifier() {
         <Alert tone="warning" title="Esto es una copia alterada a propósito">
           {jury.alteration ? <>Alteración: «{alterationById(jury.alteration)?.title}». </> : null}
           La hizo el jurado sobre una copia; el paquete original no cambió. Verifícala tú mismo.
-          {jury.anchor === "sim" ? <> El ancla es una <strong>simulación</strong>: el acta se toma del original que descargó tu teléfono.</> : null}
+          {jury.anchor === "sim" ? (
+            <>
+              {" "}
+              El ancla es una <strong>simulación</strong>: el acta se toma del original que descargó tu teléfono.
+            </>
+          ) : null}
         </Alert>
       ) : null}
 
@@ -129,7 +134,6 @@ export function AuditVerifier() {
         <Card>
           <CardHeader>
             <CardTitle>1. Paquete de auditoría</CardTitle>
-            <CardDescription>Por id de la elección, por URL, subiendo el archivo o pegando el JSON.</CardDescription>
           </CardHeader>
           <CardContent>
             <PackageLoader initialId={params.get("id") ?? ""} onLoaded={(p) => void toTarget(p).then(use)} allowFixture />
@@ -137,53 +141,54 @@ export function AuditVerifier() {
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle>{jury ? "Copia a verificar" : "2. Verificación"}</CardTitle>
-            {target?.isFixture ? <FixtureTag /> : null}
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {preparing ? <LoadingState label={jury || params.get("alt") ? "Reproduciendo la copia del jurado…" : "Descargando el paquete…"} /> : null}
-          {prepError ? (
-            <Alert tone="warning" title="No verificable: no se pudo preparar el paquete">
-              {prepError}
-            </Alert>
-          ) : null}
-          {!target && !preparing && !prepError ? <EmptyState title="Sin paquete cargado">Carga un paquete para habilitar la verificación.</EmptyState> : null}
-          {target ? (
-            <>
-              <dl className="grid grid-cols-1 gap-3 text-small sm:grid-cols-2">
-                <div className="min-w-0">
-                  <dt className="text-muted-foreground">Origen</dt>
-                  <dd className="font-semibold break-words">{target.label}</dd>
-                </div>
-                <div className="min-w-0">
-                  <dt className="text-muted-foreground">SHA-256 de entrada (calculado aquí)</dt>
-                  <dd className="q-mono font-semibold break-all" data-testid="input-sha256">
-                    {target.digest}
-                  </dd>
-                </div>
-              </dl>
-              {jury?.expectedDigest ? (
-                <Alert tone={jury.digestOk ? "info" : "warning"} title={jury.digestOk ? "Es la misma copia que alteró el jurado" : "Tu copia NO coincide con la del jurado"}>
-                  Huella del jurado <span className="q-mono">{jury.expectedDigest}…</span>
-                  {jury.digestOk ? " = huella de tu copia." : " ≠ huella de tu copia: el original que descargaste cambió o el enlace está mal. Igual puedes verificarla."}
-                </Alert>
-              ) : null}
-              <Button size="lg" onClick={verify} loading={verifying} className="w-full sm:w-fit" data-testid="verify-button">
-                <ShieldCheck aria-hidden="true" /> {jury ? "Verificar la copia del jurado" : "Verificar en este navegador"}
-              </Button>
-              {verifying ? (
-                <p role="status" aria-live="polite" className="text-small text-muted-foreground">
-                  Verificando en tu navegador (incluye las pruebas Groth16)…
-                </p>
-              ) : null}
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
+      {preparing || prepError || target ? (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle>{jury ? "Copia a verificar" : "2. Verificación"}</CardTitle>
+              {target?.isFixture ? <FixtureTag /> : null}
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {preparing ? <LoadingState label={jury || params.get("alt") ? "Reproduciendo la copia del jurado…" : "Descargando el paquete…"} /> : null}
+            {prepError ? (
+              <Alert tone="warning" title="No verificable: no se pudo preparar el paquete">
+                {prepError}
+              </Alert>
+            ) : null}
+            {target ? (
+              <>
+                <dl className="grid grid-cols-1 gap-3 text-small sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">Origen</dt>
+                    <dd className="font-semibold break-words">{target.label}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-muted-foreground">SHA-256 de entrada (calculado aquí)</dt>
+                    <dd className="q-mono font-semibold break-all" data-testid="input-sha256">
+                      {target.digest}
+                    </dd>
+                  </div>
+                </dl>
+                {jury?.expectedDigest ? (
+                  <Alert tone={jury.digestOk ? "info" : "warning"} title={jury.digestOk ? "Es la misma copia que alteró el jurado" : "Tu copia NO coincide con la del jurado"}>
+                    Huella del jurado <span className="q-mono">{jury.expectedDigest}…</span>
+                    {jury.digestOk ? " = huella de tu copia." : " ≠ huella de tu copia: el original que descargaste cambió o el enlace está mal. Igual puedes verificarla."}
+                  </Alert>
+                ) : null}
+                <Button size="lg" onClick={verify} loading={verifying} className="w-full sm:w-fit" data-testid="verify-button">
+                  <ShieldCheck aria-hidden="true" /> {jury ? "Verificar la copia del jurado" : "Verificar en este navegador"}
+                </Button>
+                {verifying ? (
+                  <p role="status" aria-live="polite" className="text-small text-muted-foreground">
+                    Verificando en tu navegador (incluye las pruebas Groth16)…
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {run ? (
         <VerdictBanner status={statusOf(run)} title={run.ok && run.result.electionId !== "unknown" ? `Elección ${run.result.electionId}` : undefined}>
@@ -205,16 +210,13 @@ export function AuditVerifier() {
 
       {drawUnchecked ? (
         <Alert tone="warning" title="Sorteo no verificable con este verificador" role="status">
-          El paquete trae un sorteo, pero la versión <span className="q-mono">{result?.verifierVersion}</span> no emite el check <span className="q-mono">draw_matches</span>: los ganadores publicados no se comprobaron aquí.
+          El paquete trae un sorteo, pero la versión <span className="q-mono">{result?.verifierVersion}</span> no emite el check <span className="q-mono">draw_matches</span>: los ganadores publicados
+          no se comprobaron aquí.
         </Alert>
       ) : null}
 
       {result ? (
-        <AuditChecklist
-          result={result}
-          runtime="navegador"
-          onDownload={() => downloadJson(`verificacion-${result.electionId}-${result.checkedAt.slice(0, 19).replace(/[:T]/g, "-")}.json`, result)}
-        />
+        <AuditChecklist result={result} runtime="navegador" onDownload={() => downloadJson(`verificacion-${result.electionId}-${result.checkedAt.slice(0, 19).replace(/[:T]/g, "-")}.json`, result)} />
       ) : null}
     </div>
   );

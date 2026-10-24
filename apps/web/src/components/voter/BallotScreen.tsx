@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check } from "lucide-react";
 import type { z } from "zod";
 import type { Receipt } from "@quorum/contracts";
@@ -32,6 +32,7 @@ function explain(e: unknown): { message: string; alreadyVoted: boolean } {
  */
 export function BallotScreen({ electionId, electionTitle, options, voterId, inviteToken, onDone, onAlreadyVoted }: { electionId: string; electionTitle: string; options: Option[]; voterId: string; inviteToken: string; onDone: (r: ReceiptV1) => void; onAlreadyVoted: () => void }) {
   const [choice, setChoice] = useState<number | null>(null);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [detail, setDetail] = useState("");
   const [error, setError] = useState<{ message: string; alreadyVoted: boolean } | null>(null);
@@ -75,27 +76,41 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
     }
   }
 
+  function pick(i: number) {
+    setChoice(i);
+    setError(null);
+    setPhase("idle");
+  }
+
+  function onArrow(e: React.KeyboardEvent) {
+    const step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const next = ((choice ?? -1) + step + options.length) % options.length;
+    pick(next);
+    optionRefs.current[next]?.focus();
+  }
+
   return (
     <div className="flex flex-col gap-4 pb-28" data-testid="ballot">
       <header>
-        <p className="text-base font-semibold text-muted-foreground">Tu voto</p>
-        <h1 className="line-clamp-3 text-title font-bold leading-tight">{electionTitle}</h1>
+        <p className="q-eyebrow">Tu voto</p>
+        <h1 className="text-title font-bold leading-tight">{electionTitle}</h1>
       </header>
-      <fieldset disabled={sending} role="radiogroup" aria-label="Opciones" className="flex flex-col gap-2">
-        <legend className="sr-only">Elige una opción</legend>
+      <fieldset disabled={sending} role="radiogroup" aria-label="Elige una opción" className="flex flex-col gap-2" onKeyDown={onArrow}>
         {options.map((opt, i) => {
           const selected = choice === i;
           return (
             <button
               key={opt.id}
+              ref={(el) => {
+                optionRefs.current[i] = el;
+              }}
               type="button"
               role="radio"
               aria-checked={selected}
-              onClick={() => {
-                setChoice(i);
-                setError(null);
-                setPhase("idle");
-              }}
+              tabIndex={selected || (choice === null && i === 0) ? 0 : -1}
+              onClick={() => pick(i)}
               className={cn(
                 "flex min-h-14 w-full items-center gap-3 rounded-md border-2 px-4 text-left text-heading font-semibold transition-[background-color,border-color,box-shadow] duration-150 disabled:opacity-60",
                 selected ? "border-primary bg-primary text-primary-foreground shadow-primary" : "border-border bg-card shadow-card hover:border-primary/40",

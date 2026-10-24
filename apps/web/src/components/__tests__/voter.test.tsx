@@ -79,7 +79,7 @@ describe("VoterFlow · inscripción", () => {
       return { status: 200, body: invite("registration", { livenessPassedAt: "2026-10-24T14:00:00.000Z", walletAddress: wallet }) };
     });
     const { container } = render(<VoterFlow token="tok" />);
-    expect(await screen.findByText("Vinculando este teléfono…")).toBeTruthy();
+    expect(await screen.findByText("Preparando este teléfono…")).toBeTruthy();
     expect(await screen.findByText("¡Listo! Ya estás inscrito.", undefined, { timeout: 15_000 })).toBeTruthy();
     expect(screen.getByText(/Deja esta página abierta: la boleta aparecerá aquí sola/)).toBeTruthy();
     // Sin hora programada: lo dice, sin cuenta regresiva.

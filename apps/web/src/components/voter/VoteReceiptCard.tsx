@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Copy } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { copyText } from "@/lib/client/download";
 import { formatDateTime } from "@/lib/client/format";
 
@@ -72,18 +73,18 @@ export function VoteReceiptCard({ electionId, receipt, votedAt, title }: { elect
       </div>
 
       <nav className="q-after-print flex w-full flex-col gap-2" aria-label="Después de votar">
-        <Link href={`/e/${id}/live`} className="inline-flex min-h-14 items-center justify-center rounded-full bg-primary px-4 text-heading font-semibold text-primary-foreground shadow-primary hover:bg-primary-hover">
+        <Link href={`/e/${id}/live`} className={buttonVariants({ size: "lg", full: true })}>
           Ver resultados
         </Link>
         {receipt ? (
-          <div className="grid grid-cols-2 gap-2">
-            <Link href={`/e/${id}?comprobar=1#mi-voto`} className="inline-flex min-h-tap items-center justify-center whitespace-nowrap rounded-full border border-input bg-card px-2 text-small font-semibold hover:bg-muted">
+          <>
+            <Link href={`/e/${id}?comprobar=1#mi-voto`} className={buttonVariants({ variant: "ghost", full: true })}>
               Comprobar mi voto
             </Link>
-            <button type="button" onClick={copy} className="inline-flex min-h-tap items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-primary-soft px-2 text-small font-semibold text-primary-soft-foreground hover:bg-primary-muted/60 [&_svg]:size-4">
+            <Button variant="link" className="self-center" onClick={copy}>
               <Copy aria-hidden="true" /> {copied === "ok" ? "Copiado" : copied === "fail" ? "No se copió" : "Copiar código"}
-            </button>
-          </div>
+            </Button>
+          </>
         ) : null}
         <p role="status" aria-live="polite" className="sr-only">
           {copied === "ok" ? "Código copiado" : copied === "fail" ? "No se pudo copiar" : ""}
