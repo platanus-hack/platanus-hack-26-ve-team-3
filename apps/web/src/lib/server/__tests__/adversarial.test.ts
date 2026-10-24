@@ -263,7 +263,7 @@ describe("AT-07 FaceBinding con firma ajena o reenviada", () => {
 
 // ---------------------------------------------------------------------------
 describe("AT-08 commitment duplicado inyectado (M3)", () => {
-  it("(a) V2 inscribe el commitment público de V1 → 409; (b) V1 lo reenvía → 409; el padrón congelado no tiene duplicados", async () => {
+  it("(a) V2 inscribe el commitment público de V1 → 409; (b) V1 lo reenvía → éxito idempotente SIN duplicar (reintento del mismo teléfono) y con otro commitment → 409; el padrón congelado no tiene duplicados", async () => {
     const org = await setupRegistration();
     const v1 = await register(org, 61);
     const v2 = await enrollAndLink(org, 62, "V2");
@@ -271,8 +271,13 @@ describe("AT-08 commitment duplicado inyectado (M3)", () => {
     expect(pub).toContain(v1.identity.commitment);
     const a = await call(identity, { params: { id: v2.id }, body: { inviteToken: v2.inviteToken, commitment: v1.identity.commitment } });
     expect(a.status).toBe(409);
+    // (b) Reintento del mismo teléfono (respuesta perdida): éxito idempotente, el padrón no cambia.
+    const before = (await call(roll, { params: { id: org.id } })).json.commitments as string[];
     const b = await call(identity, { params: { id: v1.id }, body: { inviteToken: v1.inviteToken, commitment: v1.identity.commitment } });
-    expect(b.status).toBe(409);
+    expect(b.status).toBe(201);
+    expect((await call(roll, { params: { id: org.id } })).json.commitments).toEqual(before);
+    const b2 = await call(identity, { params: { id: v1.id }, body: { inviteToken: v1.inviteToken, commitment: createVoterIdentity().commitment } });
+    expect(b2.status).toBe(409);
     // variante no canónica del mismo commitment → 400 (no se cuela como "otro" número)
     const c = await call(identity, { params: { id: v2.id }, body: { inviteToken: v2.inviteToken, commitment: `0${v1.identity.commitment}` } });
     expect(c.status).toBe(400);
