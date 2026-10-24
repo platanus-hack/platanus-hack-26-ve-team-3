@@ -81,10 +81,16 @@ export async function registerIdentity(voterId: string, input: { inviteToken: st
 // ---------------------------------------------------------------------------
 // Apertura: congela el padrón
 // ---------------------------------------------------------------------------
-export async function openElection(id: string): Promise<Election> {
+/**
+ * `registration → open`. Con `{ auto: true }` (inicio programado) solo abre si, YA DENTRO del lock, la elección sigue en
+ * `registration` y `votingStartsAt` ya pasó: si otra petición la abrió primero o el organizador movió la hora, no hace
+ * nada y devuelve la elección tal cual (idempotente).
+ */
+export async function openElection(id: string, opts: { auto?: boolean } = {}): Promise<Election> {
   // engine → room (las entradas a la sala toman solo `room:`): la sala no admite a nadie mientras se congela el padrón.
   return withLock(`engine:${id}`, () => withLock(`room:${id}`, async () => {
     const e = await requireElection(id);
+    if (opts.auto && !scheduleDue(e, now().getTime())) return e;
     if (e.status !== "registration") throw new HttpError("closed", `Solo se abre desde inscripción (estado ${e.status})`, 409);
     const engine = await requireEngine(id);
     if (engine.roll.length === 0) throw new HttpError("closed", "No hay identidades inscritas: no se puede congelar un padrón vacío", 409);
@@ -97,10 +103,34 @@ export async function openElection(id: string): Promise<Election> {
     await store.putEngine(next);
     // A2: con el padrón congelado ya no hace falta el dedupe facial → se borran las plantillas (descriptores cifrados).
     await store.deleteFaceTemplates(id);
-    const opened: Election = { ...e, status: "open", groupRoot: root };
+    // `votingStartsAt` pasa a ser la hora REAL de apertura (a mano o programada).
+    const opened: Election = { ...e, status: "open", groupRoot: root, votingStartsAt: now().toISOString() };
     await saveElection(opened);
     return opened;
   }));
+}
+
+/** ¿Toca abrir sola? Fase `registration` con hora programada ya alcanzada. */
+export function scheduleDue(e: Pick<Election, "status" | "votingStartsAt">, nowMs: number): boolean {
+  if (e.status !== "registration" || !e.votingStartsAt) return false;
+  const at = Date.parse(e.votingStartsAt);
+  return Number.isFinite(at) && nowMs >= at;
+}
+
+/**
+ * Inicio programado, perezoso: se llama al principio de cada lectura/escritura relevante (GET elección, sala, padrón,
+ * invitación, tally; POST voto, join, identidad…). Si la hora ya llegó y la fase es `registration`, ejecuta la MISMA
+ * transición que `POST /open` bajo el lock de la elección (una sola vez: las demás peticiones concurrentes ven `open`
+ * dentro del lock y no hacen nada). Si no se puede abrir (padrón vacío) la elección sigue en `registration`.
+ */
+export async function syncSchedule(id: string): Promise<void> {
+  const e = await (await getStore()).getElection(id);
+  if (!e || !scheduleDue(e, now().getTime())) return;
+  try {
+    await openElection(id, { auto: true });
+  } catch (err) {
+    if (!(err instanceof HttpError)) throw err; // p. ej. padrón vacío: se queda en `registration`
+  }
 }
 
 export async function getRoll(id: string) {

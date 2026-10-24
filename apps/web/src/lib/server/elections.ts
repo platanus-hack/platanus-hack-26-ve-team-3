@@ -75,6 +75,7 @@ export async function createElection(input: CreateElectionInput, opts: { id?: st
     winnersCount: input.winnersCount ?? null,
     optionValues: input.optionValues ?? null,
     registryAddress: env.registryAddress ?? null,
+    votingStartsAt: null,
   });
   const store = await getStore();
   await store.putElection(election);

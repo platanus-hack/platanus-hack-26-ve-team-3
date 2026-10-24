@@ -2,6 +2,7 @@ import { JoinRoomInput, JoinRoomResult } from "@quorum/contracts";
 import { json, parseBody, route } from "@/lib/server/errors";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { joinRoom } from "@/lib/server/rooms";
+import { syncScheduleForRoom } from "@/lib/server/schedule";
 
 /** Muchas personas de la sala comparten la IP del wifi del evento: el tope por IP es generoso; el control real es `maxSeats`. */
 function joinLimitPerMinute(): number {
@@ -17,5 +18,6 @@ function joinLimitPerMinute(): number {
 export const POST = route<{ roomCode: string }>(async (req, { roomCode }) => {
   rateLimit(req, "room:join", joinLimitPerMinute());
   const input = await parseBody(req, JoinRoomInput);
+  await syncScheduleForRoom(roomCode);
   return json(JoinRoomResult.parse(await joinRoom(roomCode, input)), { status: 201 });
 });

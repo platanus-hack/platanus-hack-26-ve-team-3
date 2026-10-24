@@ -2,6 +2,7 @@ import { CastVoteInput } from "@quorum/contracts";
 import { castVote } from "@/lib/server/engine";
 import { json, parseBody, route } from "@/lib/server/errors";
 import { rateLimit } from "@/lib/server/ratelimit";
+import { syncSchedule } from "@/lib/server/schedule";
 
 /**
  * POST /api/elections/:id/vote { proof: SemaphoreProof, onchain?: { txHash } } → Receipt (inclusionId = nullifier).
@@ -10,5 +11,6 @@ import { rateLimit } from "@/lib/server/ratelimit";
 export const POST = route<{ id: string }>(async (req, { id }) => {
   rateLimit(req, "vote", 20);
   const input = await parseBody(req, CastVoteInput);
+  await syncSchedule(id);
   return json(await castVote(id, input), { status: 201 });
 });
