@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AuditResult as AuditResultSchema } from "@quorum/contracts";
-import { verifyPackage, type AnchorReader } from "../src/index.js";
+import { verifyPackage, type AnchorReader } from "../src/index";
 // Solo en tests: el adaptador genera un paquete real al vuelo y codifica el calldata del ancla simulada.
 import { buildDemoElection, encodeAnchorCalldata, rechain, tally as recount, tallyHash, hashCanonical } from "@quorum/protocol-adapter";
 
@@ -18,7 +18,7 @@ describe("fixtures de packages/demo-fixtures/protocol", () => {
     expect(AuditResultSchema.safeParse(r).success).toBe(true);
     expect(r.valid).toBe(true);
     expect(r.protocol).toBe("semaphore-ledger");
-    expect(r.checks.map((c) => c.name)).toEqual(["package_schema", "manifest_hash", "group_root", "chain_integrity", "proofs_valid", "nullifiers_unique", "tally_matches", "anchor_matches"]);
+    expect(r.checks.map((c) => c.name)).toEqual(["package_schema", "manifest_hash", "group_root", "commitments_unique", "chain_integrity", "proofs_valid", "nullifiers_unique", "tally_matches", "anchor_matches"]);
     expect(reasonOf(r, "anchor_matches")).toMatch(/no evaluado/);
     expect(r.unsupportedGuarantees.join("\n")).toMatch(/secreto-del-contenido/);
     expect(r.unsupportedGuarantees.join("\n")).toMatch(/resistencia-a-coaccion/);
@@ -123,4 +123,23 @@ describe("flujo completo generado en el test + ancla simulada", () => {
     expect(down.valid).toBe(false);
     expect(down.checks.find((c) => c.name === "anchor_matches")?.reason).toMatch(/no se pudo leer/);
   }, 60_000);
+});
+
+describe("rollPolicy (sala abierta) — declarativa", () => {
+  it("open-room → sigue valid:true y se declara en unsupportedGuarantees con tope y entradas", async () => {
+    const pkg = { ...load("valid"), rollPolicy: { kind: "open-room", maxSeats: 60, joined: 27, enrolled: 3, eligibility: "face-dedupe-demo", note: "x" } };
+    const r = await verifyPackage(pkg);
+    expect(r.valid).toBe(true);
+    const note = r.unsupportedGuarantees.find((g) => g.startsWith("censo-abierto-en-sala"));
+    expect(note).toMatch(/la elegibilidad depende de la deduplicación facial demo, no de un padrón/);
+    expect(note).toMatch(/tope 60 asientos, entraron 27, 3 llegaron al padrón/);
+  });
+
+  it("sin rollPolicy no aparece la nota; rollPolicy mal formada → package_schema falla", async () => {
+    const r = await verifyPackage(load("valid"));
+    expect(r.unsupportedGuarantees.some((g) => g.startsWith("censo-abierto-en-sala"))).toBe(false);
+    const bad = await verifyPackage({ ...load("valid"), rollPolicy: { kind: "open-room", maxSeats: 0 } });
+    expect(bad.valid).toBe(false);
+    expect(failing(bad)).toEqual(["package_schema"]);
+  });
 });

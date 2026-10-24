@@ -8,13 +8,14 @@
  * NO garantiza: secreto del contenido frente al servidor (la opción va en claro dentro de la prueba),
  * resistencia a coacción, validez 0/1 de boletas cifradas (no hay cifrado), identidad civil de los votantes.
  */
-export { canonicalJson, hashCanonical, sha256Utf8, keccakToField } from "./hash.js";
-export { createVoterIdentity, importIdentity, buildGroup, groupRoot, electionScope, MERKLE_TREE_DEPTH, SEMAPHORE_VERSION, type VoterIdentity } from "./identity.js";
-export { defaultArtifacts, browserArtifacts, ARTIFACT_FILES, ARTIFACT_SHA256, type SnarkArtifactPaths } from "./artifacts.js";
-export { castBallot, verifyProof, type SemaphoreProof } from "./ballot.js";
-export { buildDemoElection, demoManifest, type DemoElection } from "./demo.js";
-export { createLedger, appendBallot, finalHash, tally, genesisHash, entryHash, rechain, LedgerRejection, type Ledger, type LedgerEntry, type LedgerRejectionCode, type Tally, type Hex32 } from "./ledger.js";
-export { buildAuditPackage, manifestHash, tallyHash, AUDIT_PACKAGE_VERSION, ADAPTER_VERSION, type AuditPackage, type ElectionManifest, type AnchorRef } from "./audit-package.js";
+export { canonicalJson, hashCanonical, sha256Utf8, keccakToField } from "./hash";
+export { createVoterIdentity, importIdentity, buildGroup, groupRoot, electionScope, MERKLE_TREE_DEPTH, SEMAPHORE_VERSION, type VoterIdentity } from "./identity";
+export { defaultArtifacts, browserArtifacts, ARTIFACT_FILES, ARTIFACT_SHA256, type SnarkArtifactPaths } from "./artifacts";
+export { castBallot, verifyProof, type SemaphoreProof } from "./ballot";
+export { buildDemoElection, demoManifest, type DemoElection } from "./demo";
+export { createLedger, appendBallot, isCanonicalField, SNARK_SCALAR_FIELD, finalHash, tally, genesisHash, entryHash, rechain, LedgerRejection, type Ledger, type LedgerEntry, type LedgerRejectionCode, type Tally, type Hex32 } from "./ledger";
+export { drawWinners, drawSeed, runDraw, sortCandidates, winningOptionIndex, winnersCountFor, DRAW_METHOD, type DrawCandidate, type DrawRule, type DrawResult } from "./draw";
+export { buildAuditPackage, manifestHash, tallyHash, AUDIT_PACKAGE_VERSION, ADAPTER_VERSION, type AuditPackage, type ElectionManifest, type AnchorRef } from "./audit-package";
 export {
   anchorOnBaseSepolia,
   readAnchor,
@@ -36,4 +37,4 @@ export {
   type AnchorResult,
   type ReadAnchorResult,
   type EasAttestResult,
-} from "./anchor.js";
+} from "./anchor";

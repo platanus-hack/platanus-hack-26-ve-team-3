@@ -94,3 +94,38 @@ Decisiones D-09..D-12 en `docs/DECISIONS.md`. Cambios sobre v0:
 
 ## Env nuevas
 `NEXT_PUBLIC_ZERODEV_PROJECT_ID`, `NEXT_PUBLIC_REGISTRY_ADDRESS`, `ORGANIZER_PRIVATE_KEY`, `FACE_DEDUPE_THRESHOLD=0.75`, `NEXT_PUBLIC_DEMO_ELECTION_ID`.
+
+## Contrato v1 — implementado (feat/phase2-engine, 2026-10-24) · diferencias que la UI debe conocer
+- `POST /api/elections` acepta además `candidates[]`, `winnersCountFromResult`, `optionValues[]` (un valor por opción) o `winnersCount`; responde `Election` + **`organizerToken`** (una sola vez; el servidor guarda solo su sha256).
+- **Auth del organizador** (`Authorization: Bearer <organizerToken>`, 401 si falta): `publish`, `POST/GET voters`, `invites`, `open`, `close`, `POST draw`. `GET /voters` sin token → `{ counts: { total, invited, registered, withIdentity, voted } }`; con token → `{ voters: [{id, displayName, state, walletAddress, hasIdentity}], counts }`.
+- `publish` → `registration` (ya no `open`). `manifestHash` = SHA-256 (hex con `0x`) del `ElectionManifest` del adaptador, que incluye `drawRule { candidates, winnersCount, tieBreak:"lowest" }`.
+- `POST /api/face/enroll` → `{ ok, faceBindingHash, voteNonce }` o `409 {code:"duplicate_identity"}`; solo en `registration`. `POST /api/face/verify` exige `inviteToken` y responde `{ ok, voteNonce, mode }` (sin similitud).
+- `POST /api/voters/:id/wallet` `{ inviteToken, walletAddress, kind, bindingSignature }`: firma EIP-712 `FaceBinding` con dominio `{name:"Quorum", version:"1", chainId:84532, verifyingContract:0x0…0}` (igual a `@quorum/wallet`). Con `BASE_SEPOLIA_RPC` usa `publicClient.verifyTypedData` (EOA/1271/6492); sin RPC solo `eoa-demo` (kernel → 503).
+- `POST /api/voters/:id/identity` `{ inviteToken, commitment }` (tras la wallet) → `201 { ok, registeredCount }`.
+- `POST /api/elections/:id/open` (organizador) congela el padrón y **borra las plantillas faciales**. `GET /api/elections/:id/roll` → `{ frozen, groupRoot, scope, merkleTreeDepth, commitments }`.
+- `POST /api/elections/:id/vote` `{ proof }` → `201 Receipt { inclusionId = nullifier, nullifier, index, hash, state:"incluido" }`. Errores: 400 codificación no canónica/opción fuera de rango; 403 `not_eligible` (raíz/scope/prueba); 409 `already_voted` / `closed`. `onchain.txHash` se ignora salvo `QUORUM_ONCHAIN_CAST=true`.
+- `POST /api/voters/:id/voted { inviteToken }` (nuevo, opcional): autodeclaración para el estado "voted"; enviarlo en una petición separada del voto.
+- `GET /api/elections/:id/ledger` → mientras `open` **sin entradas** (`count`, `finalHash`, `proofsPublished:false`); desde `closed` entradas completas. El votante comprueba su inclusión con `GET /receipt/:nullifier`.
+- `POST /close` → `auditable` o **`failed`** (si el verificador rechaza; el `AuditResult` se publica igual). `GET /api/elections/:id/audit` → `{ auditResult, packageDigest, anchorStatus }`. `GET /artifacts` devuelve los bytes exactos con `ETag` = digest.
+- `POST /draw` (organizador, solo `auditable`) → `drawn`; `GET /draw` → `{ seed, n, winners, method, finalHash, candidates, tieBreak }`. El paquete pasa a incluir `draw` y el verificador añade `draw_matches`; nuevo check `commitments_unique`.
+
+## Sala abierta (asamblea abierta) — `feat/p2-sala-abierta`
+Para la demo: todo el público vota desde su teléfono. El organizador abre una sala en `registration`, el proyector muestra el QR de `joinUrl` y un contador en vivo. Esquemas en `packages/contracts` (`OpenRoomInput`, `RoomStatus`, `OpenRoomResult`, `RoomPublicInfo`, `JoinRoomInput`, `JoinRoomResult`). Lógica en `apps/web/src/lib/server/rooms.ts`.
+
+| Método y ruta | Auth | Entrada | Salida | Errores |
+|---|---|---|---|---|
+| `POST /api/elections/:id/room` | Bearer organizador | `{ maxSeats: 1..500, expiresInMin: 1..180 }` | `201` (sala nueva) o `200` (ya había una abierta: mismo `roomCode`, nuevos tope/expiración) → `{ open, seatsTaken, maxSeats, expiresAt, closedReason, roomCode, joinUrl }` | 401 sin Bearer · 400 rango o `maxSeats < seatsTaken` · 409 `closed` si no está en `registration` |
+| `DELETE /api/elections/:id/room` | Bearer | — | `200 RoomStatus` (`open:false`, `closedReason:"manual"`). Idempotente | 401 |
+| `GET /api/elections/:id/room` | público | — | `{ open, seatsTaken, maxSeats, expiresAt, closedReason }` (+ `roomCode`, `joinUrl` con Bearer). Sin sala: `{ open:false, seatsTaken, maxSeats:null, expiresAt:null, closedReason:null }`. `Cache-Control: public, s-maxage=2` | 404 elección |
+| `GET /api/rooms/:roomCode` | público | — | `{ electionId, title, open, seatsTaken, maxSeats, expiresAt, closedReason }` (para `/j/<roomCode>` antes de unirse; el código es case-insensitive) | 404 |
+| `POST /api/rooms/:roomCode/join` | público, rate limit por IP (`ROOM_JOIN_RATE_PER_MIN`, default 30/min) | `{ displayName }` alias libre | `201 { electionId, voterId, displayName, inviteToken, inviteUrl }` — el `inviteToken` se entrega **una sola vez**; seguir a `inviteUrl` (`/v/<token>`) | 400 `invalid_input` alias · 404 sala · 409 `room_full` · 410 `room_closed` (cerrada, expirada, reemplazada o votación ya abierta) · 429 |
+
+- `roomCode`: 6 caracteres de `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (sin 0/O/1/I/L). `joinUrl = APP_URL + /j/ + roomCode`.
+- `closedReason`: `null` (abierta) · `"manual"` (DELETE o sala reemplazada) · `"expired"` · `"election-opened"`.
+- `seatsTaken` = votantes con `source:"room"` de la elección (todas sus salas); el tope `maxSeats` se aplica a ese total.
+- Alias (`RoomAlias`): NFC, espacios colapsados, 1..32 caracteres, solo letras/números/espacios y `. ' _ -`, al menos una letra o número, **menos de 7 dígitos** (nunca teléfono ni documento). Nunca se pide teléfono.
+- El votante creado lleva `source:"room"`, `inviteStatus:"claimed"`, sin `phoneE164`. Desde ahí, flujo normal: `POST /api/face/enroll` (dedupe 1:N → `409 duplicate_identity`: el control "una persona = un lugar", **modo demo**) → `POST /api/voters/:id/wallet` (FaceBinding) → `POST /api/voters/:id/identity`.
+- `POST /open` cierra la sala (`closedReason:"election-opened"`) y fija `rollPolicy`. El organizador ve `source` en `GET /voters` (Bearer).
+- **Paquete de auditoría**: si la elección tuvo sala, `rollPolicy = { kind:"open-room", maxSeats, joined, enrolled, eligibility:"face-dedupe-demo", note:"censo abierto en sala: la elegibilidad depende de la deduplicación facial demo, no de un padrón" }` a nivel raíz (sin alias ni ids). Está **fuera de `manifestHash`/`checksums`** (la sala se abre después de publicar): es una declaración del organizador. El verificador no la comprueba y la muestra en `unsupportedGuarantees` como `censo-abierto-en-sala: …`.
+- **Hallazgo A6**: el opt-in de WhatsApp (`QUORUM <id>`) ya **no crea votantes**; solo reenvía el enlace a quien el organizador cargó con ese teléfono. La sala es la única vía abierta: explícita, activada por el organizador, con tope y expiración.
+- Seed: `pnpm --filter @quorum/web seed:demo -- --reset --room [--seats 60] [--minutes 15]` imprime `roomCode` y `joinUrl`.

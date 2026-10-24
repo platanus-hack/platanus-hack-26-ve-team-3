@@ -27,6 +27,24 @@ export const env = {
     const n = Number(str("FACE_THRESHOLD") ?? "0.6");
     return Number.isFinite(n) ? n : 0.6;
   },
+  /** Umbral de similitud coseno para rechazar un rostro ya inscrito en la misma elección (dedupe 1:N). */
+  get faceDedupeThreshold(): number {
+    const n = Number(str("FACE_DEDUPE_THRESHOLD") ?? "0.75");
+    return Number.isFinite(n) ? n : 0.75;
+  },
+  /** Clave del organizador para anclar en Base Sepolia. Solo servidor; sin ella el ancla queda deshabilitada. */
+  get organizerPrivateKey(): `0x${string}` | undefined {
+    const v = str("ORGANIZER_PRIVATE_KEY");
+    return v && /^0x[0-9a-fA-F]{64}$/.test(v) ? (v as `0x${string}`) : undefined;
+  },
+  /** C2: el txHash on-chain del voto (Cast desde la wallet del votante) permite correlacionar wallet ↔ voto por tiempo. Apagado por defecto. */
+  get onchainCastEnabled(): boolean {
+    return str("QUORUM_ONCHAIN_CAST") === "true";
+  },
+  get registryAddress(): string | undefined {
+    const v = str("NEXT_PUBLIC_REGISTRY_ADDRESS");
+    return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? v : undefined;
+  },
   get faceKey(): string | undefined {
     return str("FACE_KEY");
   },

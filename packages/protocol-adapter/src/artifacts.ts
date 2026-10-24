@@ -15,7 +15,10 @@ export const ARTIFACT_SHA256 = {
 
 /** Rutas absolutas en Node a los artefactos vendorizados en este paquete (sin importar módulos node:*). */
 export function defaultArtifacts(): SnarkArtifactPaths {
-  const base = new URL("../artifacts/", import.meta.url);
+  // La ruta se arma en tiempo de ejecución para que los bundlers (Turbopack) no la traten como asset:
+  // solo se usa en Node (tests, scripts); el servidor web nunca genera pruebas.
+  const dir = ["..", "artifacts", ""].join("/");
+  const base = new URL(dir, import.meta.url);
   return {
     wasm: decodeURIComponent(new URL(ARTIFACT_FILES.wasm, base).pathname),
     zkey: decodeURIComponent(new URL(ARTIFACT_FILES.zkey, base).pathname),

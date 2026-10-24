@@ -15,7 +15,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
-import type { Hex32 } from "./ledger.js";
+import type { Hex32 } from "./ledger";
 
 /** Base Sepolia (testnet de Base). Fuente: https://docs.base.org/chain/network-information (consultado 2026-10-24). */
 export const BASE_SEPOLIA_CHAIN_ID = 84532;

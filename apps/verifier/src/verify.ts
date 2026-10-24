@@ -8,7 +8,7 @@
  */
 import { Group, verifyProof } from "@semaphore-protocol/core";
 import { AuditResult as AuditResultSchema, type AuditResult } from "@quorum/contracts";
-import { createPublicClient, decodeAbiParameters, http, keccak256, sha256, stringToBytes, type Hex } from "viem";
+import { concat, createPublicClient, decodeAbiParameters, http, keccak256, sha256, stringToBytes, toHex, type Hex } from "viem";
 import { z } from "zod";
 
 export const VERIFIER_VERSION = "quorum-verifier/0.1.0 (semaphore-core 4.14.5)";
@@ -16,7 +16,13 @@ export const BASE_SEPOLIA_CHAIN_ID = 84532;
 
 // ---------- esquema del paquete (quorum-audit/1) ----------
 const Hex32 = z.string().regex(/^0x[0-9a-f]{64}$/, "hex de 32 bytes");
-const Decimal = z.string().regex(/^\d+$/, "string decimal");
+/** Módulo del campo escalar de BN254. */
+const SNARK_SCALAR_FIELD = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+/** Decimal canónico (sin ceros a la izquierda ni hex) y < r: evita dos codificaciones del mismo nullifier (C1). */
+const Decimal = z
+  .string()
+  .regex(/^(0|[1-9]\d{0,77})$/, "decimal canónico (sin ceros a la izquierda ni hex)")
+  .refine((v) => BigInt(v) < SNARK_SCALAR_FIELD, "fuera del campo BN254");
 const ProofSchema = z.object({
   merkleTreeDepth: z.number().int().min(1).max(32),
   merkleTreeRoot: Decimal,
@@ -26,6 +32,23 @@ const ProofSchema = z.object({
   points: z.tuple([Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal]),
 });
 const EntrySchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, proof: ProofSchema });
+const Hex32Lower = z.string().regex(/^0x[0-9a-f]{64}$/, "hex de 32 bytes");
+const DrawCandidateSchema = z.object({ id: z.string().min(1), label: z.string(), amount: z.number().optional() });
+const DrawRuleSchema = z.object({
+  candidates: z.array(DrawCandidateSchema).min(1),
+  winnersCount: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("fixed"), n: z.number().int().min(0) }),
+    z.object({ kind: z.literal("from-result"), optionValues: z.array(z.number().int().min(0)) }),
+  ]),
+  tieBreak: z.literal("lowest").optional(),
+});
+const DrawSchema = z.object({
+  seed: Hex32Lower,
+  n: z.number().int().min(0),
+  winners: z.array(z.string()),
+  method: z.literal("keccak256(finalHash)|fisher-yates"),
+  finalHash: Hex32Lower,
+});
 const ManifestSchema = z.object({
   electionId: z.string().min(1),
   title: z.string(),
@@ -36,6 +59,20 @@ const ManifestSchema = z.object({
   protocol: z.literal("semaphore-ledger"),
   merkleTreeDepth: z.number().int(),
   label: z.string().optional(),
+  drawRule: DrawRuleSchema.optional(),
+});
+/**
+ * Política del censo declarada por el organizador (opcional). Hoy solo `open-room`: sala abierta en la que el público
+ * se inscribió con un alias. No entra en `manifestHash` ni en `checksums` (la sala se abre después de publicar), así que
+ * el verificador NO la comprueba: la muestra como garantía no soportada para que nadie lea el padrón como un censo cerrado.
+ */
+const RollPolicySchema = z.object({
+  kind: z.literal("open-room"),
+  maxSeats: z.number().int().min(1),
+  joined: z.number().int().min(0),
+  enrolled: z.number().int().min(0),
+  eligibility: z.literal("face-dedupe-demo"),
+  note: z.string().optional(),
 });
 const TallySchema = z.object({ counts: z.array(z.number().int().min(0)), invalid: z.number().int().min(0), total: z.number().int().min(0) });
 export const AuditPackageSchema = z.object({
@@ -57,6 +94,8 @@ export const AuditPackageSchema = z.object({
   checksums: z.object({ manifest: Hex32, commitments: Hex32, ledger: Hex32, tally: Hex32 }),
   versions: z.object({ adapter: z.string(), semaphore: z.string(), artifacts: z.string() }).optional(),
   generatedAt: z.string().optional(),
+  draw: DrawSchema.optional(),
+  rollPolicy: RollPolicySchema.optional(),
 });
 export type AuditPackage = z.infer<typeof AuditPackageSchema>;
 
@@ -79,6 +118,20 @@ function sortKeys(value: unknown): unknown {
 }
 export const hashCanonical = (v: unknown): Hex => sha256(stringToBytes(canonicalJson(v)));
 export const expectedScope = (electionId: string): string => (BigInt(keccak256(stringToBytes(`quorum:${electionId}`))) >> 8n).toString();
+
+// ---------- sorteo (reimplementado a propósito; misma definición que protocol-adapter/src/draw.ts) ----------
+/** seed = keccak256(finalHash); Fisher-Yates parcial con r_i = keccak256(seed ‖ uint256(i)) sobre ids ordenados. */
+export function recomputeDraw(candidateIds: readonly string[], n: number, finalHash: Hex): { seed: Hex; winners: string[]; n: number } {
+  const ids = [...candidateIds].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const seed = keccak256(finalHash);
+  const take = Math.min(n, ids.length);
+  for (let i = 0; i < take; i++) {
+    const r = BigInt(keccak256(concat([seed, toHex(BigInt(i), { size: 32 })])));
+    const j = i + Number(r % BigInt(ids.length - i));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  return { seed, winners: ids.slice(0, take), n: take };
+}
 
 // ---------- ancla ----------
 export type AnchorRead = { chainId: number; from: string; to: string | null; input: Hex };
@@ -162,6 +215,19 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
     checks.push({ name: "group_root", passed: rootOk, reason: rootOk ? `raíz del padrón recomputada y coincide (${pkg.commitments.length} commitments)` : `padrón alterado: ${problems.join("; ")}` });
   }
 
+  // 2b. commitments_unique (M3): un commitment repetido daría dos hojas a la misma credencial en el padrón.
+  {
+    const seen = new Map<bigint, number>();
+    const dups: string[] = [];
+    pkg.commitments.forEach((c, i) => {
+      const k = BigInt(c);
+      const first = seen.get(k);
+      if (first !== undefined) dups.push(`commitment #${i} duplica #${first}`);
+      else seen.set(k, i);
+    });
+    checks.push({ name: "commitments_unique", passed: dups.length === 0, reason: dups.length ? `padrón con duplicados: ${dups.join("; ")}` : `${seen.size} commitments únicos` });
+  }
+
   // 3. chain_integrity
   const scope = expectedScope(pkg.electionId);
   {
@@ -212,12 +278,14 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
 
   // 5. nullifiers_unique
   {
-    const seen = new Map<string, number>();
+    // Se compara el VALOR (BigInt), no el texto: "0"+n y n son el mismo nullifier.
+    const seen = new Map<bigint, number>();
     const dups: string[] = [];
     pkg.ledger.forEach((e, i) => {
-      const first = seen.get(e.proof.nullifier);
+      const key = BigInt(e.proof.nullifier);
+      const first = seen.get(key);
       if (first !== undefined) dups.push(`#${i} repite el nullifier de #${first}`);
-      else seen.set(e.proof.nullifier, i);
+      else seen.set(key, i);
     });
     checks.push({ name: "nullifiers_unique", passed: dups.length === 0, reason: dups.length ? `doble voto: ${dups.join("; ")}` : `${seen.size} nullifiers únicos` });
   }
@@ -273,6 +341,64 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
       }
       checks.push({ name: "anchor_matches", passed: problems.length === 0, reason: problems.length ? problems.join("; ") : `ancla en Base Sepolia (tx ${pkg.anchor.txHash.slice(0, 12)}…) coincide con finalHash, groupRoot y tallyHash` });
     }
+  }
+
+  // 8. draw_matches (solo si el manifiesto declara regla de sorteo o el paquete trae sorteo)
+  if (pkg.manifest.drawRule || pkg.draw) {
+    const rule = pkg.manifest.drawRule;
+    const draw = pkg.draw;
+    if (!rule) {
+      checks.push({ name: "draw_matches", passed: false, reason: "el paquete trae un sorteo pero el manifiesto no declara regla de sorteo (regla añadida después de publicar)" });
+    } else if (!draw) {
+      checks.push({ name: "draw_matches", passed: true, reason: "no evaluado: el manifiesto declara sorteo pero aún no se ha realizado" });
+      unsupported.push("sorteo: aún no realizado; no hay ganadores que comprobar");
+    } else {
+      const problems: string[] = [];
+      const ids = rule.candidates.map((c) => c.id);
+      if (new Set(ids).size !== ids.length) problems.push("ids de candidatos repetidos en el manifiesto");
+      // N recomputado desde NUESTRO recuento, no desde el tally publicado.
+      const n = pkg.manifest.options.length;
+      const counts = new Array<number>(n).fill(0);
+      for (const e of pkg.ledger) {
+        const m = Number(e.proof.message);
+        if (Number.isInteger(m) && m >= 0 && m < n) counts[m] += 1;
+      }
+      let expectedN: number | null;
+      if (rule.winnersCount.kind === "fixed") expectedN = rule.winnersCount.n;
+      else {
+        // Empate en el máximo → gana la opción de MENOR valor N (tieBreak "lowest", declarado en el manifiesto).
+        const values = rule.winnersCount.optionValues;
+        const max = Math.max(0, ...counts);
+        let best = -1;
+        if (max > 0) counts.forEach((c, i) => { if (c === max && (best < 0 || values[i] < values[best])) best = i; });
+        expectedN = best >= 0 ? (values[best] ?? null) : null;
+        if (values.length !== n) problems.push(`optionValues tiene ${values.length} valores, el manifiesto ${n} opciones`);
+        if (rule.tieBreak !== "lowest") problems.push("el manifiesto no declara regla de empate (tieBreak) para N");
+      }
+      if (expectedN === null) problems.push("no hay boletas válidas: la regla no fija N y no debería existir sorteo");
+      if (draw.finalHash !== pkg.finalHash) problems.push(`sorteo hecho sobre finalHash ${draw.finalHash.slice(0, 18)}… ≠ finalHash del paquete ${pkg.finalHash.slice(0, 18)}…`);
+      if (problems.length === 0 && expectedN !== null) {
+        const r = recomputeDraw(ids, expectedN, pkg.finalHash as Hex);
+        if (draw.seed !== r.seed) problems.push(`semilla publicada ${draw.seed.slice(0, 18)}… ≠ keccak256(finalHash) ${r.seed.slice(0, 18)}…`);
+        if (draw.n !== r.n) problems.push(`N publicado ${draw.n} ≠ N recomputado ${r.n}`);
+        if (JSON.stringify(draw.winners) !== JSON.stringify(r.winners)) problems.push(`ganadores publicados [${draw.winners.join(", ")}] ≠ recomputados [${r.winners.join(", ")}]`);
+      }
+      checks.push({
+        name: "draw_matches",
+        passed: problems.length === 0,
+        reason: problems.length ? `sorteo no reproducible: ${problems.join("; ")}` : `sorteo recomputado: N=${draw.n}, ganadores [${draw.winners.join(", ")}] con semilla keccak256(finalHash)`,
+      });
+    }
+  }
+
+  // 9. Política del censo (declarativa; no es un check: no hay nada criptográfico que recomputar).
+  if (pkg.rollPolicy) {
+    const rp = pkg.rollPolicy;
+    unsupported.push(
+      `censo-abierto-en-sala: censo abierto en sala: la elegibilidad depende de la deduplicación facial demo, no de un padrón ` +
+        `(tope ${rp.maxSeats} asientos, entraron ${rp.joined}, ${rp.enrolled} llegaron al padrón de ${pkg.commitments.length} commitments; ` +
+        `declarado por el organizador fuera de manifestHash/checksums, el verificador no puede comprobarlo)`,
+    );
   }
 
   return finish({ electionId: pkg.electionId, protocol: "semaphore-ledger" });

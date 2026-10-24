@@ -1,33 +1,26 @@
-import { AuditResult, Protocol } from "@quorum/contracts";
-import { z } from "zod";
-import { canonicalJson, sha256Hex } from "@/lib/server/crypto";
-import { json, parseBody, route } from "@/lib/server/errors";
+import { createHash } from "node:crypto";
+import { verifyUploaded } from "@/lib/server/engine";
+import { HttpError, json, route } from "@/lib/server/errors";
 import { rateLimit } from "@/lib/server/ratelimit";
 
-const Input = z.object({ package: z.record(z.string(), z.unknown()) });
+const MAX_BYTES = 8 * 1024 * 1024;
 
 /**
- * POST /api/audit/verify → AuditResult.
- * Hasta que `apps/verifier` exista y se integre, devuelve `valid:false` con
- * `unsupportedGuarantees: ["verifier-not-integrated"]`. Nunca se finge una verificación
- * (regla dura 2: VERIFIED nunca sale de un booleano de nuestra DB).
+ * POST /api/audit/verify { package } → AuditResult del verificador independiente (`@quorum/verifier`).
+ * Devuelve el resultado íntegro (checks con causa + unsupportedGuarantees); un paquete mal formado
+ * da `valid:false` con `package_schema`, nunca un éxito por defecto.
  */
 export const POST = route(async (req) => {
   rateLimit(req, "audit:verify", 30);
-  const { package: pkg } = await parseBody(req, Input);
-  const protocol = Protocol.safeParse(pkg.protocol);
-  const result = AuditResult.parse({
-    electionId: typeof pkg.electionId === "string" ? pkg.electionId : "unknown",
-    verifierVersion: "not-integrated",
-    protocol: protocol.success ? protocol.data : "integrity-demo",
-    inputArtifactDigest: sha256Hex(canonicalJson(pkg)),
-    checkedAt: new Date().toISOString(),
-    valid: false,
-    checks: [
-      { name: "package-parsed", passed: true },
-      { name: "independent-verifier", passed: false, reason: "apps/verifier aún no integrado; resultado no verificable" },
-    ],
-    unsupportedGuarantees: ["verifier-not-integrated"],
-  });
-  return json(result);
+  const raw = await req.text();
+  if (raw.length > MAX_BYTES) throw new HttpError("invalid_input", "Paquete demasiado grande");
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    throw new HttpError("invalid_input", "Body JSON inválido");
+  }
+  if (!body || typeof body !== "object" || !("package" in body)) throw new HttpError("invalid_input", "Falta `package`");
+  const digest = createHash("sha256").update(raw).digest("hex");
+  return json(await verifyUploaded((body as { package: unknown }).package, digest));
 });

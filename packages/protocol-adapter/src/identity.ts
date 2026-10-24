@@ -1,5 +1,5 @@
 import { Identity, Group } from "@semaphore-protocol/core";
-import { keccakToField } from "./hash.js";
+import { keccakToField } from "./hash";
 
 /** Profundidad del árbol con la que se compilaron los artefactos vendorizados (2^10 = 1024 votantes). */
 export const MERKLE_TREE_DEPTH = 10;

@@ -1,8 +1,8 @@
 /**
  * Webhook de Kapso — plan B4 (opt-in) de research/03:
  * el votante envía "QUORUM <electionId>" al número de Kapso → evento `whatsapp.message.received`
- * → creamos/encontramos al votante por teléfono y le respondemos con su enlace único (vía provider;
- * en dev es dry-run, nunca un WhatsApp real sin INVITE_SEND_APPROVED=true).
+ * → buscamos al votante YA CARGADO por el organizador con ese teléfono y le reenviamos su enlace único (vía provider;
+ * en dev es dry-run, nunca un WhatsApp real sin INVITE_SEND_APPROVED=true). Hallazgo A6: nunca crea votantes.
  *
  * Seguridad: `X-Webhook-Signature` = HMAC-SHA256 hex del body crudo con `KAPSO_WEBHOOK_SECRET`.
  * Dedupe por `X-Idempotency-Key`. Soporta envelope batch (`body.batch === true` → `body.events`).
@@ -10,8 +10,7 @@
  * La forma exacta del evento de Kapso no está verificada en research/03; se leen varias rutas
  * (`data.message.text.body`, `data.text.body`, Meta `entry[].changes[].value.messages[]`).
  */
-import type { Voter } from "@quorum/contracts";
-import { hmacSha256Hex, randomId, randomToken, safeEqualHex } from "./crypto";
+import { hmacSha256Hex, safeEqualHex } from "./crypto";
 import { inviteVoter, selectProvider } from "./invites";
 import { getStore } from "./store";
 
@@ -101,24 +100,13 @@ export async function handleOptIn(msg: Incoming): Promise<"sent" | "ignored" | "
   if (!phone) return "ignored";
   const store = await getStore();
   const election = await store.getElection(electionId);
-  if (!election || (election.status !== "open" && election.status !== "draft")) return "ignored";
+  if (!election || (election.status !== "registration" && election.status !== "draft")) return "ignored";
 
-  let voter = await store.getVoterByPhone(electionId, phone);
-  if (!voter) {
-    voter = {
-      id: randomId("vt"),
-      electionId,
-      displayName: (msg.profileName ?? "Votante WhatsApp").slice(0, 80),
-      phoneE164: phone,
-      inviteToken: randomToken(),
-      inviteStatus: "pending",
-      walletAddress: null,
-      livenessPassedAt: null,
-      credentialIssuedAt: null,
-      votedAt: null,
-    } satisfies Voter;
-    await store.putVoter(voter);
-  }
+  // A6: el opt-in NO crea votantes (un número cualquiera no puede auto-inscribirse). Solo reenvía el enlace a quien
+  // el organizador ya cargó en el censo con ese teléfono. La única vía abierta es la sala (rooms.ts): explícita,
+  // activada por el organizador, con tope y expiración.
+  const voter = await store.getVoterByPhone(electionId, phone);
+  if (!voter) return "ignored";
   const { provider } = selectProvider();
   const r = await inviteVoter(provider, voter);
   return r.status === "failed" ? "failed" : "sent";

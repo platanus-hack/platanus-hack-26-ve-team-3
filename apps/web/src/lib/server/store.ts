@@ -1,35 +1,69 @@
 /**
- * Store de Quórum: elecciones, votantes, boletas, nonces y plantillas faciales.
+ * Store de Quórum: elecciones, votantes, estado del motor (padrón + ledger Semaphore), nonces y plantillas faciales.
  *
  * Invariantes de privacidad (spec maestra, regla dura 3):
- *  - `Ballot` NUNCA contiene `voterId`, wallet ni teléfono. Solo `commitment`, `inclusionId` y,
- *    en modo `integrity-demo`, la opción en claro sin ningún vínculo con el elector.
- *  - `Voter` guarda solo `votedAt` (el hecho de haber votado, nunca qué).
+ *  - Las boletas viven SOLO en `EngineState.ledger` (pruebas Semaphore): nunca `voterId`, wallet ni teléfono.
+ *  - `EngineState.roll` liga voterId → commitment solo durante `registration`; `POST /open` congela la lista
+ *    de commitments (sin ids) y vacía `roll`. El commitment no permite ligar una boleta (nullifier) a nadie.
+ *  - `Voter` guarda solo `votedAt` (el hecho de haber votado, autodeclarado; nunca qué).
  *  - `FaceTemplate` guarda el descriptor cifrado (AES-256-GCM), nunca imágenes.
  *
  * Implementaciones: `MemoryStore` (tests) y `JsonFileStore` (un JSON por colección bajo `DATA_DIR`).
- * Cuando ADR-001 fije el motor, las boletas pasarán por `packages/protocol-adapter`; este store
- * seguirá siendo el índice local de metadatos.
  */
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { Election, Voter } from "@quorum/contracts";
+import type { AuditResult, Election, Voter } from "@quorum/contracts";
+import type { ElectionManifest, Ledger, Tally } from "@quorum/protocol-adapter";
 import { env } from "./env";
 import type { SealedBlob } from "./crypto";
 
-export interface Ballot {
-  inclusionId: string;
+/** Estado del motor `semaphore-ledger` por elección. */
+export interface EngineState {
   electionId: string;
-  /** `ballotCommitment` firmado (bytes32 hex). */
-  commitment: string;
+  /** Manifiesto fijado en `publish` (su hash es `Election.manifestHash`). */
+  manifest: ElectionManifest;
+  /** Solo durante `registration`: orden de inscripción. Se vacía al abrir. */
+  roll: { voterId: string; commitment: string }[];
+  /** Padrón congelado en `open` (orden = orden de inscripción). Sin ids. */
+  commitments: string[];
+  ledger: Ledger | null;
+  /** Por nullifier: hora de inclusión y, si el cliente lo declaró, tx on-chain. Nunca la opción ni el votante. */
+  receipts: Record<string, { includedAt: string; txHash?: string; onchainStatus?: "verificado" | "no verificable" | "fallo detectado" }>;
+  tally: Tally | null;
+  /** Bytes exactos del paquete de auditoría publicado (JSON canónico) y su sha256. */
+  packageJson: string | null;
+  packageDigest: string | null;
+  auditResult: AuditResult | null;
+  anchorStatus: { mode: "disabled" | "anchored" | "error"; reason: string } | null;
   /**
-   * Solo en modo `integrity-demo`: opción en claro SIN vínculo con el votante.
-   * Crypto lo reemplazará por el ciphertext/referencia del motor elegido (ADR-001).
+   * Política del censo fijada al congelar el padrón (`open`). Solo existe si hubo sala abierta: se publica en el
+   * paquete de auditoría para declarar honestamente que la elegibilidad dependió de la deduplicación facial demo.
    */
-  choice?: string;
-  receivedAt: string;
-  includedAt: string | null;
+  rollPolicy?: RollPolicy | null;
+}
+
+/** Declaración del censo abierto en sala (va al paquete de auditoría; sin ids ni alias). */
+export interface RollPolicy {
+  kind: "open-room";
+  /** Tope de asientos de la última sala abierta. */
+  maxSeats: number;
+  /** Votantes creados por sala (asientos ocupados). */
+  joined: number;
+  /** De ellos, cuántos llegaron al padrón congelado (identidad Semaphore inscrita). */
+  enrolled: number;
+  eligibility: "face-dedupe-demo";
+}
+
+/** Sala abierta (asamblea abierta) de una elección en `registration`. Indexada por `code`. */
+export interface Room {
+  code: string;
+  electionId: string;
+  maxSeats: number;
+  openedAt: string;
+  expiresAt: string;
+  closedAt: string | null;
+  closedReason: "manual" | "election-opened" | null;
 }
 
 export interface VoteNonce {
@@ -60,16 +94,28 @@ export interface Store {
   getVoterByPhone(electionId: string, phoneE164: string): Promise<Voter | null>;
   listVoters(electionId: string): Promise<Voter[]>;
   putVoter(voter: Voter): Promise<void>;
-  // ballots
-  listBallots(electionId: string): Promise<Ballot[]>;
-  getBallot(electionId: string, inclusionId: string): Promise<Ballot | null>;
-  putBallot(ballot: Ballot): Promise<void>;
+  // motor (padrón + ledger)
+  getEngine(electionId: string): Promise<EngineState | null>;
+  putEngine(state: EngineState): Promise<void>;
   // nonces
   getNonce(nonce: string): Promise<VoteNonce | null>;
   putNonce(entry: VoteNonce): Promise<void>;
   // face templates
   getFaceTemplate(voterId: string): Promise<FaceTemplate | null>;
   putFaceTemplate(template: FaceTemplate): Promise<void>;
+  listFaceTemplates(electionId: string): Promise<FaceTemplate[]>;
+  /** A2: al congelar el padrón se borran todas las plantillas faciales de la elección. Devuelve cuántas. */
+  deleteFaceTemplates(electionId: string): Promise<number>;
+  // token del organizador (solo su sha256)
+  getOrganizerTokenHash(electionId: string): Promise<string | null>;
+  putOrganizerTokenHash(electionId: string, tokenHash: string): Promise<void>;
+  // salas abiertas
+  getRoom(code: string): Promise<Room | null>;
+  /** La sala más reciente de la elección (abierta o no). */
+  getLatestRoom(electionId: string): Promise<Room | null>;
+  putRoom(room: Room): Promise<void>;
+  /** Borra todo lo de una elección (script de demo `--reset`). */
+  deleteElectionData(electionId: string): Promise<void>;
   /** Borra todo (tests). */
   clear(): Promise<void>;
 }
@@ -77,9 +123,11 @@ export interface Store {
 type Collections = {
   elections: Map<string, Election>;
   voters: Map<string, Voter>;
-  ballots: Map<string, Ballot>; // key `${electionId}:${inclusionId}`
+  engine: Map<string, EngineState>; // key electionId
   nonces: Map<string, VoteNonce>;
   faceTemplates: Map<string, FaceTemplate>; // key voterId
+  organizerTokens: Map<string, { tokenHash: string }>; // key electionId
+  rooms: Map<string, Room>; // key code
 };
 
 type CollectionName = keyof Collections;
@@ -88,9 +136,11 @@ export class MemoryStore implements Store {
   protected readonly data: Collections = {
     elections: new Map(),
     voters: new Map(),
-    ballots: new Map(),
+    engine: new Map(),
     nonces: new Map(),
     faceTemplates: new Map(),
+    organizerTokens: new Map(),
+    rooms: new Map(),
   };
 
   /** Hook para persistir una colección tras una mutación (no-op en memoria). */
@@ -131,16 +181,13 @@ export class MemoryStore implements Store {
     await this.persist("voters");
   }
 
-  async listBallots(electionId: string) {
-    return [...this.data.ballots.values()].filter((b) => b.electionId === electionId).map((b) => structuredClone(b));
+  async getEngine(electionId: string) {
+    const s = this.data.engine.get(electionId);
+    return s ? structuredClone(s) : null;
   }
-  async getBallot(electionId: string, inclusionId: string) {
-    const b = this.data.ballots.get(`${electionId}:${inclusionId}`);
-    return b ? structuredClone(b) : null;
-  }
-  async putBallot(ballot: Ballot) {
-    this.data.ballots.set(`${ballot.electionId}:${ballot.inclusionId}`, structuredClone(ballot));
-    await this.persist("ballots");
+  async putEngine(state: EngineState) {
+    this.data.engine.set(state.electionId, structuredClone(state));
+    await this.persist("engine");
   }
 
   async getNonce(nonce: string) {
@@ -159,6 +206,54 @@ export class MemoryStore implements Store {
   async putFaceTemplate(template: FaceTemplate) {
     this.data.faceTemplates.set(template.voterId, structuredClone(template));
     await this.persist("faceTemplates");
+  }
+  async deleteFaceTemplates(electionId: string) {
+    let n = 0;
+    for (const [k, t] of this.data.faceTemplates) {
+      if (t.electionId === electionId) {
+        this.data.faceTemplates.delete(k);
+        n += 1;
+      }
+    }
+    await this.persist("faceTemplates");
+    return n;
+  }
+  async getOrganizerTokenHash(electionId: string) {
+    return this.data.organizerTokens.get(electionId)?.tokenHash ?? null;
+  }
+  async putOrganizerTokenHash(electionId: string, tokenHash: string) {
+    this.data.organizerTokens.set(electionId, { tokenHash });
+    await this.persist("organizerTokens");
+  }
+  async listFaceTemplates(electionId: string) {
+    return [...this.data.faceTemplates.values()].filter((t) => t.electionId === electionId).map((t) => structuredClone(t));
+  }
+
+  async getRoom(code: string) {
+    const r = this.data.rooms.get(code);
+    return r ? structuredClone(r) : null;
+  }
+  async getLatestRoom(electionId: string) {
+    let latest: Room | null = null;
+    for (const r of this.data.rooms.values()) {
+      if (r.electionId === electionId && (!latest || r.openedAt >= latest.openedAt)) latest = r;
+    }
+    return latest ? structuredClone(latest) : null;
+  }
+  async putRoom(room: Room) {
+    this.data.rooms.set(room.code, structuredClone(room));
+    await this.persist("rooms");
+  }
+
+  async deleteElectionData(electionId: string) {
+    this.data.elections.delete(electionId);
+    this.data.engine.delete(electionId);
+    this.data.organizerTokens.delete(electionId);
+    for (const [k, v] of this.data.voters) if (v.electionId === electionId) this.data.voters.delete(k);
+    for (const [k, v] of this.data.faceTemplates) if (v.electionId === electionId) this.data.faceTemplates.delete(k);
+    for (const [k, v] of this.data.nonces) if (v.electionId === electionId) this.data.nonces.delete(k);
+    for (const [k, v] of this.data.rooms) if (v.electionId === electionId) this.data.rooms.delete(k);
+    for (const name of Object.keys(this.data) as CollectionName[]) await this.persist(name);
   }
 
   async clear() {

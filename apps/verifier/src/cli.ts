@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { verifyPackage } from "./verify.js";
+import { verifyPackage } from "./verify";
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith("--"));

@@ -1,304 +1,551 @@
 /**
- * Flujo crítico P0 contra los route handlers reales (sin servidor HTTP):
- * crear → publicar → censo → invitaciones dry-run → enroll → verify → wallet → voto firmado (EIP-712, EOA viem)
- * → recibo → tally → duplicado rechazado → cerrar → voto en cerrada rechazado → artifacts → audit/verify honesto.
+ * Contrato v1 contra los route handlers reales (sin servidor HTTP), con pruebas Semaphore REALES (Groth16):
+ * crear → publicar (registration) → censo → rostro (dedupe 1:N) → wallet (EIP-712 FaceBinding) → identidad
+ * → open (groupRoot) → voto {proof} → ledger/recibo → close (paquete + verifyPackage real) → draw → audit/verify.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { keccak256, toHex } from "viem";
-import { VoteTypes } from "@quorum/contracts";
+import { FaceBindingTypes } from "@quorum/contracts";
+import { castBallot, createVoterIdentity, defaultArtifacts, drawWinners, encodeAnchorCalldata, type SemaphoreProof } from "@quorum/protocol-adapter";
 import { POST as createElection } from "@/app/api/elections/route";
 import { GET as getElection } from "@/app/api/elections/[id]/route";
 import { POST as publish } from "@/app/api/elections/[id]/publish/route";
-import { POST as addVoters } from "@/app/api/elections/[id]/voters/route";
+import { GET as listVoters, POST as addVoters } from "@/app/api/elections/[id]/voters/route";
 import { POST as invites } from "@/app/api/elections/[id]/invites/route";
 import { GET as invite } from "@/app/api/invite/[token]/route";
 import { POST as enroll } from "@/app/api/face/enroll/route";
-import { POST as verify } from "@/app/api/face/verify/route";
+import { POST as faceVerify } from "@/app/api/face/verify/route";
 import { POST as linkWallet } from "@/app/api/voters/[id]/wallet/route";
+import { POST as identity } from "@/app/api/voters/[id]/identity/route";
+import { POST as voted } from "@/app/api/voters/[id]/voted/route";
+import { POST as openRoute } from "@/app/api/elections/[id]/open/route";
+import { GET as roll } from "@/app/api/elections/[id]/roll/route";
 import { POST as vote } from "@/app/api/elections/[id]/vote/route";
+import { GET as ledger } from "@/app/api/elections/[id]/ledger/route";
 import { GET as receipt } from "@/app/api/elections/[id]/receipt/[inclusionId]/route";
 import { GET as tally } from "@/app/api/elections/[id]/tally/route";
-import { GET as layout } from "@/app/api/elections/[id]/layout/route";
 import { POST as close } from "@/app/api/elections/[id]/close/route";
 import { GET as artifacts } from "@/app/api/elections/[id]/artifacts/route";
+import { GET as audit } from "@/app/api/elections/[id]/audit/route";
+import { GET as getDraw, POST as draw } from "@/app/api/elections/[id]/draw/route";
 import { POST as auditVerify } from "@/app/api/audit/verify/route";
-import { voteDomain } from "../vote";
-import { call, descriptor, freshStore, sampleElection } from "./helpers";
+import { faceBindingDomain, setWalletRpcVerifierForTests } from "../wallet";
+import { setEngineHooksForTests } from "../engine";
+import { call, descriptor, freshStore } from "./helpers";
 import type { MemoryStore } from "../store";
 
+const artifactsPaths = defaultArtifacts();
 let store: MemoryStore;
 beforeEach(() => {
   store = freshStore();
+  setEngineHooksForTests({});
+  setWalletRpcVerifierForTests(undefined);
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
-async function setupOpenElection() {
-  const created = await call(createElection, { body: sampleElection() });
+/** Elección ficticia "Condominio Los Samanes": ¿cuántos proyectos financiamos? (1..5) + 6 proyectos postulados. */
+function samanes() {
+  const now = Date.now();
+  return {
+    title: "Condominio Los Samanes (ficticio): ¿cuántos proyectos financiamos?",
+    description: "Simulación. Opciones neutrales.",
+    kind: "multiple",
+    options: [1, 2, 3, 4, 5].map((n) => ({ id: `n${n}`, label: `${n} proyecto${n > 1 ? "s" : ""}` })),
+    optionValues: [1, 2, 3, 4, 5],
+    winnersCountFromResult: true,
+    candidates: [
+      { id: "p-01", label: "Iluminación del estacionamiento", amount: 1200 },
+      { id: "p-02", label: "Jardín comunal", amount: 800 },
+      { id: "p-03", label: "Bomba de agua", amount: 2500 },
+      { id: "p-04", label: "Cámaras de la entrada", amount: 1800 },
+      { id: "p-05", label: "Techo del salón de fiestas", amount: 3000 },
+      { id: "p-06", label: "Pintura de la fachada", amount: 2200 },
+    ],
+    startsAt: new Date(now - 60_000).toISOString(),
+    endsAt: new Date(now + 3_600_000).toISOString(),
+  };
+}
+
+type Org = { id: string; auth: Record<string, string> };
+
+async function setupRegistration(body: Record<string, unknown> = samanes()): Promise<Org> {
+  const created = await call(createElection, { body });
   expect(created.status).toBe(201);
   expect(created.json.status).toBe("draft");
-  expect(created.json.manifestHash).toBeNull();
+  expect(created.json.organizerToken).toMatch(/^[A-Za-z0-9_-]{40,}$/);
   const id = created.json.id as string;
-  const published = await call(publish, { params: { id } });
-  expect(published.status).toBe(200);
-  expect(published.json.status).toBe("open");
-  expect(published.json.manifestHash).toMatch(/^[0-9a-f]{64}$/);
-  expect(published.json.layout).toBeTruthy();
-  return id;
+  const auth = { authorization: `Bearer ${created.json.organizerToken}` };
+  const pub = await call(publish, { params: { id }, headers: auth });
+  expect(pub.status).toBe(200);
+  expect(pub.json.status).toBe("registration");
+  expect(pub.json.manifestHash).toMatch(/^0x[0-9a-f]{64}$/);
+  return { id, auth };
 }
 
-async function addVoter(id: string, displayName = "Ana", phoneE164?: string) {
-  const r = await call(addVoters, { params: { id }, body: { voters: [{ displayName, phoneE164 }] } });
+async function addVoter(org: Org, displayName = "Ana Ejemplo", phoneE164?: string) {
+  const r = await call(addVoters, { params: { id: org.id }, headers: org.auth, body: { voters: [{ displayName, phoneE164 }] } });
   expect(r.status).toBe(201);
-  const v = r.json.voters[0];
-  expect(v.inviteUrl).toBe(`http://localhost:3000/v/${v.inviteToken}`);
-  return v as { id: string; inviteToken: string; inviteUrl: string };
+  return r.json.voters[0] as { id: string; inviteToken: string; inviteUrl: string };
 }
 
-/** Enroll + verify + wallet; devuelve nonce vigente y cuenta. */
-async function readyToVote(id: string, voterId: string, inviteToken: string, seed = 7) {
-  const en = await call(enroll, { body: { voterId, inviteToken, descriptor: descriptor(seed), consent: true } });
+async function signBinding(account: ReturnType<typeof privateKeyToAccount>, electionId: string, voterId: string, faceBindingHash: `0x${string}`) {
+  return account.signTypedData({ domain: faceBindingDomain(), types: FaceBindingTypes, primaryType: "FaceBinding", message: { electionId, voterId, faceBindingHash, wallet: account.address } });
+}
+
+/** Inscripción completa: rostro → wallet (firma FaceBinding) → identidad Semaphore (clave solo en "el navegador" del test). */
+async function register(org: Org, seed: number, name = `Vecino ${seed}`) {
+  const v = await addVoter(org, name);
+  const en = await call(enroll, { body: { voterId: v.id, inviteToken: v.inviteToken, descriptor: descriptor(seed), consent: true } });
   expect(en.status).toBe(201);
-  expect(en.json.ok).toBe(true);
-  const ve = await call(verify, { body: { voterId, descriptor: descriptor(seed) } });
-  expect(ve.status).toBe(200);
-  expect(ve.json.ok).toBe(true);
-  expect(ve.json.mode).toBe("demo-liveness");
-  expect(ve.json.voteNonce).toMatch(/^0x[0-9a-f]{64}$/);
+  expect(en.json.faceBindingHash).toMatch(/^0x[0-9a-f]{64}$/);
   const account = privateKeyToAccount(generatePrivateKey());
-  const w = await call(linkWallet, { params: { id: voterId }, body: { inviteToken, walletAddress: account.address } });
+  const bindingSignature = await signBinding(account, org.id, v.id, en.json.faceBindingHash);
+  const w = await call(linkWallet, { params: { id: v.id }, body: { inviteToken: v.inviteToken, walletAddress: account.address, kind: "eoa-demo", bindingSignature } });
   expect(w.status).toBe(200);
-  expect(w.json.walletAddress).toBe(account.address);
+  expect(w.json.registeredAt).toBeTruthy();
   expect(w.json.phoneE164).toBeUndefined();
-  return { account, nonce: ve.json.voteNonce as `0x${string}` };
+  const id = createVoterIdentity();
+  const idr = await call(identity, { params: { id: v.id }, body: { inviteToken: v.inviteToken, commitment: id.commitment } });
+  expect(idr.status).toBe(201);
+  return { ...v, account, identity: id, faceBindingHash: en.json.faceBindingHash as `0x${string}` };
 }
 
-async function signVote(opts: { id: string; account: ReturnType<typeof privateKeyToAccount>; nonce: `0x${string}`; choice: string; expires?: bigint }) {
-  const ballotCommitment = keccak256(toHex(`${opts.choice}:${opts.nonce}`));
-  const expires = opts.expires ?? BigInt(Math.floor(Date.now() / 1000) + 120);
-  const message = { electionId: opts.id, ballotCommitment, voter: opts.account.address, nonce: opts.nonce, expires };
-  const signature = await opts.account.signTypedData({ domain: voteDomain(), types: VoteTypes, primaryType: "Vote", message });
-  return { message: { ...message, expires: expires.toString() }, signature, plainChoice: opts.choice };
+async function openIt(org: Org) {
+  const o = await call(openRoute, { params: { id: org.id }, headers: org.auth });
+  expect(o.status).toBe(200);
+  expect(o.json.status).toBe("open");
+  expect(o.json.groupRoot).toMatch(/^\d+$/);
+  return o.json;
 }
 
-describe("flujo crítico", () => {
-  it("crear → publicar → censo → invitaciones dry-run → prueba de vida → wallet → voto → recibo → tally → cierre → auditoría", async () => {
-    const id = await setupOpenElection();
+async function ballot(electionId: string, privateKey: string, option: number, electionForScope = electionId) {
+  const r = await call(roll, { params: { id: electionId } });
+  return castBallot(privateKey, r.json.commitments, electionForScope, option, artifactsPaths);
+}
 
-    const got = await call(getElection, { params: { id } });
-    expect(got.status).toBe(200);
-    expect(got.json.id).toBe(id);
+describe("Contrato v1 — flujo completo Los Samanes", () => {
+  it("registration → open → 5 votos reales → close (verifyPackage real) → draw → audit/verify", async () => {
+    const org = await setupRegistration();
+    const voters = [];
+    for (let i = 0; i < 6; i++) voters.push(await register(org, 100 + i));
 
-    const v = await addVoter(id, "Ana", "+584121234567");
-    const inv = await call(invites, { params: { id }, body: { electionId: id, voterIds: [v.id], channel: "dry-run" } });
-    expect(inv.status).toBe(200);
-    expect(inv.json.channel).toBe("dry-run");
-    expect(inv.json.results).toEqual([{ voterId: v.id, status: "sent" }]);
+    // Lista pública: solo agregados; organizador: lista sin teléfono ni commitment
+    const pub = await call(listVoters, { params: { id: org.id } });
+    expect(pub.json).toEqual({ counts: { total: 6, invited: 0, registered: 6, withIdentity: 6, voted: 0 } });
+    expect(JSON.stringify(pub.json)).not.toContain("Vecino");
+    const priv = await call(listVoters, { params: { id: org.id }, headers: org.auth });
+    expect(priv.json.voters).toHaveLength(6);
+    expect(priv.json.voters[0]).toMatchObject({ state: "registered", hasIdentity: true });
+    expect(JSON.stringify(priv.json)).not.toContain(voters[0].identity.commitment);
 
-    const byToken = await call(invite, { params: { token: v.inviteToken } });
-    expect(byToken.status).toBe(200);
-    expect(byToken.json.voter.id).toBe(v.id);
-    expect(byToken.json.voter.phoneE164).toBeUndefined();
-    expect(JSON.stringify(byToken.json)).not.toContain("+58412");
+    const opened = await openIt(org);
+    // A2: plantillas faciales borradas al congelar el padrón
+    expect(await store.listFaceTemplates(org.id)).toHaveLength(0);
+    const r = await call(roll, { params: { id: org.id } });
+    expect(r.json).toMatchObject({ frozen: true, groupRoot: opened.groupRoot, merkleTreeDepth: 10 });
+    expect(r.json.commitments).toEqual(voters.map((v) => v.identity.commitment));
 
-    const { account, nonce } = await readyToVote(id, v.id, v.inviteToken);
-    const signed = await signVote({ id, account, nonce, choice: "sab" });
-    const cast = await call(vote, { params: { id }, body: signed });
-    expect(cast.status).toBe(201);
-    expect(cast.json.state).toBe("recibido");
-    expect(cast.json.inclusionId).toMatch(/^[0-9a-f]{64}$/);
-    expect(cast.json).not.toHaveProperty("choice");
+    // 5 votos: opciones índice [2,2,1,2,0] → gana "3 proyectos"
+    const choices = [2, 2, 1, 2, 0];
+    const receipts = [];
+    for (let i = 0; i < choices.length; i++) {
+      const proof = await ballot(org.id, voters[i].identity.privateKey, choices[i]);
+      const res = await call(vote, { params: { id: org.id }, body: { proof } });
+      expect(res.status).toBe(201);
+      expect(res.json).toMatchObject({ state: "incluido", inclusionId: proof.nullifier, nullifier: proof.nullifier, index: i });
+      expect(res.json).not.toHaveProperty("message");
+      receipts.push(res.json);
+      const m = await call(voted, { params: { id: voters[i].id }, body: { inviteToken: voters[i].inviteToken } });
+      expect(m.status).toBe(200);
+      if (i < 4) {
+        const t = await call(tally, { params: { id: org.id } });
+        expect(t.json.options.every((o: { count: number | null }) => o.count === null)).toBe(true);
+      }
+      // C3: con la elección abierta el ledger no publica entradas (ni pruebas ni mensajes)
+      const l = await call(ledger, { params: { id: org.id } });
+      expect(l.json).toMatchObject({ status: "open", count: i + 1, proofsPublished: false, entries: [] });
+      expect(JSON.stringify(l.json)).not.toContain(proof.nullifier);
+    }
+    const t = await call(tally, { params: { id: org.id } });
+    expect(t.json.totalVotes).toBe(5);
+    expect(t.json.eligible).toBe(6);
+    expect(t.json.options.map((o: { count: number }) => o.count)).toEqual([1, 1, 3, 0, 0]);
 
-    // La boleta no guarda voterId; el votante solo guarda votedAt.
-    const ballots = await store.listBallots(id);
-    expect(ballots).toHaveLength(1);
-    expect(ballots[0]).not.toHaveProperty("voterId");
-    expect(ballots[0]).not.toHaveProperty("voter");
-    const voter = await store.getVoter(v.id);
-    expect(voter?.votedAt).toBeTruthy();
-    expect(JSON.stringify(voter)).not.toContain('"choice"');
-
-    const rc = await call(receipt, { params: { id, inclusionId: cast.json.inclusionId } });
+    // Recibo por nullifier
+    const rc = await call(receipt, { params: { id: org.id, inclusionId: receipts[1].nullifier } });
     expect(rc.status).toBe(200);
-    expect(rc.json.inclusionId).toBe(cast.json.inclusionId);
-    expect(rc.json).not.toHaveProperty("choice");
+    expect(rc.json).toMatchObject({ index: 1, state: "incluido" });
 
-    const t1 = await call(tally, { params: { id } });
-    expect(t1.status).toBe(200);
-    expect(t1.headers.get("cache-control")).toBe("public, s-maxage=2, stale-while-revalidate=5");
-    expect(t1.json.totalVotes).toBe(1);
-    expect(t1.json.eligible).toBe(1);
-    expect(t1.json.turnout).toBe(1);
-    expect(t1.json.leadingShare).toBeNull();
-    expect(t1.json.options.every((o: { count: number | null }) => o.count === null)).toBe(true);
-
-    // Duplicado: mismo nonce (ya consumido) → already_voted
-    const dup = await call(vote, { params: { id }, body: signed });
+    // Doble voto: mismo nullifier (prueba nueva de la misma credencial) → 409 already_voted
+    const again = await ballot(org.id, voters[0].identity.privateKey, 4);
+    const dup = await call(vote, { params: { id: org.id }, body: { proof: again } });
     expect(dup.status).toBe(409);
     expect(dup.json.code).toBe("already_voted");
 
-    // Duplicado con nonce nuevo (nueva verificación) → el votante ya votó
-    const ve2 = await call(verify, { body: { voterId: v.id, descriptor: descriptor(7) } });
-    const signed2 = await signVote({ id, account, nonce: ve2.json.voteNonce, choice: "dom" });
-    const dup2 = await call(vote, { params: { id }, body: signed2 });
-    expect(dup2.status).toBe(409);
-    expect(dup2.json.code).toBe("already_voted");
-
-    const lay = await call(layout, { params: { id } });
-    expect(lay.status).toBe(200);
-    expect(lay.json.tiles.length).toBeGreaterThanOrEqual(2);
-
-    const closed = await call(close, { params: { id } });
+    // Cierre: paquete + verificador independiente real
+    const closed = await call(close, { params: { id: org.id }, headers: org.auth });
     expect(closed.status).toBe(200);
     expect(closed.json.status).toBe("auditable");
+    expect(closed.json.anchor).toBeNull();
+    expect(closed.json.packageDigest).toMatch(/^0x[0-9a-f]{64}$/);
+    const au = await call(audit, { params: { id: org.id } });
+    expect(au.json.auditResult.valid).toBe(true);
+    expect(au.json.auditResult.verifierVersion).toMatch(/quorum-verifier/);
+    expect(au.json.auditResult.checks.find((c: { name: string }) => c.name === "anchor_matches").reason).toMatch(/no evaluado/);
+    expect(au.json.auditResult.checks.find((c: { name: string }) => c.name === "draw_matches").reason).toMatch(/no evaluado/);
+    expect(au.json.anchorStatus.mode).toBe("disabled");
 
-    // Censo tras cierre → closed
-    const lateCensus = await call(addVoters, { params: { id }, body: { voters: [{ displayName: "x" }] } });
-    expect(lateCensus.status).toBe(409);
-    expect(lateCensus.json.code).toBe("closed");
+    // Ledger completo tras el cierre
+    const full = await call(ledger, { params: { id: org.id } });
+    expect(full.json.proofsPublished).toBe(true);
+    expect(full.json.entries).toHaveLength(5);
 
-    const rcAfter = await call(receipt, { params: { id, inclusionId: cast.json.inclusionId } });
-    expect(rcAfter.json.state).toBe("incluido");
-
-    const art = await call(artifacts, { params: { id } });
+    // Paquete: bytes exactos + ETag; sin PII
+    const art = await call(artifacts, { params: { id: org.id } });
     expect(art.status).toBe(200);
-    expect(art.json.manifestHash).toBe(got.json.manifestHash ?? art.json.manifestHash);
-    expect(art.json.ballots).toHaveLength(1);
-    expect(art.json.ballots[0]).not.toHaveProperty("voterId");
-    expect(art.json.result.counts).toEqual({ sab: 1, dom: 0, mie: 0 });
-    expect(JSON.stringify(art.json)).not.toContain("+58412");
-    expect(JSON.stringify(art.json)).not.toContain("Ana");
-
-    const audit = await call(auditVerify, { body: { package: art.json } });
-    expect(audit.status).toBe(200);
-    expect(audit.json.valid).toBe(false);
-    expect(audit.json.unsupportedGuarantees).toContain("verifier-not-integrated");
-    expect(audit.json.inputArtifactDigest).toMatch(/^[0-9a-f]{64}$/);
-    expect(audit.json.electionId).toBe(id);
-  });
-
-  it("rechaza voto en elección cerrada", async () => {
-    const id = await setupOpenElection();
-    const v = await addVoter(id);
-    const { account, nonce } = await readyToVote(id, v.id, v.inviteToken);
-    const closed = await call(close, { params: { id } });
-    expect(closed.json.status).toBe("auditable");
-    const signed = await signVote({ id, account, nonce, choice: "sab" });
-    const r = await call(vote, { params: { id }, body: signed });
-    expect(r.status).toBe(409);
-    expect(r.json.code).toBe("closed");
-  });
-
-  it("rechaza firma inválida, wallet no enlazada y nonce ajeno", async () => {
-    const id = await setupOpenElection();
-    const v = await addVoter(id);
-    const { account, nonce } = await readyToVote(id, v.id, v.inviteToken);
-
-    // Firma de otra cuenta
-    const other = privateKeyToAccount(generatePrivateKey());
-    const good = await signVote({ id, account, nonce, choice: "sab" });
-    const forged = await signVote({ id, account: other, nonce, choice: "sab" });
-    const bad = await call(vote, { params: { id }, body: { ...good, signature: forged.signature } });
-    expect(bad.status).toBe(403);
-    expect(bad.json.code).toBe("forbidden");
-
-    // message.voter de una wallet no enlazada
-    const notLinked = await call(vote, { params: { id }, body: { ...forged, message: { ...forged.message } } });
-    expect(notLinked.status).toBe(403);
-    expect(notLinked.json.code).toBe("not_eligible");
-
-    // Nonce desconocido
-    const unknownNonce = await signVote({ id, account, nonce: `0x${"ab".repeat(32)}`, choice: "sab" });
-    const un = await call(vote, { params: { id }, body: unknownNonce });
-    expect(un.status).toBe(403);
-    expect(un.json.code).toBe("not_eligible");
-
-    // Firma expirada
-    const expired = await signVote({ id, account, nonce, choice: "sab", expires: BigInt(1) });
-    const ex = await call(vote, { params: { id }, body: expired });
-    expect(ex.status).toBe(403);
-
-    // plainChoice inválido
-    const badChoice = await call(vote, { params: { id }, body: { ...good, plainChoice: "nope" } });
-    expect(badChoice.status).toBe(400);
-
-    // El voto correcto sigue siendo válido (ningún rechazo consumió el nonce)
-    const ok = await call(vote, { params: { id }, body: good });
-    expect(ok.status).toBe(201);
-  });
-
-  it("prueba de vida: mismo descriptor pasa, descriptor aleatorio falla y no emite nonce", async () => {
-    const id = await setupOpenElection();
-    const v = await addVoter(id);
-    const en = await call(enroll, { body: { voterId: v.id, inviteToken: v.inviteToken, descriptor: descriptor(3), consent: true } });
-    expect(en.status).toBe(201);
-    const again = await call(enroll, { body: { voterId: v.id, inviteToken: v.inviteToken, descriptor: descriptor(3), consent: true } });
-    expect(again.status).toBe(403);
-    const wrongToken = await call(enroll, { body: { voterId: v.id, inviteToken: "nope", descriptor: descriptor(3), consent: true } });
-    expect(wrongToken.status).toBe(403);
-
-    const same = await call(verify, { body: { voterId: v.id, descriptor: descriptor(3) } });
-    expect(same.json.ok).toBe(true);
-    expect(same.json.similarity).toBeCloseTo(1, 3);
-    expect(same.json.threshold).toBe(0.6);
-
-    const random = await call(verify, { body: { voterId: v.id, descriptor: descriptor(99) } });
-    expect(random.status).toBe(200);
-    expect(random.json.ok).toBe(false);
-    expect(random.json.voteNonce).toBeNull();
-    expect(random.json.similarity).toBeLessThan(0.6);
-
-    // Plantilla cifrada: nunca el descriptor en claro
-    const tpl = await store.getFaceTemplate(v.id);
-    expect(tpl?.sealed.alg).toBe("aes-256-gcm");
-    expect(JSON.stringify(tpl)).not.toContain(String(descriptor(3)[0]));
-  });
-
-  it("tally desglosa por opción solo con ≥ 5 votos", async () => {
-    const id = await setupOpenElection();
-    const choices = ["sab", "sab", "dom", "sab", "mie"];
-    for (let i = 0; i < choices.length; i++) {
-      const v = await addVoter(id, `Votante ${i}`);
-      const { account, nonce } = await readyToVote(id, v.id, v.inviteToken, 10 + i);
-      const signed = await signVote({ id, account, nonce, choice: choices[i] });
-      const r = await call(vote, { params: { id }, body: signed });
-      expect(r.status).toBe(201);
-      if (i < 4) {
-        const t = await call(tally, { params: { id } });
-        expect(t.json.options.every((o: { count: number | null }) => o.count === null)).toBe(true);
-      }
+    expect(art.headers.get("etag")).toBe(`"${closed.json.packageDigest}"`);
+    const pkgText = JSON.stringify(art.json);
+    for (const v of voters) {
+      expect(pkgText).not.toContain(v.id);
+      expect(pkgText).not.toContain(v.account.address);
+      expect(pkgText).not.toContain(v.faceBindingHash);
     }
-    const t = await call(tally, { params: { id } });
-    expect(t.json.totalVotes).toBe(5);
-    expect(t.json.options.map((o: { id: string; count: number }) => [o.id, o.count])).toEqual([["sab", 3], ["dom", 1], ["mie", 1]]);
-    expect(t.json.leadingShare).toBeCloseTo(0.6);
+    expect(pkgText).not.toContain("Vecino");
+    const notModified = await call(artifacts, { params: { id: org.id }, headers: { "if-none-match": `"${closed.json.packageDigest}"` } });
+    expect(notModified.status).toBe(304);
+
+    // Sorteo: N = 3 (opción ganadora "3 proyectos"); seed = keccak256(finalHash)
+    const d = await call(draw, { params: { id: org.id }, headers: org.auth });
+    expect(d.status).toBe(200);
+    expect(d.json.status).toBe("drawn");
+    expect(d.json.draw.n).toBe(3);
+    const g = await call(getDraw, { params: { id: org.id } });
+    expect(g.json.winners).toEqual(drawWinners(g.json.candidates, 3, g.json.finalHash).winners);
+    expect(g.json.tieBreak).toBe("lowest");
+    const au2 = await call(audit, { params: { id: org.id } });
+    expect(au2.json.auditResult.valid).toBe(true);
+    expect(au2.json.auditResult.checks.find((c: { name: string }) => c.name === "draw_matches")).toMatchObject({ passed: true });
+
+    // Re-verificación pública con el paquete descargado, y con una copia adulterada
+    const art2 = await call(artifacts, { params: { id: org.id } });
+    const ok = await call(auditVerify, { body: { package: art2.json } });
+    expect(ok.status).toBe(200);
+    expect(ok.json.valid).toBe(true);
+    expect(ok.json.inputArtifactDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const tampered = structuredClone(art2.json);
+    tampered.tally.counts = [0, 0, 0, 0, 5];
+    const bad = await call(auditVerify, { body: { package: tampered } });
+    expect(bad.json.valid).toBe(false);
+    expect(bad.json.checks.filter((c: { passed: boolean }) => !c.passed).map((c: { name: string }) => c.name)).toContain("tally_matches");
+    const cheatDraw = structuredClone(art2.json);
+    cheatDraw.draw.winners = ["p-01", "p-02", "p-03"].filter((w) => !art2.json.draw.winners.includes(w)).concat(art2.json.draw.winners).slice(0, 3);
+    if (JSON.stringify(cheatDraw.draw.winners) !== JSON.stringify(art2.json.draw.winners)) {
+      const cd = await call(auditVerify, { body: { package: cheatDraw } });
+      expect(cd.json.checks.find((c: { name: string }) => c.name === "draw_matches").passed).toBe(false);
+    }
+    const junk = await call(auditVerify, { body: { package: { hello: "world" } } });
+    expect(junk.json.valid).toBe(false);
+    expect(junk.json.checks[0].name).toBe("package_schema");
+  }, 120_000);
+});
+
+describe("inscripción", () => {
+  it("dedupe facial 1:N → 409 duplicate_identity sin guardar nada; dentro de otra elección sí se admite", async () => {
+    const org = await setupRegistration();
+    const a = await addVoter(org, "A");
+    const b = await addVoter(org, "B");
+    expect((await call(enroll, { body: { voterId: a.id, inviteToken: a.inviteToken, descriptor: descriptor(5), consent: true } })).status).toBe(201);
+    const near = descriptor(5).map((x, i) => (i === 0 ? x + 0.01 : x));
+    const dup = await call(enroll, { body: { voterId: b.id, inviteToken: b.inviteToken, descriptor: near, consent: true } });
+    expect(dup.status).toBe(409);
+    expect(dup.json.code).toBe("duplicate_identity");
+    expect(JSON.stringify(dup.json)).not.toMatch(/similar|A\b/);
+    expect(await store.getFaceTemplate(b.id)).toBeNull();
+    expect((await store.getVoter(b.id))?.faceBindingHash ?? null).toBeNull();
+    expect((await call(enroll, { body: { voterId: b.id, inviteToken: b.inviteToken, descriptor: descriptor(6), consent: true } })).status).toBe(201);
+    // plantilla cifrada, nunca el descriptor en claro
+    const tpl = await store.getFaceTemplate(a.id);
+    expect(tpl?.sealed.alg).toBe("aes-256-gcm");
+    expect(JSON.stringify(tpl)).not.toContain(String(descriptor(5)[0]));
+
+    const other = await setupRegistration();
+    const c = await addVoter(other, "C");
+    expect((await call(enroll, { body: { voterId: c.id, inviteToken: c.inviteToken, descriptor: descriptor(5), consent: true } })).status).toBe(201);
+  });
+
+  it("face/verify (A3): exige inviteToken y responde solo ok/no-ok", async () => {
+    const org = await setupRegistration();
+    const v = await addVoter(org);
+    await call(enroll, { body: { voterId: v.id, inviteToken: v.inviteToken, descriptor: descriptor(3), consent: true } });
+    const noTok = await call(faceVerify, { body: { voterId: v.id, descriptor: descriptor(3) } });
+    expect(noTok.status).toBe(400);
+    const wrong = await call(faceVerify, { body: { voterId: v.id, inviteToken: "x", descriptor: descriptor(3) } });
+    expect(wrong.status).toBe(403);
+    const same = await call(faceVerify, { body: { voterId: v.id, inviteToken: v.inviteToken, descriptor: descriptor(3) } });
+    expect(same.json).toMatchObject({ ok: true, mode: "demo-liveness" });
+    expect(same.json).not.toHaveProperty("similarity");
+    expect(same.json).not.toHaveProperty("threshold");
+    const rnd = await call(faceVerify, { body: { voterId: v.id, inviteToken: v.inviteToken, descriptor: descriptor(99) } });
+    expect(rnd.json).toEqual({ ok: false, voteNonce: null, mode: "demo-liveness" });
+  });
+
+  it("wallet: exige rostro, firma FaceBinding válida y propia; una wallet por votante y por elección", async () => {
+    const org = await setupRegistration();
+    const a = await addVoter(org, "A");
+    const b = await addVoter(org, "B");
+    const acct = privateKeyToAccount(generatePrivateKey());
+    const fake = `0x${"11".repeat(32)}` as const;
+    const before = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: a.inviteToken, walletAddress: acct.address, kind: "eoa-demo", bindingSignature: await signBinding(acct, org.id, a.id, fake) } });
+    expect(before.status).toBe(403);
+    expect(before.json.code).toBe("not_eligible");
+
+    const en = await call(enroll, { body: { voterId: a.id, inviteToken: a.inviteToken, descriptor: descriptor(21), consent: true } });
+    const hash = en.json.faceBindingHash as `0x${string}`;
+    const other = privateKeyToAccount(generatePrivateKey());
+    // firma de otra cuenta, firma sobre otro hash, firma para otro votante
+    for (const sig of [await signBinding(other, org.id, a.id, hash), await signBinding(acct, org.id, a.id, fake), await signBinding(acct, org.id, b.id, hash)]) {
+      const r = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: a.inviteToken, walletAddress: acct.address, kind: "eoa-demo", bindingSignature: sig } });
+      expect(r.status).toBe(403);
+      expect(r.json.code).toBe("forbidden");
+    }
+    const tok = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: "nope", walletAddress: acct.address, kind: "eoa-demo", bindingSignature: await signBinding(acct, org.id, a.id, hash) } });
+    expect(tok.status).toBe(403);
+    // kernel sin RPC → 503 honesto
+    const kernel = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: a.inviteToken, walletAddress: acct.address, kind: "kernel", bindingSignature: "0x1234" } });
+    expect(kernel.status).toBe(503);
+    expect(kernel.json.code).toBe("unavailable");
+    const good = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: a.inviteToken, walletAddress: acct.address, kind: "eoa-demo", bindingSignature: await signBinding(acct, org.id, a.id, hash) } });
+    expect(good.status).toBe(200);
+    expect(good.json).toMatchObject({ walletAddress: acct.address, walletKind: "eoa-demo", inviteStatus: "claimed" });
+    const changeWallet = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: a.inviteToken, walletAddress: other.address, kind: "eoa-demo", bindingSignature: await signBinding(other, org.id, a.id, hash) } });
+    expect(changeWallet.status).toBe(403);
+
+    // B intenta reutilizar la wallet de A
+    const enb = await call(enroll, { body: { voterId: b.id, inviteToken: b.inviteToken, descriptor: descriptor(22), consent: true } });
+    const reuse = await call(linkWallet, { params: { id: b.id }, body: { inviteToken: b.inviteToken, walletAddress: acct.address, kind: "eoa-demo", bindingSignature: await signBinding(acct, org.id, b.id, enb.json.faceBindingHash) } });
+    expect(reuse.status).toBe(403);
+    expect(reuse.json.code).toBe("not_eligible");
+
+    // smart wallet (kernel) con verificador RPC inyectado (ERC-1271/6492 simulado, sin red)
+    setWalletRpcVerifierForTests(async ({ message, signature }) => message.voterId === b.id && signature === "0xc0ffee");
+    const kOk = await call(linkWallet, { params: { id: b.id }, body: { inviteToken: b.inviteToken, walletAddress: other.address, kind: "kernel", bindingSignature: "0xc0ffee" } });
+    expect(kOk.status).toBe(200);
+    expect(kOk.json.walletKind).toBe("kernel");
+  });
+
+  it("identidad: tras la wallet, una sola vez, commitment único, no después de abrir", async () => {
+    const org = await setupRegistration();
+    const v = await addVoter(org);
+    const id1 = createVoterIdentity();
+    const early = await call(identity, { params: { id: v.id }, body: { inviteToken: v.inviteToken, commitment: id1.commitment } });
+    expect(early.status).toBe(403);
+    expect(early.json.code).toBe("not_eligible");
+    const r = await register(org, 31);
+    const twice = await call(identity, { params: { id: r.id }, body: { inviteToken: r.inviteToken, commitment: createVoterIdentity().commitment } });
+    expect(twice.status).toBe(409);
+    const r2 = await register(org, 32);
+    void r2;
+    // commitment ajeno (público en /roll) para un tercero → 409
+    const third = await addVoter(org, "T");
+    const en = await call(enroll, { body: { voterId: third.id, inviteToken: third.inviteToken, descriptor: descriptor(33), consent: true } });
+    const acct = privateKeyToAccount(generatePrivateKey());
+    await call(linkWallet, { params: { id: third.id }, body: { inviteToken: third.inviteToken, walletAddress: acct.address, kind: "eoa-demo", bindingSignature: await signBinding(acct, org.id, third.id, en.json.faceBindingHash) } });
+    const stolen = await call(identity, { params: { id: third.id }, body: { inviteToken: third.inviteToken, commitment: r.identity.commitment } });
+    expect(stolen.status).toBe(409);
+    const nonCanonical = await call(identity, { params: { id: third.id }, body: { inviteToken: third.inviteToken, commitment: `0${createVoterIdentity().commitment}` } });
+    expect(nonCanonical.status).toBe(400);
+    const ok = await call(identity, { params: { id: third.id }, body: { inviteToken: third.inviteToken, commitment: createVoterIdentity().commitment } });
+    expect(ok.json).toEqual({ ok: true, registeredCount: 3 });
+
+    await openIt(org);
+    const late = await addVoter(org).catch(() => null);
+    expect(late).toBeNull();
+    const lateCensus = await call(addVoters, { params: { id: org.id }, headers: org.auth, body: { voters: [{ displayName: "x" }] } });
+    expect(lateCensus.status).toBe(409);
+    const lateEnroll = await call(enroll, { body: { voterId: v.id, inviteToken: v.inviteToken, descriptor: descriptor(34), consent: true } });
+    expect(lateEnroll.status).toBe(409);
+  });
+
+  it("open: padrón vacío → 409; segunda apertura → 409", async () => {
+    const org = await setupRegistration();
+    const empty = await call(openRoute, { params: { id: org.id }, headers: org.auth });
+    expect(empty.status).toBe(409);
+    await register(org, 41);
+    await openIt(org);
+    expect((await call(openRoute, { params: { id: org.id }, headers: org.auth })).status).toBe(409);
+  });
+});
+
+describe("voto: rechazos", () => {
+  it("fase, codificación (C1/A1), scope ajeno, prueba alterada, fuera de rango, elección cerrada", async () => {
+    const org = await setupRegistration();
+    const v1 = await register(org, 51);
+    const v2 = await register(org, 52);
+
+    // aún en registration
+    const commitments = [v1.identity.commitment, v2.identity.commitment];
+    const early = await castBallot(v1.identity.privateKey, commitments, org.id, 0, artifactsPaths);
+    const e = await call(vote, { params: { id: org.id }, body: { proof: early } });
+    expect(e.status).toBe(409);
+    expect(e.json.code).toBe("closed");
+
+    await openIt(org);
+    const good = await ballot(org.id, v1.identity.privateKey, 1);
+    // C1: nullifier no canónico ("0"+n) → 400 en la entrada
+    expect((await call(vote, { params: { id: org.id }, body: { proof: { ...good, nullifier: `0${good.nullifier}` } } })).status).toBe(400);
+    // A1: message en hex → 400
+    expect((await call(vote, { params: { id: org.id }, body: { proof: { ...good, message: "0x1" } } })).status).toBe(400);
+    // prueba de otra elección (scope distinto)
+    const foreign = await ballot(org.id, v2.identity.privateKey, 1, "otra-eleccion");
+    const f = await call(vote, { params: { id: org.id }, body: { proof: foreign } });
+    expect(f.status).toBe(403);
+    expect(f.json.code).toBe("not_eligible");
+    // prueba alterada (mensaje cambiado) → Groth16 no verifica
+    const forged: SemaphoreProof = { ...good, message: "0" };
+    const fo = await call(vote, { params: { id: org.id }, body: { proof: forged } });
+    expect(fo.status).toBe(403);
+    expect(fo.json.error).toMatch(/no verifica/);
+    // opción fuera de rango (prueba válida para message 7) → 400 sin consumir el nullifier
+    const out = await ballot(org.id, v2.identity.privateKey, 7);
+    const o = await call(vote, { params: { id: org.id }, body: { proof: out } });
+    expect(o.status).toBe(400);
+    // los rechazos no consumieron nada: las boletas legítimas entran
+    expect((await call(vote, { params: { id: org.id }, body: { proof: good } })).status).toBe(201);
+    expect((await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v2.identity.privateKey, 0) } })).status).toBe(201);
+    expect((await call(ledger, { params: { id: org.id } })).json.count).toBe(2);
+
+    await call(close, { params: { id: org.id }, headers: org.auth });
+    const late = await call(vote, { params: { id: org.id }, body: { proof: good } });
+    expect(late.status).toBe(409);
+    expect(late.json.code).toBe("closed");
+  }, 60_000);
+
+  it("C2: onchain.txHash se ignora por defecto; con QUORUM_ONCHAIN_CAST=true se comprueba contra el registro", async () => {
+    vi.stubEnv("NEXT_PUBLIC_REGISTRY_ADDRESS", "0x00000000000000000000000000000000000000aa");
+    const org = await setupRegistration();
+    const v1 = await register(org, 61);
+    const v2 = await register(org, 62);
+    await openIt(org);
+    const tx = `0x${"ab".repeat(32)}`;
+    const r1 = await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v1.identity.privateKey, 0), onchain: { txHash: tx } } });
+    expect(r1.status).toBe(201);
+    expect(r1.json).not.toHaveProperty("txHash");
+    vi.stubEnv("QUORUM_ONCHAIN_CAST", "true");
+    setEngineHooksForTests({ onchainReader: async () => ({ status: "success", logAddresses: ["0x00000000000000000000000000000000000000AA"] }) });
+    const r2 = await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v2.identity.privateKey, 0), onchain: { txHash: tx } } });
+    expect(r2.json).toMatchObject({ txHash: tx, onchainStatus: "verificado" });
+  }, 60_000);
+});
+
+describe("cierre: ancla y fallos", () => {
+  it("con ORGANIZER_PRIVATE_KEY + RPC (transporte simulado) ancla y el verificador comprueba anchor_matches", async () => {
+    vi.stubEnv("ORGANIZER_PRIVATE_KEY", generatePrivateKey());
+    vi.stubEnv("BASE_SEPOLIA_RPC", "http://127.0.0.1:1/never-called");
+    const org = await setupRegistration();
+    const v = await register(org, 71);
+    await openIt(org);
+    await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v.identity.privateKey, 0) } });
+    const txHash = `0x${"a1".repeat(32)}` as const;
+    let sent: `0x${string}` = "0x";
+    const from = "0x1111111111111111111111111111111111111111" as const;
+    setEngineHooksForTests({
+      anchorTransport: {
+        chainId: async () => 84532,
+        sender: () => from,
+        send: async (_to, data) => {
+          sent = data;
+          return txHash;
+        },
+        getTransaction: async () => ({ from, to: from, input: sent }),
+        getReceiptLogs: async () => [],
+        call: async () => "0x",
+      },
+      anchorReader: async (h) => ({ chainId: 84532, from, to: from, input: h === txHash ? sent : "0x" }),
+    });
+    const closed = await call(close, { params: { id: org.id }, headers: org.auth });
+    expect(closed.json.status).toBe("auditable");
+    expect(closed.json.anchor).toEqual({ chainId: 84532, txHash });
+    const au = await call(audit, { params: { id: org.id } });
+    expect(au.json.anchorStatus.mode).toBe("anchored");
+    expect(au.json.auditResult.checks.find((c: { name: string }) => c.name === "anchor_matches")).toMatchObject({ passed: true });
+    const art = await call(artifacts, { params: { id: org.id } });
+    expect(sent).toBe(encodeAnchorCalldata({ finalHash: art.json.finalHash, groupRoot: art.json.groupRoot, tallyHash: art.json.tallyHash, electionId: org.id }));
+  }, 60_000);
+
+  it("si el ledger guardado se altera, el cierre queda `failed` y el AuditResult se publica igual", async () => {
+    const org = await setupRegistration();
+    const v = await register(org, 81);
+    await openIt(org);
+    await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v.identity.privateKey, 1) } });
+    const eng = await store.getEngine(org.id);
+    eng!.ledger!.entries[0].proof.message = "0"; // el organizador "corrige" el voto en su base
+    await store.putEngine(eng!);
+    const closed = await call(close, { params: { id: org.id }, headers: org.auth });
+    expect(closed.json.status).toBe("failed");
+    const au = await call(audit, { params: { id: org.id } });
+    expect(au.json.auditResult.valid).toBe(false);
+    expect(au.json.auditResult.checks.filter((c: { passed: boolean }) => !c.passed).map((c: { name: string }) => c.name)).toEqual(expect.arrayContaining(["chain_integrity", "proofs_valid"]));
+    const d = await call(draw, { params: { id: org.id }, headers: org.auth });
+    expect(d.status).toBe(409);
+  }, 60_000);
+
+  it("draw antes de auditable → 409; elección sin regla de sorteo → 409", async () => {
+    const org = await setupRegistration();
+    expect((await call(draw, { params: { id: org.id }, headers: org.auth })).status).toBe(409);
+    const { candidates: _c, optionValues: _o, winnersCountFromResult: _w, ...plain } = samanes();
+    void _c; void _o; void _w;
+    const org2 = await setupRegistration(plain);
+    const v = await register(org2, 91);
+    await openIt(org2);
+    await call(vote, { params: { id: org2.id }, body: { proof: await ballot(org2.id, v.identity.privateKey, 0) } });
+    await call(close, { params: { id: org2.id }, headers: org2.auth });
+    const d = await call(draw, { params: { id: org2.id }, headers: org2.auth });
+    expect(d.status).toBe(409);
+    expect(d.json.error).toMatch(/no declara sorteo/);
+  }, 60_000);
+});
+
+describe("autorización del organizador (C4/A7)", () => {
+  it("sin token o con el token de otra elección → 401 en publish, voters, invites, open, close, draw", async () => {
+    const created = await call(createElection, { body: samanes() });
+    const id = created.json.id as string;
+    const otherTok = (await call(createElection, { body: samanes() })).json.organizerToken as string;
+    for (const headers of [{}, { authorization: `Bearer ${otherTok}` }, { authorization: "Basic abc" }] as Record<string, string>[]) {
+      expect((await call(publish, { params: { id }, headers })).status).toBe(401);
+      expect((await call(addVoters, { params: { id }, headers, body: { voters: [{ displayName: "x" }] } })).status).toBe(401);
+      expect((await call(invites, { params: { id }, headers, body: { electionId: id, voterIds: ["v"], channel: "dry-run" } })).status).toBe(401);
+      expect((await call(openRoute, { params: { id }, headers })).status).toBe(401);
+      expect((await call(close, { params: { id }, headers })).status).toBe(401);
+      expect((await call(draw, { params: { id }, headers })).status).toBe(401);
+      const lv = await call(listVoters, { params: { id }, headers });
+      expect(lv.json).not.toHaveProperty("voters");
+    }
+    // el token se guarda como hash, nunca en claro, y GET /elections/:id no lo expone
+    expect(JSON.stringify(await call(getElection, { params: { id } }))).not.toContain(created.json.organizerToken);
+    expect(await store.getOrganizerTokenHash(id)).not.toBe(created.json.organizerToken);
+  });
+
+  it("invitaciones dry-run e invite/:token sin teléfono", async () => {
+    const org = await setupRegistration();
+    const v = await addVoter(org, "Ana", "+584121234567");
+    const inv = await call(invites, { params: { id: org.id }, headers: org.auth, body: { electionId: org.id, voterIds: [v.id], channel: "dry-run" } });
+    expect(inv.status).toBe(200);
+    expect(inv.json.channel).toBe("dry-run");
+    const byToken = await call(invite, { params: { token: v.inviteToken } });
+    expect(byToken.json.voter.id).toBe(v.id);
+    expect(JSON.stringify(byToken.json)).not.toContain("+58412");
   });
 
   it("valida inputs y devuelve ApiError", async () => {
     const bad = await call(createElection, { body: { title: "x", kind: "multiple", options: [], startsAt: "no", endsAt: "no" } });
     expect(bad.status).toBe(400);
     expect(bad.json.code).toBe("invalid_input");
+    const noValues = await call(createElection, { body: { ...samanes(), optionValues: [1, 2] } });
+    expect(noValues.status).toBe(400);
     const nf = await call(getElection, { params: { id: "el_nope" } });
     expect(nf.status).toBe(404);
-    expect(nf.json.code).toBe("not_found");
-    const inv = await call(invite, { params: { token: "nope" } });
-    expect(inv.status).toBe(404);
-    const notJson = await call(createElection, { rawBody: "{{" });
-    expect(notJson.status).toBe(400);
-  });
-
-  it("wallet: una sola vez y única por elección", async () => {
-    const id = await setupOpenElection();
-    const a = await addVoter(id, "A");
-    const b = await addVoter(id, "B");
-    const acct = privateKeyToAccount(generatePrivateKey());
-    const first = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: a.inviteToken, walletAddress: acct.address } });
-    expect(first.status).toBe(200);
-    const again = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: a.inviteToken, walletAddress: acct.address } });
-    expect(again.status).toBe(200); // idempotente con la misma dirección
-    const other = await call(linkWallet, { params: { id: a.id }, body: { inviteToken: a.inviteToken, walletAddress: privateKeyToAccount(generatePrivateKey()).address } });
-    expect(other.status).toBe(403);
-    const dupWallet = await call(linkWallet, { params: { id: b.id }, body: { inviteToken: b.inviteToken, walletAddress: acct.address } });
-    expect(dupWallet.status).toBe(403);
-    expect(dupWallet.json.code).toBe("not_eligible");
+    expect((await call(createElection, { rawBody: "{{" })).status).toBe(400);
   });
 });
