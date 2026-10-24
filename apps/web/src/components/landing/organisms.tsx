@@ -108,7 +108,7 @@ export function Promise() {
 
 export function FinalCta() {
   return (
-    <section className="q-reveal flex flex-col items-start gap-6 rounded-xl border border-white/10 bg-[#0a2538] px-6 py-10 text-white md:flex-row md:items-center md:justify-between md:px-10 md:py-12">
+    <section className="q-reveal flex flex-col items-start gap-6 rounded-xl border border-white/10 bg-[#111844] px-6 py-10 text-white md:flex-row md:items-center md:justify-between md:px-10 md:py-12">
       <div>
         <h2 className="font-display text-[1.75rem] font-bold leading-tight tracking-tight md:text-[2.25rem]">Tu próxima votación, verificable.</h2>
         <p className="mt-2 text-body text-white/65">Lista en minutos. Sin instalar nada.</p>
