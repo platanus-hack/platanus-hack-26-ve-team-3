@@ -235,3 +235,21 @@ Corrida final tras mejorar el texto de `chain_integrity` (2026-10-24T14:37:18Z; 
 - `pnpm -r typecheck` y `pnpm -r test` fallan en `apps/web` por causas ajenas a este carril (`LayoutProps` no definido en `src/app/layout.tsx`; `vitest` no instalado en `apps/web`). No se tocó `apps/web`.
 - Lectura de `attestationUid` (EAS) en el verificador CLI: no implementada; se reporta `no evaluado`.
 - `ranking`/`budget`: el `message` es un índice de opción; esas modalidades necesitan otra codificación (no hecha).
+
+## 2026-10-24 · Laboratorio del jurado y auditor v1 (rama `feat/p2-audit-lab`)
+Verificador usado: el de esta rama (`quorum-verifier/0.1.0`, sin `draw_matches`/`commitments_unique`). Paquete: `public/fixtures/protocol/valid.json` (fixture, 3 boletas con pruebas Groth16 reales). Ancla "simulada" = lector inyectado con el acta del original (etiquetada `simulación`).
+
+| Alteración | Check esperado (sin ancla) | Resultado real sin ancla | Con ancla simulada |
+|---|---|---|---|
+| Cambiar el voto de una boleta (cadena/recuento rehechos) | `proofs_valid` | falla `proofs_valid` | + `anchor_matches` |
+| Reordenar el registro | `chain_integrity` | falla `chain_integrity` | igual |
+| Duplicar un voto (mismo nullifier, rehecho) | `nullifiers_unique` | falla `nullifiers_unique` | + `anchor_matches` |
+| Inflar el resultado (tallyHash recalculado) | `tally_matches` | falla `tally_matches` | + `anchor_matches` |
+| Cambiar la raíz del padrón | `group_root` | falla `group_root` (y otros) | + `anchor_matches` |
+| Colar a alguien en el padrón | `group_root` | falla `group_root` | igual |
+| Alterar el hash final | `chain_integrity` | falla `chain_integrity` | + `anchor_matches` |
+| Borrar una boleta | `chain_integrity`, `tally_matches` | fallan ambos | igual |
+| Quitar un voto y rehacer todo | — (no detectable) | `valid: true` (no detectado, como advierte el guion) | falla `anchor_matches` |
+| Cambiar semilla / ganador del sorteo | `draw_matches` | no ejecutable: el fixture no trae `draw` y este verificador no emite `draw_matches` | — |
+
+Comandos ejecutados (verdes): `pnpm typecheck`, `pnpm lint`, `pnpm test` (web 85 tests, incl. `src/lib/client/lab/__tests__/lab.test.ts` 29 y `src/components/__tests__/lab.test.tsx` 4), `pnpm --filter @quorum/web build`, `PORT=3317 playwright test e2e/lab.spec.ts e2e/phase2.spec.ts e2e/smoke.spec.ts` (38 passed, 4 skipped = capturas), capturas `SCREENSHOTS=1` → `docs/screenshots/phase2/lab-*-{360,1440}.png`.
