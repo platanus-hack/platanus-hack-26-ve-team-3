@@ -6,6 +6,8 @@
  *   pnpm --filter @quorum/web seed:demo -- --simulate 6      # además inscribe 6 vecinos SIMULADOS (rostro sintético, wallet eoa-demo)
  *   pnpm --filter @quorum/web seed:demo -- --simulate 6 --full   # … y abre, vota (pruebas Semaphore reales), cierra, verifica y sortea
  *   … --anchor                                              # permite anclar en Base Sepolia si hay ORGANIZER_PRIVATE_KEY + BASE_SEPOLIA_RPC
+ *                                                            (con NEXT_PUBLIC_REGISTRY_ADDRESS: vía QuorumRegistry.anchor; si no, tx con calldata)
+ *   … --out <archivo.json>                                  # escribe el paquete de auditoría publicado (bytes exactos) para el verificador CLI
  *
  * Todo es simulación: nombres "Vecino N (simulado)", sin teléfonos, sin WhatsApp, descriptores faciales sintéticos.
  * Por defecto NO ancla aunque existan credenciales (enviar una tx es una acción hacia afuera: requiere `--anchor`).
@@ -119,10 +121,20 @@ async function main() {
     const closed = await engine.closeElection(election.id);
     const audit = await engine.getAudit(election.id);
     console.log(`✔ close → ${closed.status} · verificador valid=${audit.auditResult.valid} · ancla: ${audit.anchorStatus?.reason}`);
-    for (const c of audit.auditResult.checks) console.log(`    ${c.passed ? "PASS" : "FAIL"} ${c.name}: ${c.reason ?? ""}`);
+    for (const c of audit.auditResult.checks) console.log(`    [${c.status ?? (c.passed ? "verificado" : "fallo detectado")}] ${c.name}: ${c.reason ?? ""}`);
+    if (closed.anchor) console.log(`  ancla: chainId ${closed.anchor.chainId} · tx ${closed.anchor.txHash} · https://sepolia.basescan.org/tx/${closed.anchor.txHash}`);
     if (closed.status === "auditable") {
       const drawn = await engine.drawElection(election.id);
       console.log(`✔ draw → ${drawn.status} · N=${drawn.draw?.n} · ganadores ${drawn.draw?.winners.join(", ")} · seed ${drawn.draw?.seed}`);
+    }
+    const out = opt("out", "");
+    if (out) {
+      const { writeFileSync } = await import("node:fs");
+      const { resolve } = await import("node:path");
+      const { json, digest } = await engine.getArtifacts(election.id);
+      const file = resolve(process.env.INIT_CWD ?? process.cwd(), out);
+      writeFileSync(file, json);
+      console.log(`✔ paquete de auditoría → ${file} (sha256 ${digest})`);
     }
   }
 

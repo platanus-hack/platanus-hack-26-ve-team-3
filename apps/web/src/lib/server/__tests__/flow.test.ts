@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { FaceBindingTypes } from "@quorum/contracts";
 import { castBallot, createVoterIdentity, defaultArtifacts, drawWinners, encodeAnchorCalldata, type SemaphoreProof } from "@quorum/protocol-adapter";
+import { encodeAnchor, registryAbi } from "@quorum/wallet";
+import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, getAddress, type Hex } from "viem";
 import { POST as createElection } from "@/app/api/elections/route";
 import { GET as getElection } from "@/app/api/elections/[id]/route";
 import { POST as publish } from "@/app/api/elections/[id]/publish/route";
@@ -441,7 +443,9 @@ describe("voto: rechazos", () => {
 
 describe("cierre: ancla y fallos", () => {
   it("con ORGANIZER_PRIVATE_KEY + RPC (transporte simulado) ancla y el verificador comprueba anchor_matches", async () => {
-    vi.stubEnv("ORGANIZER_PRIVATE_KEY", generatePrivateKey());
+    vi.stubEnv("NEXT_PUBLIC_REGISTRY_ADDRESS", ""); // sin registro → modo antiguo (calldata)
+    const legacyPk = generatePrivateKey();
+    vi.stubEnv("ORGANIZER_PRIVATE_KEY", legacyPk);
     vi.stubEnv("BASE_SEPOLIA_RPC", "http://127.0.0.1:1/never-called");
     const org = await setupRegistration();
     const v = await register(org, 71);
@@ -449,7 +453,7 @@ describe("cierre: ancla y fallos", () => {
     await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v.identity.privateKey, 0) } });
     const txHash = `0x${"a1".repeat(32)}` as const;
     let sent: `0x${string}` = "0x";
-    const from = "0x1111111111111111111111111111111111111111" as const;
+    const from = privateKeyToAccount(legacyPk).address;
     setEngineHooksForTests({
       anchorTransport: {
         chainId: async () => 84532,
@@ -469,9 +473,92 @@ describe("cierre: ancla y fallos", () => {
     expect(closed.json.anchor).toEqual({ chainId: 84532, txHash });
     const au = await call(audit, { params: { id: org.id } });
     expect(au.json.anchorStatus.mode).toBe("anchored");
-    expect(au.json.auditResult.checks.find((c: { name: string }) => c.name === "anchor_matches")).toMatchObject({ passed: true });
+    expect(au.json.auditResult.checks.find((c: { name: string }) => c.name === "anchor_matches")).toMatchObject({ passed: true, status: "verificado" });
     const art = await call(artifacts, { params: { id: org.id } });
+    expect(art.json.manifest.anchorPolicy).toEqual({ kind: "calldata", chainId: 84532, organizer: from });
     expect(sent).toBe(encodeAnchorCalldata({ finalHash: art.json.finalHash, groupRoot: art.json.groupRoot, tallyHash: art.json.tallyHash, electionId: org.id }));
+  }, 60_000);
+
+  it("con NEXT_PUBLIC_REGISTRY_ADDRESS: manifiesto fija organizador+registro, el cierre llama a QuorumRegistry.anchor y anchor_matches queda verificado", async () => {
+    const pk = generatePrivateKey();
+    const organizer = privateKeyToAccount(pk).address;
+    const registry = getAddress("0x64e7cbf3b1a334a6633f0025d289335aeda8be13");
+    vi.stubEnv("ORGANIZER_PRIVATE_KEY", pk);
+    vi.stubEnv("BASE_SEPOLIA_RPC", "http://127.0.0.1:1/never-called");
+    vi.stubEnv("NEXT_PUBLIC_REGISTRY_ADDRESS", registry);
+    const org = await setupRegistration();
+    const v = await register(org, 72);
+    await openIt(org);
+    await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v.identity.privateKey, 1) } });
+    const txHash = `0x${"b3".repeat(32)}` as const;
+    let sent: { to: string; data: Hex } | null = null;
+    let logs: { address: `0x${string}`; data: Hex; topics: Hex[] }[] = [];
+    setEngineHooksForTests({
+      anchorTransport: {
+        chainId: async () => 84532,
+        sender: () => organizer,
+        send: async (to, data) => {
+          sent = { to, data };
+          const { args } = decodeFunctionData({ abi: registryAbi, data });
+          const [eid, fh] = args as [Hex, Hex];
+          logs = [{ address: registry, topics: encodeEventTopics({ abi: registryAbi, eventName: "Anchored", args: { electionId: eid, organizer } }) as Hex[], data: encodeAbiParameters([{ type: "bytes32" }, { type: "uint256" }], [fh, BigInt(0)]) }];
+          return txHash;
+        },
+        getTransaction: async () => ({ from: organizer, to: registry, input: sent!.data }),
+        getReceiptLogs: async () => logs,
+        call: async () => "0x",
+      },
+      anchorReader: async (h) => {
+        if (h !== txHash) throw new Error("tx not found");
+        return { chainId: 84532, from: organizer, to: registry, input: sent!.data, status: "success", logs };
+      },
+    });
+    const closed = await call(close, { params: { id: org.id }, headers: org.auth });
+    expect(closed.json.status).toBe("auditable");
+    expect(closed.json.anchor).toEqual({ chainId: 84532, txHash, registryAddress: registry });
+    const art = await call(artifacts, { params: { id: org.id } });
+    expect(art.json.manifest.anchorPolicy).toEqual({ kind: "quorum-registry", chainId: 84532, registryAddress: registry, organizer });
+    expect(sent).toEqual({ to: registry, data: encodeAnchor(org.id, art.json.finalHash) });
+    const au = await call(audit, { params: { id: org.id } });
+    expect(au.json.anchorStatus.mode).toBe("anchored");
+    expect(au.json.auditResult.checks.find((c: { name: string }) => c.name === "anchor_matches")).toMatchObject({ passed: true, status: "verificado" });
+
+    // Paquete alterado (finalHash) subido a /api/audit/verify → fallo detectado contra el ancla.
+    const tampered = { ...art.json, finalHash: `0x${"ee".repeat(32)}` };
+    const vr = await call(auditVerify, { body: { package: tampered } });
+    const anchorCheck = vr.json.checks.find((c: { name: string }) => c.name === "anchor_matches");
+    expect(vr.json.valid).toBe(false);
+    expect(anchorCheck).toMatchObject({ passed: false, status: "fallo detectado" });
+    expect(anchorCheck.reason).toMatch(/hash final ≠ ancla/);
+  }, 60_000);
+
+  it("con registro pero el ancla falla (sin fondos / revert): cierre honesto con anchor=null y anchor_matches no evaluado", async () => {
+    const pk = generatePrivateKey();
+    vi.stubEnv("ORGANIZER_PRIVATE_KEY", pk);
+    vi.stubEnv("BASE_SEPOLIA_RPC", "http://127.0.0.1:1/never-called");
+    vi.stubEnv("NEXT_PUBLIC_REGISTRY_ADDRESS", "0x64e7cbf3b1a334a6633f0025d289335aeda8be13");
+    const org = await setupRegistration();
+    const v = await register(org, 73);
+    await openIt(org);
+    await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v.identity.privateKey, 0) } });
+    setEngineHooksForTests({
+      anchorTransport: {
+        chainId: async () => 84532,
+        sender: () => privateKeyToAccount(pk).address,
+        send: async () => {
+          throw new Error("insufficient funds for gas * price + value");
+        },
+        getTransaction: async () => { throw new Error("unused"); },
+        getReceiptLogs: async () => [],
+        call: async () => "0x",
+      },
+    });
+    const closed = await call(close, { params: { id: org.id }, headers: org.auth });
+    expect(closed.json.anchor).toBeNull();
+    const au = await call(audit, { params: { id: org.id } });
+    expect(au.json.anchorStatus.mode).toBe("error");
+    expect(au.json.anchorStatus.reason).toMatch(/QuorumRegistry: insufficient funds/);
+    expect(au.json.auditResult.checks.find((c: { name: string }) => c.name === "anchor_matches")).toMatchObject({ status: "no evaluado" });
   }, 60_000);
 
   it("si el ledger guardado se altera, el cierre queda `failed` y el AuditResult se publica igual", async () => {
