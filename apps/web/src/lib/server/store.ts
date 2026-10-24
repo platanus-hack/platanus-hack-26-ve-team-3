@@ -36,6 +36,34 @@ export interface EngineState {
   packageDigest: string | null;
   auditResult: AuditResult | null;
   anchorStatus: { mode: "disabled" | "anchored" | "error"; reason: string } | null;
+  /**
+   * Política del censo fijada al congelar el padrón (`open`). Solo existe si hubo sala abierta: se publica en el
+   * paquete de auditoría para declarar honestamente que la elegibilidad dependió de la deduplicación facial demo.
+   */
+  rollPolicy?: RollPolicy | null;
+}
+
+/** Declaración del censo abierto en sala (va al paquete de auditoría; sin ids ni alias). */
+export interface RollPolicy {
+  kind: "open-room";
+  /** Tope de asientos de la última sala abierta. */
+  maxSeats: number;
+  /** Votantes creados por sala (asientos ocupados). */
+  joined: number;
+  /** De ellos, cuántos llegaron al padrón congelado (identidad Semaphore inscrita). */
+  enrolled: number;
+  eligibility: "face-dedupe-demo";
+}
+
+/** Sala abierta (asamblea abierta) de una elección en `registration`. Indexada por `code`. */
+export interface Room {
+  code: string;
+  electionId: string;
+  maxSeats: number;
+  openedAt: string;
+  expiresAt: string;
+  closedAt: string | null;
+  closedReason: "manual" | "election-opened" | null;
 }
 
 export interface VoteNonce {
@@ -81,6 +109,11 @@ export interface Store {
   // token del organizador (solo su sha256)
   getOrganizerTokenHash(electionId: string): Promise<string | null>;
   putOrganizerTokenHash(electionId: string, tokenHash: string): Promise<void>;
+  // salas abiertas
+  getRoom(code: string): Promise<Room | null>;
+  /** La sala más reciente de la elección (abierta o no). */
+  getLatestRoom(electionId: string): Promise<Room | null>;
+  putRoom(room: Room): Promise<void>;
   /** Borra todo lo de una elección (script de demo `--reset`). */
   deleteElectionData(electionId: string): Promise<void>;
   /** Borra todo (tests). */
@@ -94,6 +127,7 @@ type Collections = {
   nonces: Map<string, VoteNonce>;
   faceTemplates: Map<string, FaceTemplate>; // key voterId
   organizerTokens: Map<string, { tokenHash: string }>; // key electionId
+  rooms: Map<string, Room>; // key code
 };
 
 type CollectionName = keyof Collections;
@@ -106,6 +140,7 @@ export class MemoryStore implements Store {
     nonces: new Map(),
     faceTemplates: new Map(),
     organizerTokens: new Map(),
+    rooms: new Map(),
   };
 
   /** Hook para persistir una colección tras una mutación (no-op en memoria). */
@@ -194,6 +229,22 @@ export class MemoryStore implements Store {
     return [...this.data.faceTemplates.values()].filter((t) => t.electionId === electionId).map((t) => structuredClone(t));
   }
 
+  async getRoom(code: string) {
+    const r = this.data.rooms.get(code);
+    return r ? structuredClone(r) : null;
+  }
+  async getLatestRoom(electionId: string) {
+    let latest: Room | null = null;
+    for (const r of this.data.rooms.values()) {
+      if (r.electionId === electionId && (!latest || r.openedAt >= latest.openedAt)) latest = r;
+    }
+    return latest ? structuredClone(latest) : null;
+  }
+  async putRoom(room: Room) {
+    this.data.rooms.set(room.code, structuredClone(room));
+    await this.persist("rooms");
+  }
+
   async deleteElectionData(electionId: string) {
     this.data.elections.delete(electionId);
     this.data.engine.delete(electionId);
@@ -201,6 +252,7 @@ export class MemoryStore implements Store {
     for (const [k, v] of this.data.voters) if (v.electionId === electionId) this.data.voters.delete(k);
     for (const [k, v] of this.data.faceTemplates) if (v.electionId === electionId) this.data.faceTemplates.delete(k);
     for (const [k, v] of this.data.nonces) if (v.electionId === electionId) this.data.nonces.delete(k);
+    for (const [k, v] of this.data.rooms) if (v.electionId === electionId) this.data.rooms.delete(k);
     for (const name of Object.keys(this.data) as CollectionName[]) await this.persist(name);
   }
 

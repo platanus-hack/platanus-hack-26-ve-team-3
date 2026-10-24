@@ -37,7 +37,8 @@ import { requireElection, requireEngine, requireVoter } from "./elections";
 import { env } from "./env";
 import { HttpError, type ApiCode } from "./errors";
 import { withLock } from "./lock";
-import { getStore, type EngineState } from "./store";
+import { freezeRoomPolicy } from "./rooms";
+import { getStore, type EngineState, type RollPolicy } from "./store";
 
 type ReceiptT = z.infer<typeof Receipt>;
 
@@ -82,14 +83,17 @@ export async function registerIdentity(voterId: string, input: { inviteToken: st
 // Apertura: congela el padrón
 // ---------------------------------------------------------------------------
 export async function openElection(id: string): Promise<Election> {
-  return withLock(`engine:${id}`, async () => {
+  // engine → room (las entradas a la sala toman solo `room:`): la sala no admite a nadie mientras se congela el padrón.
+  return withLock(`engine:${id}`, () => withLock(`room:${id}`, async () => {
     const e = await requireElection(id);
     if (e.status !== "registration") throw new HttpError("closed", `Solo se abre desde inscripción (estado ${e.status})`, 409);
     const engine = await requireEngine(id);
     if (engine.roll.length === 0) throw new HttpError("closed", "No hay identidades inscritas: no se puede congelar un padrón vacío", 409);
     const commitments = engine.roll.map((r) => r.commitment);
     const root = computeGroupRoot(commitments);
-    const next: EngineState = { ...engine, roll: [], commitments, ledger: createLedger(id, root) };
+    // Sala abierta: se cierra sola al abrir la votación y su política queda fijada para el paquete de auditoría.
+    const rollPolicy = await freezeRoomPolicy(id);
+    const next: EngineState = { ...engine, roll: [], commitments, ledger: createLedger(id, root), rollPolicy };
     const store = await getStore();
     await store.putEngine(next);
     // A2: con el padrón congelado ya no hace falta el dedupe facial → se borran las plantillas (descriptores cifrados).
@@ -97,7 +101,7 @@ export async function openElection(id: string): Promise<Election> {
     const opened: Election = { ...e, status: "open", groupRoot: root };
     await saveElection(opened);
     return opened;
-  });
+  }));
 }
 
 export async function getRoll(id: string) {
@@ -251,6 +255,14 @@ export async function getLedger(id: string) {
 // ---------------------------------------------------------------------------
 // Cierre: paquete + verificador real + ancla opcional
 // ---------------------------------------------------------------------------
+/** Declaración honesta del censo en el paquete (fuera de `manifestHash`/`checksums`: el verificador la muestra como nota). */
+export type PublishedRollPolicy = RollPolicy & { note: string };
+export const OPEN_ROOM_NOTE = "censo abierto en sala: la elegibilidad depende de la deduplicación facial demo, no de un padrón";
+
+function withRollPolicy(pkg: AuditPackage, policy: RollPolicy | null | undefined): AuditPackage & { rollPolicy?: PublishedRollPolicy } {
+  return policy ? { ...pkg, rollPolicy: { ...policy, note: OPEN_ROOM_NOTE } } : pkg;
+}
+
 function serialize(pkg: AuditPackage) {
   const json = canonicalJson(pkg);
   return { json, digest: sha256Utf8(json) };
@@ -293,7 +305,7 @@ export async function closeElection(id: string): Promise<Election> {
       }
     }
 
-    const pkg = buildAuditPackage({ electionId: id, manifest: engine.manifest, commitments: engine.commitments, ledger: engine.ledger, tally: t, anchor, generatedAt: now().toISOString() });
+    const pkg = withRollPolicy(buildAuditPackage({ electionId: id, manifest: engine.manifest, commitments: engine.commitments, ledger: engine.ledger, tally: t, anchor, generatedAt: now().toISOString() }), engine.rollPolicy);
     if (pkg.manifestHash !== e.manifestHash) throw new HttpError("unavailable", "El manifiesto guardado no coincide con el publicado");
     const { json, digest } = serialize(pkg);
     const auditResult = await verifyStored(json, digest);
@@ -338,7 +350,7 @@ export async function drawElection(id: string): Promise<Election> {
       throw new HttpError("closed", err instanceof Error && err.message.startsWith("NO_VOTES") ? "No hay votos válidos: N no está definido" : "No se pudo sortear", 409);
     }
     const prev = JSON.parse(engine.packageJson) as AuditPackage;
-    const pkg = buildAuditPackage({ electionId: id, manifest: engine.manifest, commitments: engine.commitments, ledger: engine.ledger, tally: engine.tally, anchor: prev.anchor, generatedAt: now().toISOString(), draw });
+    const pkg = withRollPolicy(buildAuditPackage({ electionId: id, manifest: engine.manifest, commitments: engine.commitments, ledger: engine.ledger, tally: engine.tally, anchor: prev.anchor, generatedAt: now().toISOString(), draw }), engine.rollPolicy);
     const { json, digest } = serialize(pkg);
     const auditResult = await verifyStored(json, digest);
     await (await getStore()).putEngine({ ...engine, packageJson: json, packageDigest: digest, auditResult });

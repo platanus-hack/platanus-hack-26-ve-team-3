@@ -13,6 +13,8 @@ const STATUS_BY_CODE: Record<ApiCode, number> = {
   forbidden: 403,
   unavailable: 503,
   duplicate_identity: 409,
+  room_full: 409,
+  room_closed: 410,
 };
 
 /** Error tipado que las rutas convierten en una respuesta `ApiError`. */

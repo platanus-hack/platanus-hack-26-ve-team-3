@@ -168,6 +168,7 @@ export async function addVoters(electionId: string, input: z.infer<typeof AddVot
       faceBindingHash: null,
       walletKind: null,
       registeredAt: null,
+      source: "invite",
     };
     await store.putVoter(voter);
     created.push(voter);
@@ -216,7 +217,7 @@ export async function listVoterSummaries(electionId: string) {
   const voters = await (await getStore()).listVoters(electionId);
   return {
     voters: voters.map((v) =>
-      VoterSummary.parse({ id: v.id, displayName: v.displayName, state: voterState(v), walletAddress: v.walletAddress, hasIdentity: Boolean(v.credentialIssuedAt) }),
+      VoterSummary.parse({ id: v.id, displayName: v.displayName, state: voterState(v), walletAddress: v.walletAddress, hasIdentity: Boolean(v.credentialIssuedAt), source: v.source ?? "invite" }),
     ),
     counts,
   };
