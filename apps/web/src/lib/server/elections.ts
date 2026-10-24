@@ -223,7 +223,7 @@ export async function listVoterSummaries(electionId: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Agregados (solo totales; con < 5 votos no se desglosa)
+// Agregados (solo totales; con < 5 votos no se desglosa; en vivo, por lotes de 5)
 // ---------------------------------------------------------------------------
 export async function computeAggregates(e: Election): Promise<Aggregates> {
   const engine = await (await getStore()).getEngine(e.id);
@@ -231,19 +231,25 @@ export async function computeAggregates(e: Election): Promise<Aggregates> {
   const total = entries.length;
   const eligible = engine ? (engine.commitments.length || engine.roll.length) : 0;
   const counts = new Array<number>(e.options.length).fill(0);
-  for (const en of entries) {
+  // C3 / AT-10: mientras se vota, el desglose se publica por lotes completos de MIN_VOTES_FOR_BREAKDOWN boletas.
+  // Si cambiara con cada voto, quien ve quién pasa a `voted` (el organizador) sabría la opción de cada persona
+  // restando dos lecturas consecutivas del tally. Al cerrar se publica el recuento exacto.
+  const live = e.status === "registration" || e.status === "open";
+  const counted = live ? entries.slice(0, Math.floor(total / MIN_VOTES_FOR_BREAKDOWN) * MIN_VOTES_FOR_BREAKDOWN) : entries;
+  for (const en of counted) {
     const m = Number(en.proof.message);
     if (Number.isInteger(m) && m >= 0 && m < counts.length) counts[m] += 1;
   }
   const breakdown = total >= MIN_VOTES_FOR_BREAKDOWN;
   const options = e.options.map((o, i) => ({ id: o.id, label: o.label, count: breakdown ? counts[i] : null }));
   const max = breakdown ? Math.max(0, ...counts) : 0;
+  const countedTotal = counted.length;
   return Aggregates.parse({
     electionId: e.id,
     turnout: eligible > 0 ? Math.min(1, total / eligible) : 0,
     totalVotes: total,
     eligible,
-    leadingShare: breakdown && total > 0 ? max / total : null,
+    leadingShare: breakdown && countedTotal > 0 ? max / countedTotal : null,
     closesAt: e.endsAt,
     status: e.status,
     options,

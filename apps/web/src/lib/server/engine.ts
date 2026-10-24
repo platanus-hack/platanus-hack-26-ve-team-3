@@ -192,6 +192,13 @@ export async function castVote(id: string, input: CastVoteInput): Promise<Receip
   });
 }
 
+const CARACAS_OFFSET_MS = 4 * 60 * 60 * 1000;
+/** Inicio del día en America/Caracas (UTC−4, sin horario de verano) para un instante dado. */
+export function caracasDayStart(d: Date): Date {
+  const local = new Date(d.getTime() - CARACAS_OFFSET_MS);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) + CARACAS_OFFSET_MS);
+}
+
 /** Autodeclaración "ya voté" (para el estado público del inscrito). Petición separada del voto: no liga persona ↔ boleta. */
 export async function markVoted(voterId: string, inviteToken: string) {
   const voter = await requireVoter(voterId);
@@ -200,7 +207,9 @@ export async function markVoted(voterId: string, inviteToken: string) {
   if (e.status !== "open") throw new HttpError("closed", "La elección no está abierta");
   if (!voter.credentialIssuedAt) throw new HttpError("not_eligible", "Este votante no tiene identidad en el padrón");
   if (voter.votedAt) return { ok: true as const, votedAt: voter.votedAt };
-  const votedAt = now().toISOString();
+  // C5 / AT-10: no se guarda la hora exacta. Con milisegundos, ordenar a los votantes por `votedAt` y emparejarlos
+  // con el ledger por posición reconstruía votante → opción desde la DB. Solo el día (America/Caracas, UTC−4).
+  const votedAt = caracasDayStart(now()).toISOString();
   await (await getStore()).putVoter({ ...voter, votedAt });
   return { ok: true as const, votedAt };
 }
