@@ -37,3 +37,14 @@ describe("rateLimit · QUORUM_RATELIMIT_SCALE (sala con IP compartida)", () => {
     }
   });
 });
+
+describe("clientKey (anti-spoofing)", () => {
+  it("prefiere cf-connecting-ip y si no, la última entrada de x-forwarded-for", async () => {
+    const { clientKey } = await import("../ratelimit");
+    const h = (o: Record<string, string>) => new Request("http://x", { headers: o });
+    expect(clientKey(h({ "cf-connecting-ip": "1.1.1.1", "x-forwarded-for": "9.9.9.9, 1.1.1.1" }))).toBe("1.1.1.1");
+    expect(clientKey(h({ "x-forwarded-for": "6.6.6.6, 2.2.2.2" }))).toBe("2.2.2.2");
+    expect(clientKey(h({ "x-real-ip": "3.3.3.3" }))).toBe("3.3.3.3");
+    expect(clientKey(h({}))).toBe("local");
+  });
+});

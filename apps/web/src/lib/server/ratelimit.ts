@@ -3,9 +3,17 @@ import { HttpError } from "./errors";
 
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
+/**
+ * IP del cliente para el rate limit. Render pasa el tráfico por Cloudflare, que fija `cf-connecting-ip` (el cliente no
+ * puede falsificarla). Sin ella se usa la ÚLTIMA entrada de `x-forwarded-for` (la agrega nuestro proxy); la primera la
+ * controla el cliente y permitía saltarse el límite (docs/LOAD_TEST.md, hallazgo 2).
+ */
 export function clientKey(req: Request): string {
+  const cf = req.headers.get("cf-connecting-ip")?.trim();
+  if (cf) return cf;
   const fwd = req.headers.get("x-forwarded-for");
-  return (fwd ? fwd.split(",")[0].trim() : req.headers.get("x-real-ip")) || "local";
+  const last = fwd?.split(",").map((s) => s.trim()).filter(Boolean).at(-1);
+  return last || req.headers.get("x-real-ip") || "local";
 }
 
 /**

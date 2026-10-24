@@ -35,6 +35,11 @@ services:
         value: dry-run
       - key: INVITE_SEND_APPROVED
         value: "false"
+      # Sala con ~60 teléfonos detrás de la misma IP del wifi (docs/LOAD_TEST.md).
+      - key: QUORUM_RATELIMIT_SCALE
+        value: "5"
+      - key: ROOM_JOIN_RATE_PER_MIN
+        value: "200"
       # Secretos: FACE_KEY se genera en Render; ORGANIZER_PRIVATE_KEY se pega a mano en el dashboard (nunca en git).
       - key: FACE_KEY
         generateValue: true
