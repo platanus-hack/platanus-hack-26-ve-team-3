@@ -7,11 +7,11 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCountdown, formatInt, formatPercent } from "@/lib/client/format";
 import { ProgressRow } from "@/components/ui/progress-row";
+import { SERIES } from "@/components/results/series";
 
 const HIDDEN_NOTE = "Desglose oculto hasta 5 votos";
 
 /* Paleta categórica desde tokens (--color-chart-1..10), cambia sola con el tema. */
-const SERIES = Array.from({ length: 10 }, (_, i) => `var(--color-chart-${i + 1})`);
 
 const TOOLTIP_STYLE = {
   borderRadius: 12,

@@ -2,13 +2,10 @@ import Link from "next/link";
 import { ArrowRight, Check, Lock, QrCode, ReceiptText, ScanFace } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { CheckList } from "@/components/ui/check-list";
+export { Backdrop } from "@/components/ui/backdrop";
 import { Glass } from "@/components/ui/glass";
 import { cn } from "@/lib/client/cn";
 import { FloatingChip, ResultsPreview, StatItem, StepCard } from "./molecules";
-
-export function Backdrop() {
-  return <div aria-hidden="true" className="q-grid-bg pointer-events-none absolute inset-x-0 top-0 -z-10 h-[44rem]" />;
-}
 
 export function Hero() {
   return (

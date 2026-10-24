@@ -24,6 +24,8 @@ import { StepIndicator, VoterShell } from "./VoterUi";
 import { SuccessMark } from "@/components/ui/success-mark";
 import { rememberVoterLink } from "@/lib/client/myElections";
 import { readLocal, type Local } from "@/lib/client/voterAccess";
+import { Glass } from "@/components/ui/glass";
+import { NextSteps } from "@/components/ui/next-steps";
 
 type ReceiptV1 = z.infer<typeof Receipt>;
 
@@ -291,8 +293,21 @@ export function VoterFlow({ token }: { token: string }) {
       return (
         <VoterShell className="items-center text-center">
           <SuccessMark />
-          <h1 className="text-display font-bold tracking-tight">¡Listo! Ya estás inscrito.</h1>
+          <div>
+            <h1 className="text-display font-bold tracking-tight">¡Listo! Ya estás inscrito.</h1>
+            <p className="mt-2 line-clamp-2 text-body text-muted-foreground">{title}</p>
+          </div>
           <WaitingCountdown startsAt={startsAt} left={left} />
+          <Glass className="w-full p-5">
+            <p className="q-eyebrow mb-4 text-left">Qué sigue</p>
+            <NextSteps
+              steps={[
+                { label: "Te inscribiste", hint: "Este teléfono quedó listo para votar.", state: "done" },
+                { label: "El organizador abre la votación", hint: startsAt ? `Programada para las ${formatStartTime(startsAt)}` : "Te avisamos aquí mismo.", state: "current" },
+                { label: "Votas en dos toques", hint: "Recibes un comprobante sin tu opción.", state: "todo" },
+              ]}
+            />
+          </Glass>
           <p className="text-body text-muted-foreground">Deja esta página abierta: la boleta aparecerá aquí sola.</p>
         </VoterShell>
       );
@@ -378,11 +393,11 @@ export function VoterFlow({ token }: { token: string }) {
 function WaitingCountdown({ startsAt, left }: { startsAt: string | null; left: number | null }) {
   const state = !startsAt || left === null ? "manual" : left > 0 ? "counting" : left > -LATE_MS ? "opening" : "manual";
   return (
-    <div className="flex w-full flex-col items-center gap-1 rounded-lg border border-border bg-card px-4 py-5" data-testid="voting-countdown" data-state={state}>
+    <Glass strong className="flex w-full flex-col items-center gap-1 px-4 py-5 shadow-elevated" data-testid="voting-countdown" data-state={state}>
       {state === "counting" && left !== null ? (
         <>
           <p className="text-heading font-semibold">La votación empieza en</p>
-          <p className="text-[clamp(3.5rem,18vw,5.5rem)] font-extrabold leading-none tabular-nums" role="timer" aria-hidden="true" data-testid="countdown-value">
+          <p className="q-num text-[clamp(3.5rem,18vw,5.5rem)] font-semibold leading-none" role="timer" aria-hidden="true" data-testid="countdown-value">
             {countdownText(left)}
           </p>
           <p className="text-base text-muted-foreground">a las {formatStartTime(startsAt!)}</p>
@@ -399,7 +414,7 @@ function WaitingCountdown({ startsAt, left }: { startsAt: string | null; left: n
           <Clock className="size-5" aria-hidden="true" /> Esperando que el organizador abra la votación…
         </p>
       )}
-    </div>
+    </Glass>
   );
 }
 
