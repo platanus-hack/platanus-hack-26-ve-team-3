@@ -45,9 +45,10 @@ async function register(v: Voter) {
   await expect(page.getByTestId("step-indicator")).toContainText("Paso 1 de 2");
   await page.getByRole("button", { name: "Continuar" }).click();
   await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
-  // Wallet real de @quorum/wallet en modo eoa-demo (sin NEXT_PUBLIC_ZERODEV_PROJECT_ID), etiquetada demo en Detalles técnicos.
-  await page.getByText("Detalles técnicos").click();
-  await expect(page.getByTestId("link-mode")).toContainText(/demo/i);
+  // Wallet real de @quorum/wallet en modo eoa-demo (sin NEXT_PUBLIC_ZERODEV_PROJECT_ID). Para la persona no hay jerga:
+  // la etiqueta "demo" de la vinculación vive en /e/[id] (centro de transparencia), no en el flujo del votante.
+  await expect(page.getByTestId("tech-details")).toHaveCount(0);
+  await expect(page.getByTestId("link-mode")).toHaveCount(0);
   // La clave del signer eoa-demo vive en localStorage y la credencial está cifrada con la clave del dispositivo (v3).
   expect(await page.evaluate(() => localStorage.getItem("quorum.wallet.eoaDemo.v1"))).toMatch(/^0x[0-9a-f]{64}$/);
 }
@@ -123,8 +124,9 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
     await vote(v, "2");
     const receipt = v.page.getByTestId("receipt");
     await expect(receipt).toBeVisible({ timeout: 90_000 });
-    await expect(receipt).toContainText("incluido");
+    // "Tu voto fue contado" solo sale con state "incluido" (si no, "Tu voto fue recibido"); sin jerga ni detalles técnicos.
     await expect(v.page.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible();
+    await expect(receipt).toContainText("Código de tu comprobante");
     v.nullifier = (await v.page.getByTestId("receipt-inclusion-id").textContent())!.trim();
     expect(v.nullifier).toMatch(/^\d+$/);
   }

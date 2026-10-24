@@ -85,6 +85,14 @@ export class MockV1 {
   anchorTx: string | null = null;
   /** `POST /face/enroll` responde 409 `duplicate_identity` (rostro ya inscrito). */
   faceDuplicate = false;
+  /**
+   * Inicio programado (`votingStartsAt`). Como el servidor real: la primera petición después de esa hora pasa la
+   * fase de `registration` a `open` (y cierra la sala). `null` = la abre el organizador a mano.
+   */
+  votingStartsAt: string | null = null;
+  /** Retiene la apertura automática (para capturar "Abriendo la votación…"). */
+  holdSchedule = false;
+  schedules: unknown[] = [];
   /** Retrasos artificiales (ms) para capturar estados intermedios ("Vinculando…", "Enviando tu voto…"). */
   delays: Partial<Record<"wallet" | "vote", number>> = {};
 
@@ -114,7 +122,17 @@ export class MockV1 {
       registryAddress: null,
       layout: null,
       ...(this.eligibility ? { eligibility: this.eligibility } : {}),
+      votingStartsAt: this.votingStartsAt,
+      serverNow: new Date().toISOString(),
     };
+  }
+
+  /** Transición perezosa del inicio programado (misma regla que `syncSchedule` del servidor). */
+  private sync() {
+    if (!this.holdSchedule && this.phase === "registration" && this.votingStartsAt && Date.now() >= Date.parse(this.votingStartsAt)) {
+      this.phase = "open";
+      if (this.room) this.room = { ...this.room, open: false, closedReason: "election-opened" };
+    }
   }
 
   tally() {
@@ -163,11 +181,13 @@ export class MockV1 {
     const m = req.method();
     const body = req.postData() ? (JSON.parse(req.postData() as string) as Record<string, unknown>) : {};
     const E = `/api/elections/${E2E.electionId}`;
+    this.sync();
 
     if (p === `/api/invite/${E2E.token}`)
       return this.json(route, {
-        election: { id: E2E.electionId, title: E2E.title, kind: "multiple", options: E2E.options, status: this.phase, endsAt: "2026-10-24T22:00:00.000Z" },
+        election: { id: E2E.electionId, title: E2E.title, kind: "multiple", options: E2E.options, status: this.phase, endsAt: "2026-10-24T22:00:00.000Z", votingStartsAt: this.votingStartsAt },
         voter: { id: E2E.voterId, displayName: "Vecina Ana (ficticia)", walletAddress: this.wallet?.walletAddress ?? null, livenessPassedAt: null, votedAt: null },
+        serverNow: new Date().toISOString(),
       });
     if (p.startsWith("/api/invite/")) return this.json(route, { error: "invitación no existe", code: "not_found" }, 404);
     if (p === "/api/face/enroll" && m === "POST" && this.faceDuplicate) return this.json(route, { error: "Este rostro ya está inscrito en esta votación", code: "duplicate_identity" }, 409);
@@ -187,10 +207,11 @@ export class MockV1 {
     }
 
     /* ---------- Sala abierta ---------- */
+    const clock = { votingStartsAt: this.votingStartsAt, serverNow: new Date().toISOString() };
     const roomStatus = (secret: boolean) =>
       this.room
-        ? { open: this.room.open, seatsTaken: this.room.seatsTaken, maxSeats: this.room.maxSeats, expiresAt: this.room.expiresAt, closedReason: this.room.closedReason, ...(secret ? { roomCode: this.room.code, joinUrl: `${url.origin}/j/${this.room.code}` } : {}) }
-        : { open: false, seatsTaken: 0, maxSeats: null, expiresAt: null, closedReason: null };
+        ? { open: this.room.open, seatsTaken: this.room.seatsTaken, maxSeats: this.room.maxSeats, expiresAt: this.room.expiresAt, closedReason: this.room.closedReason, ...clock, ...(secret ? { roomCode: this.room.code, joinUrl: `${url.origin}/j/${this.room.code}` } : {}) }
+        : { open: false, seatsTaken: 0, maxSeats: null, expiresAt: null, closedReason: null, ...clock };
     if (p === `${E}/room`) {
       const org = this.isOrg(route);
       if (m === "GET") return this.json(route, roomStatus(org));
@@ -199,6 +220,7 @@ export class MockV1 {
         const created = !this.room?.open;
         const expiresAt = new Date(Date.now() + Number(body.expiresInMin) * 60_000).toISOString();
         this.room = { code: this.room?.open ? this.room.code : "K7M3QP", open: true, seatsTaken: this.room?.seatsTaken ?? 0, maxSeats: Number(body.maxSeats), expiresAt, closedReason: null };
+        this.votingStartsAt = body.votingStartsAt === null ? null : typeof body.votingStartsAt === "string" ? body.votingStartsAt : expiresAt;
         return this.json(route, roomStatus(true), created ? 201 : 200);
       }
       if (m === "DELETE") {
@@ -233,7 +255,7 @@ export class MockV1 {
         return this.json(route, { electionId: E2E.electionId, voterId: E2E.voterId, displayName: "Participante", inviteToken: E2E.token, inviteUrl: `${url.origin}/v/${E2E.token}` }, 201);
       }
       const elig = this.eligibility ? { eligibility: { method: this.eligibility.method, ...(this.eligibility.badgeUrlPrefix ? { badgeUrlPrefix: this.eligibility.badgeUrlPrefix } : {}) } } : {};
-      return this.json(route, { electionId: E2E.electionId, title: E2E.title, ...rest, ...elig });
+      return this.json(route, { electionId: E2E.electionId, title: E2E.title, ...rest, ...elig, ...clock });
     }
 
     if (p === "/api/elections" && m === "POST") {
@@ -247,6 +269,15 @@ export class MockV1 {
       return this.json(route, this.election());
     }
     if (p === E) return this.json(route, this.election());
+    if (p === `${E}/schedule` && m === "POST") {
+      if (!this.isOrg(route)) return this.json(route, { error: "falta token", code: "forbidden" }, 401);
+      this.schedules.push(body);
+      const now = Date.now();
+      const base = this.votingStartsAt && Date.parse(this.votingStartsAt) > now ? Date.parse(this.votingStartsAt) : now;
+      this.votingStartsAt =
+        "votingStartsAt" in body ? (body.votingStartsAt as string | null) : "inSeconds" in body ? new Date(now + Number(body.inSeconds) * 1000).toISOString() : new Date(base + Number(body.addSeconds) * 1000).toISOString();
+      return this.json(route, { electionId: E2E.electionId, status: this.phase, votingStartsAt: this.votingStartsAt, serverNow: new Date(now).toISOString() });
+    }
     if (p === `${E}/tally`) return this.json(route, this.tally());
     if (p === `${E}/layout`) return this.json(route, { error: "sin layout", code: "not_found" }, 404);
     if (p === `${E}/roll`)
@@ -286,6 +317,7 @@ export class MockV1 {
       const [from, to] = transitions[action];
       if (this.phase !== from) return this.json(route, { error: `fase ${this.phase}`, code: "closed" }, 409);
       this.phase = to;
+      if (to === "open") this.votingStartsAt = new Date().toISOString();
       if (to === "open" && this.room) this.room = { ...this.room, open: false, closedReason: this.room.closedReason ?? "election-opened" };
       return this.json(route, this.election());
     }

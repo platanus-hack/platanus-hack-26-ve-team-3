@@ -12,12 +12,18 @@ import { E2E, MockV1 } from "./mocks/v1";
  */
 const CODE = "K7M3QP";
 const PREFIX = "https://hack.platan.us/26-ve/id/";
+/** Lista ampliada de voter-taps.spec.ts. En `/j` con credencial, "credencial" es el objeto físico del evento (lo que
+ * pidió producto: "Escanear mi credencial"), así que ahí se permite; en `/v` (espera) vale la lista completa. */
+const FORBIDDEN = /\bwallet|smart wallet|\bfirma|EIP-?712|FaceBinding|Semaphore|credencial|nullifier|commitment|Kernel|eoa-demo|on-?chain|blockchain|Base Sepolia|ZeroDev|testnet|Detalles técnicos/i;
+const FORBIDDEN_ON_BADGE_PAGE = new RegExp(FORBIDDEN.source.replace("|credencial", ""), "i");
 const OUT = path.resolve(__dirname, "../../../docs/screenshots/phase2");
 
 function badgeMock(over: (m: MockV1) => void = () => undefined) {
   const mock = new MockV1("registration");
   mock.room = { code: CODE, open: true, seatsTaken: 41, maxSeats: 120, expiresAt: new Date(Date.now() + 14 * 60_000).toISOString(), closedReason: null };
   mock.eligibility = { method: "event-badge", badgeCheck: "live", badgeUrlPrefix: PREFIX };
+  // Inicio programado: la credencial también termina en la espera con cuenta regresiva.
+  mock.votingStartsAt = new Date(Date.now() + 20 * 60_000).toISOString();
   over(mock);
   return mock;
 }
@@ -58,6 +64,8 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
     const tReady = Date.now();
     await expect(page.getByTestId("step-indicator")).toContainText("Paso 1 de 2");
     await expect(page.getByText(/Al tocar Escanear mi credencial, aceptas/)).toBeVisible();
+    expect(await page.locator("main").innerText()).not.toMatch(FORBIDDEN_ON_BADGE_PAGE);
+    expect(await page.locator("main").textContent()).not.toMatch(FORBIDDEN_ON_BADGE_PAGE);
     await shot(page, "01-inicio");
 
     let taps = 0;
@@ -70,11 +78,20 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
     expect(mock.badgeJoins).toEqual(["jgalvis414"]);
     await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
     const tDone = Date.now();
+    // Espera con cuenta regresiva (inicio programado) y sin jerga (lista completa de voter-taps).
+    await expect(page.getByTestId("voting-countdown")).toContainText("La votación empieza en");
+    await expect(page.getByTestId("countdown-value")).toHaveText(/^(19|20):\d\d$/);
+    expect(await page.locator("main").innerText()).not.toMatch(FORBIDDEN);
     const detector = await page.evaluate(() => document.documentElement.getAttribute("data-qr-detector"));
     // El paso 2 no repite el consentimiento: rostro directo.
     const stored = JSON.parse((await page.evaluate((c) => localStorage.getItem(`quorum.room.${c}`), CODE))!) as { displayName: string; consentAt: string };
     expect(stored.displayName).toBe("Participante");
     expect(stored.consentAt).toBeTruthy();
+
+    // Texto oculto/plegado de /v (sin la página /j que Next conserva oculta tras navegar): recargar y revisar todo.
+    await page.reload();
+    await expect(page.getByTestId("countdown-value")).toHaveText(/^(19|20):\d\d$/);
+    expect(await page.locator("main").textContent()).not.toMatch(FORBIDDEN);
 
     const timing = {
       project: info.project.name,

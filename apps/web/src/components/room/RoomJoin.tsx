@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Consent } from "@/components/voter/Consent";
 import { StepIndicator } from "@/components/voter/VoterUi";
-import { ApiClientError, describeError } from "@/lib/client/api";
+import { ApiClientError, voterMessage } from "@/lib/client/api";
 import { formatInt } from "@/lib/client/format";
 import {
   classifyJoinError,
@@ -80,7 +80,7 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
       .catch((e: unknown) => {
         if (cancelled) return;
         const notFound = e instanceof ApiClientError && e.status === 404;
-        setLoadError({ notFound, message: notFound ? "No existe una sala con ese código. Revisa el código que aparece en la pantalla." : describeError(e) });
+        setLoadError({ notFound, message: notFound ? "No existe una sala con ese código. Revisa el código que aparece en la pantalla." : voterMessage(e) });
       });
     return () => {
       cancelled = true;

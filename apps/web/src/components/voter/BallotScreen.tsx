@@ -6,7 +6,7 @@ import type { z } from "zod";
 import type { Receipt } from "@quorum/contracts";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { ApiClientError, describeError } from "@/lib/client/api";
+import { ApiClientError, voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
 import { openIdentity, saveReceipt } from "@/lib/client/identityVault";
@@ -21,8 +21,7 @@ function explain(e: unknown): { message: string; alreadyVoted: boolean } {
   const msg = e instanceof Error ? e.message : String(e);
   if (/NOT_IN_GROUP/.test(msg)) return { message: "Este teléfono se vinculó después de que empezó la votación, así que no puede votar en ella.", alreadyVoted: false };
   if (e instanceof ApiClientError && e.code === "already_voted") return { message: "Ya votaste en esta votación.", alreadyVoted: true };
-  if (e instanceof ApiClientError) return { message: describeError(e), alreadyVoted: false };
-  return { message: msg, alreadyVoted: false };
+  return { message: voterMessage(e), alreadyVoted: false };
 }
 
 /**

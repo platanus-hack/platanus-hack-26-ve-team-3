@@ -76,6 +76,7 @@ export async function createElection(input: CreateElectionInput, opts: { id?: st
     winnersCount: input.winnersCount ?? null,
     optionValues: input.optionValues ?? null,
     registryAddress: env.registryAddress ?? null,
+    votingStartsAt: null,
   });
   // D-19: método de elegibilidad de la sala (la lista de usuarios se guarda solo como HMAC, aparte).
   if (input.eligibility) election.eligibility = await applyEligibility(election.id, input.eligibility);

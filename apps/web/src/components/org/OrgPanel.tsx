@@ -362,7 +362,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </Alert>
       ) : null}
 
-      {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} eligibility={election.eligibility} onElectionChange={setElection} /> : null}
+      {phase === "registration" ? <RoomCard electionId={electionId} hasToken={Boolean(token)} onPhaseChange={reload} eligibility={election.eligibility} onElectionChange={setElection} /> : null}
 
       <Card>
         <CardHeader>

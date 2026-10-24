@@ -97,7 +97,7 @@ describe("Sala abierta — auth y fase", () => {
 
     const pub = await call(getRoom, { params: { id: org.id } });
     expect(pub.status).toBe(200);
-    expect(pub.json).toEqual({ open: true, seatsTaken: 0, maxSeats: 10, expiresAt: opened.json.expiresAt, closedReason: null });
+    expect(pub.json).toEqual({ open: true, seatsTaken: 0, maxSeats: 10, expiresAt: opened.json.expiresAt, closedReason: null, votingStartsAt: opened.json.expiresAt, serverNow: expect.any(String) });
     expect(JSON.stringify(pub.json)).not.toContain(opened.json.roomCode);
     const priv = await call(getRoom, { params: { id: org.id }, headers: org.auth });
     expect(priv.json).toMatchObject({ open: true, roomCode: opened.json.roomCode, joinUrl: opened.json.joinUrl });
@@ -114,7 +114,7 @@ describe("Sala abierta — auth y fase", () => {
     expect((await openRoom(org, 501, 5)).status).toBe(400);
     expect((await call(getRoom, { params: { id: "el_inexistente" } })).status).toBe(404);
     const none = await call(getRoom, { params: { id: org.id } });
-    expect(none.json).toEqual({ open: false, seatsTaken: 0, maxSeats: null, expiresAt: null, closedReason: null });
+    expect(none.json).toEqual({ open: false, seatsTaken: 0, maxSeats: null, expiresAt: null, closedReason: null, votingStartsAt: null, serverNow: expect.any(String) });
   });
 });
 

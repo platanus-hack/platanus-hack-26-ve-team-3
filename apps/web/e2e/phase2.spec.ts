@@ -30,9 +30,11 @@ test.describe("fase 2 · votante", () => {
     const vault = await page.evaluate((id) => localStorage.getItem(`quorum.identity.${id}`), E2E.electionId);
     expect(vault).toContain(mock.commitment!);
     expect(JSON.parse(vault!).v).toBe(3);
-    // La etiqueta demo sigue existiendo, dentro de Detalles técnicos.
-    await page.getByText("Detalles técnicos").click();
-    await expect(page.getByTestId("link-mode")).toContainText(/demo/i);
+    // Sin jerga en el flujo del votante: ni "Detalles técnicos" ni la etiqueta del modo de vinculación (viven en /e/[id]).
+    await expect(page.getByText("Detalles técnicos")).toHaveCount(0);
+    await expect(page.getByTestId("link-mode")).toHaveCount(0);
+    // Sin hora programada en este mock: lo dice, sin cuenta regresiva.
+    await expect(page.getByTestId("voting-countdown")).toContainText("Esperando que el organizador abra la votación…");
 
     // El organizador congela el padrón: la página pasa SOLA a la boleta (polling de 5 s), sin volver a la wallet.
     mock.phase = "open";
@@ -42,10 +44,13 @@ test.describe("fase 2 · votante", () => {
     const receipt = page.getByTestId("receipt");
     await expect(receipt).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible();
-    await expect(receipt).toContainText("incluido");
     const nullifier = (await page.getByTestId("receipt-inclusion-id").textContent())?.trim();
     expect(nullifier).toBe(mock.nullifier);
-    await expect(page.getByTestId("receipt-inclusion-id")).toBeHidden(); // el código técnico va plegado
+    // Comprobante simple: hora, "Código de tu comprobante", "Comprobar mi voto" y "Ver resultados"; sin detalles técnicos.
+    await expect(receipt).toContainText("Código de tu comprobante");
+    await expect(page.getByTestId("receipt-time")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Ver resultados" })).toBeVisible();
+    await expect(page.getByTestId("tech-details")).toHaveCount(0);
     // El voto va sólo con la prueba (sin onchain ni datos del votante) y "ya voté" en otra petición.
     expect(Object.keys(mock.voteBodies[0] as object)).toEqual(["proof"]);
     expect((mock.voteBodies[0] as { proof: { message: string } }).proof.message).toBe("2");

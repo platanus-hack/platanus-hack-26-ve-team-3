@@ -81,15 +81,20 @@ describe("MyVoteCheck · judgeInclusion", () => {
 });
 
 describe("VoteReceiptCard (comprobante simple)", () => {
-  it("check grande y 'Tu voto fue contado'; el código técnico sólo en Detalles técnicos; nunca la opción; etiqueta demo", () => {
-    render(<VoteReceiptCard electionId="e1" walletMode="eoa-demo" receipt={{ inclusionId: "77", nullifier: "77", index: 0, state: "incluido" }} />);
+  it("check grande, 'Tu voto fue contado', hora, 'Comprobar mi voto', 'Ver resultados' y 'Código de tu comprobante'; sin jerga ni opción", () => {
+    render(<VoteReceiptCard electionId="e1" receipt={{ inclusionId: "77", nullifier: "77", state: "incluido", at: "2026-10-24T19:45:00.000Z" }} />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Tu voto fue contado");
+    expect(screen.getByTestId("receipt-time").textContent).toMatch(/3:45/);
+    expect(screen.getByText("Código de tu comprobante")).toBeTruthy();
     expect(screen.getByTestId("receipt-inclusion-id").textContent).toBe("77");
-    expect(screen.getByTestId("receipt-inclusion-id").closest("details")).toBeTruthy(); // dentro del desplegable
-    expect(screen.getByTestId("link-mode").textContent).toMatch(/demo/);
+    expect(screen.getByTestId("receipt-inclusion-id").closest("details")).toBeNull();
+    expect(screen.queryByTestId("link-mode")).toBeNull();
+    expect(screen.queryByTestId("tech-details")).toBeNull();
     expect(screen.getByRole("link", { name: "Comprobar mi voto" }).getAttribute("href")).toBe("/e/e1?comprobar=1#mi-voto");
-    expect(screen.getByRole("link", { name: "Ver resultados en vivo" }).getAttribute("href")).toBe("/e/e1/live");
-    expect(screen.getByTestId("receipt").textContent).not.toMatch(/opción elegida|Reparar/);
+    expect(screen.getByRole("link", { name: "Ver resultados" }).getAttribute("href")).toBe("/e/e1/live");
+    const text = screen.getByTestId("receipt").textContent ?? "";
+    expect(text).not.toMatch(/opción elegida|Reparar/);
+    expect(text).not.toMatch(/wallet|Kernel|eoa-demo|EIP-?712|FaceBinding|Semaphore|nullifier|commitment|on-?chain|Base Sepolia|ZeroDev|demo/i);
   });
   it("recibido (sin inclusión confirmada) no dice 'contado'", () => {
     render(<VoteReceiptCard electionId="e1" receipt={{ inclusionId: "7", nullifier: "7", state: "recibido" }} />);

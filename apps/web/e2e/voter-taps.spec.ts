@@ -7,18 +7,22 @@ import { MockV1 } from "./mocks/v1";
  *   inscripción ≤ 2 toques + escribir el nombre o apodo + permitir la cámara;  voto ≤ 2 toques.
  * También: sin jerga técnica en el flujo principal, texto base ≥ 18 px y boleta de 5 opciones sin scroll a 360×740.
  * Contra MOCKS del contrato (e2e/mocks/v1.ts); la prueba Semaphore sí se genera de verdad en el navegador.
+ * Pedido de producto: el votante no se entera de wallets ni de blockchain ("un proceso de verificación para votar"):
+ * la lista prohibida cubre también lo plegado (ya no hay "Detalles técnicos" en el flujo del votante).
  */
 const CODE = "K7M3QP";
-const FORBIDDEN = /\bwallet|\bfirma|EIP-712|Semaphore|credencial|nullifier|commitment|Kernel|on-chain/i;
+const FORBIDDEN = /\bwallet|smart wallet|\bfirma|EIP-?712|FaceBinding|Semaphore|credencial|nullifier|commitment|Kernel|eoa-demo|on-?chain|blockchain|Base Sepolia|ZeroDev|testnet|Detalles técnicos/i;
 
 async function taps(page: Page): Promise<number> {
   return page.evaluate(() => (window as unknown as { __taps: number }).__taps);
 }
 
-/** Texto visible del flujo principal (los <details> cerrados, como "Detalles técnicos", no se renderizan). */
+/** Texto visible Y oculto/plegado del flujo (textContent incluye <details> cerrados y sr-only). */
 async function expectPlainLanguage(page: Page) {
-  const text = await page.locator("main").innerText();
-  expect(text).not.toMatch(FORBIDDEN);
+  const visible = await page.locator("main").innerText();
+  expect(visible).not.toMatch(FORBIDDEN);
+  const all = (await page.locator("main").textContent()) ?? "";
+  expect(all).not.toMatch(FORBIDDEN);
 }
 
 test.use({ viewport: { width: 360, height: 740 } });
@@ -52,10 +56,16 @@ test("votante: inscripción en ≤ 2 toques (+ nombre + cámara) y voto en ≤ 2
   expect(mock.joins).toEqual(["Vecina del 4B"]);
   expect(mock.commitment).toMatch(/^\d+$/);
 
+  /* ---------- Cuenta regresiva: el organizador programa el inicio; nadie toca nada ---------- */
+  mock.votingStartsAt = new Date(Date.now() + 9_000).toISOString();
+  await expect(page.getByTestId("countdown-value")).toHaveText(/^00:0\d$/, { timeout: 10_000 });
+  await expect(page.getByTestId("voting-countdown")).toContainText("La votación empieza en");
+  await expectPlainLanguage(page);
+
   /* ---------- Voto ---------- */
-  mock.phase = "open";
   const options = page.getByRole("radio");
-  await expect(options).toHaveCount(5, { timeout: 15_000 }); // la boleta aparece sola
+  await expect(options).toHaveCount(5, { timeout: 20_000 }); // la boleta aparece sola al llegar a 0
+  expect(mock.phase).toBe("open");
   await expectPlainLanguage(page);
   // 5 opciones sin scroll: todas dentro de la pantalla, cada una ≥ 56 px.
   for (let i = 0; i < 5; i++) {

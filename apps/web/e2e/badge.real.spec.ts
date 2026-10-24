@@ -39,7 +39,8 @@ test("credencial real: 2 entran escaneando, reusar → rechazo, votan, cierre ve
   const { id, organizerToken } = election;
   const auth = { Authorization: `Bearer ${organizerToken}` };
   expect((await request.post(`/api/elections/${id}/publish`, { headers: auth })).ok()).toBe(true);
-  const room = (await (await request.post(`/api/elections/${id}/room`, { headers: auth, data: { maxSeats: 10, expiresInMin: 15 } })).json()) as { roomCode: string };
+  // Inicio programado lejano (la abrimos a mano luego): los teléfonos esperan con cuenta regresiva.
+  const room = (await (await request.post(`/api/elections/${id}/room`, { headers: auth, data: { maxSeats: 10, expiresInMin: 15, votingStartsInSec: 3600 } })).json()) as { roomCode: string };
   const code = room.roomCode;
   // La elección pública nunca expone los usuarios.
   expect(JSON.stringify(await (await request.get(`/api/elections/${id}`)).json())).not.toContain(USERS[0]);
@@ -55,6 +56,8 @@ test("credencial real: 2 entran escaneando, reusar → rechazo, votan, cierre ve
     await p.getByRole("button", { name: "Escanear mi credencial" }).click();
     await p.waitForURL(/\/v\/[^/]+$/, { timeout: 30_000 });
     await expect(p.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
+    await expect(p.getByTestId("voting-countdown")).toContainText(/La votación empieza en|Esperando que el organizador abra la votación/);
+    expect(await p.locator("main").innerText()).not.toMatch(/\bwallet|\bfirma|EIP-?712|FaceBinding|Semaphore|credencial|nullifier|commitment|on-?chain|blockchain|Detalles técnicos/i);
     console.log(`[credencial-real] ${user.slice(-1)}: /j → ¡Listo! ${Date.now() - t0} ms`);
     voters.push({ ctx, p, link: p.url() });
   }
@@ -80,7 +83,8 @@ test("credencial real: 2 entran escaneando, reusar → rechazo, votan, cierre ve
     await v.p.goto(v.link);
     await v.p.getByRole("radio", { name: /Demo A$/ }).click();
     await v.p.getByRole("button", { name: "Votar: Demo A" }).click();
-    await expect(v.p.getByTestId("receipt")).toContainText("incluido", { timeout: 90_000 });
+    await expect(v.p.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible({ timeout: 90_000 });
+    await expect(v.p.getByTestId("receipt")).toContainText("Código de tu comprobante");
     await v.ctx.close();
   }
 

@@ -64,6 +64,31 @@ export function describeError(err: unknown): string {
   return "Ocurrió un error desconocido.";
 }
 
+/**
+ * Jerga que la persona que vota no tiene por qué ver (pedido de producto: para ella es "un proceso de verificación
+ * para votar"). Los detalles técnicos viven en la página de transparencia (`/e/[id]`), `/audit` y los docs.
+ */
+export const VOTER_JARGON = /\bwallets?\b|smart wallet|\bkernel\b|eoa-demo|\beoa\b|EIP-?712|FaceBinding|Semaphore|\bcommitments?\b|on-?chain|blockchain|Base Sepolia|ZeroDev|nullifier|\bgas\b|testnet|UserOp|\bGroth16\b|\bscope\b|\bmerkle|\bRPC\b|\btx\b/i;
+
+const VOTER_FALLBACK: Partial<Record<ApiErrorCode, string>> = {
+  not_eligible: "Este teléfono no está habilitado para votar en esta votación.",
+  invalid_input: "Algo no salió bien al verificar tus datos. Inténtalo de nuevo.",
+  already_voted: "Ya votaste en esta votación. Cada persona vota una sola vez.",
+  closed: "La votación no está recibiendo votos en este momento.",
+  unavailable: "El servicio no está disponible en este momento. Inténtalo en unos segundos.",
+};
+
+/**
+ * Mensaje de error para el flujo del votante (/j, /v): igual que `describeError`, pero si el texto trae jerga técnica
+ * (mensajes del servidor o de librerías) se reemplaza por uno simple según el código.
+ */
+export function voterMessage(err: unknown): string {
+  const msg = describeError(err);
+  if (!VOTER_JARGON.test(msg)) return msg;
+  const code = err instanceof ApiClientError ? err.code : null;
+  return (code && VOTER_FALLBACK[code]) || "No pudimos completar la verificación en este teléfono. Inténtalo de nuevo.";
+}
+
 export async function request<T>(path: string, init: RequestInit | undefined, schema: z.ZodType<T> | null): Promise<T> {
   let res: Response;
   try {

@@ -9,7 +9,7 @@
  * activada por el organizador, con tope y expiración, y declarada en el paquete de auditoría (`rollPolicy`).
  */
 import { randomInt } from "node:crypto";
-import type { Election, OpenRoomInput, RoomStatus, Voter } from "@quorum/contracts";
+import { Election as ElectionSchema, type Election, type OpenRoomInput, type RoomStatus, type ScheduleInput, type Voter } from "@quorum/contracts";
 import { inviteUrlFor, requireElection } from "./elections";
 import { env } from "./env";
 import { HttpError } from "./errors";
@@ -52,7 +52,8 @@ async function seatsTaken(electionId: string): Promise<number> {
 }
 
 function statusOf(room: Room | null, election: Election, taken: number, withSecret: boolean): RoomStatus {
-  if (!room) return { open: false, seatsTaken: taken, maxSeats: null, expiresAt: null, closedReason: null };
+  const clock = { votingStartsAt: election.votingStartsAt ?? null, serverNow: new Date().toISOString() };
+  if (!room) return { open: false, seatsTaken: taken, maxSeats: null, expiresAt: null, closedReason: null, ...clock };
   const reason = closedReasonOf(room, election);
   return {
     open: reason === null,
@@ -60,8 +61,23 @@ function statusOf(room: Room | null, election: Election, taken: number, withSecr
     maxSeats: room.maxSeats,
     expiresAt: room.expiresAt,
     closedReason: reason,
+    ...clock,
     ...(withSecret ? { roomCode: room.code, joinUrl: joinUrlFor(room.code) } : {}),
   };
+}
+
+/** Máximo horizonte del inicio programado: 7 días. */
+const MAX_SCHEDULE_MS = 7 * 24 * 3600_000;
+
+function validStart(atMs: number, nowMs: number): string {
+  if (!Number.isFinite(atMs)) throw new HttpError("invalid_input", "votingStartsAt inválido");
+  if (atMs <= nowMs) throw new HttpError("invalid_input", "La hora de inicio ya pasó: para empezar ya, usa «Abrir ahora» (POST /open)");
+  if (atMs - nowMs > MAX_SCHEDULE_MS) throw new HttpError("invalid_input", "La hora de inicio no puede estar a más de 7 días");
+  return new Date(atMs).toISOString();
+}
+
+async function saveElection(e: Election) {
+  await (await getStore()).putElection(ElectionSchema.parse(e));
 }
 
 /**
@@ -69,7 +85,8 @@ function statusOf(room: Room | null, election: Election, taken: number, withSecr
  * conservando el mismo código para no reimprimir el QR). Solo en `registration`.
  */
 export async function openRoom(electionId: string, input: OpenRoomInput): Promise<{ status: RoomStatus & { roomCode: string; joinUrl: string }; created: boolean }> {
-  return withLock(`room:${electionId}`, async () => {
+  // engine → room (mismo orden que `openElection`): también fija `votingStartsAt` de la elección.
+  return withLock(`engine:${electionId}`, () => withLock(`room:${electionId}`, async () => {
     const store = await getStore();
     const e = await requireElection(electionId);
     if (e.status !== "registration") throw new HttpError("closed", `La sala abierta solo existe en fase de inscripción (estado ${e.status})`, 409);
@@ -88,10 +105,49 @@ export async function openRoom(electionId: string, input: OpenRoomInput): Promis
       room = { code, electionId, maxSeats: input.maxSeats, openedAt: new Date(now).toISOString(), expiresAt, closedAt: null, closedReason: null };
       created = true;
     }
+    // Inicio programado: explícito (ISO o relativo), null = a mano; ausente = el cierre de la sala, salvo que el
+    // organizador ya hubiera fijado una hora propia (distinta del cierre de la sala vigente), que se respeta.
+    let votingStartsAt: string | null;
+    if (input.votingStartsInSec !== undefined) votingStartsAt = validStart(now + input.votingStartsInSec * 1000, now);
+    else if (input.votingStartsAt !== undefined) votingStartsAt = input.votingStartsAt === null ? null : validStart(Date.parse(input.votingStartsAt), now);
+    else {
+      const prev = e.votingStartsAt ?? null;
+      const linked = !prev || (current !== null && closedReasonOf(current, e, now) === null && current.expiresAt === prev) || Date.parse(prev) <= now;
+      votingStartsAt = linked ? expiresAt : prev;
+    }
     await store.putRoom(room);
-    const status = statusOf(room, e, taken, true) as RoomStatus & { roomCode: string; joinUrl: string };
+    const next: Election = { ...e, votingStartsAt };
+    await saveElection(next);
+    const status = statusOf(room, next, taken, true) as RoomStatus & { roomCode: string; joinUrl: string };
     return { status, created };
-  });
+  }));
+}
+
+/**
+ * POST /api/elections/:id/schedule — mueve el inicio programado (solo en `registration`). Si la sala sigue abierta y
+ * su cierre estaba atado a la hora de inicio (el valor por defecto), el cierre de la sala se mueve con ella.
+ */
+export async function setSchedule(electionId: string, input: ScheduleInput) {
+  return withLock(`engine:${electionId}`, () => withLock(`room:${electionId}`, async () => {
+    const store = await getStore();
+    const e = await requireElection(electionId);
+    if (e.status !== "registration") throw new HttpError("closed", `La hora de inicio solo se puede cambiar durante la inscripción (estado ${e.status})`, 409);
+    const now = Date.now();
+    const prev = e.votingStartsAt ?? null;
+    let votingStartsAt: string | null;
+    if ("votingStartsAt" in input) votingStartsAt = input.votingStartsAt === null ? null : validStart(Date.parse(input.votingStartsAt), now);
+    else if ("inSeconds" in input) votingStartsAt = validStart(now + input.inSeconds * 1000, now);
+    else {
+      const base = prev && Date.parse(prev) > now ? Date.parse(prev) : now;
+      votingStartsAt = validStart(base + input.addSeconds * 1000, now);
+    }
+    const room = await store.getLatestRoom(electionId);
+    if (room && prev && closedReasonOf(room, e, now) === null && room.expiresAt === prev && votingStartsAt) {
+      await store.putRoom({ ...room, expiresAt: votingStartsAt });
+    }
+    await saveElection({ ...e, votingStartsAt });
+    return { electionId, status: e.status, votingStartsAt, serverNow: new Date(now).toISOString() };
+  }));
 }
 
 /** DELETE /api/elections/:id/room — cierra la sala (idempotente). Los votantes ya creados siguen en el censo. */

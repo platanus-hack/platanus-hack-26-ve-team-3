@@ -98,6 +98,15 @@ test.describe("panel del organizador · tarjeta Sala abierta", () => {
     await card.getByLabel("Minutos abierta").fill("15");
     await card.getByTestId("room-open").click();
     await expect(card.getByTestId("room-code")).toHaveText(CODE);
+    // Inicio programado: por defecto, el cierre de la sala (15 min); «+5 min» y «Empezar en 5 min».
+    const start = card.getByTestId("start-countdown");
+    await expect(start).toContainText(/La votación empieza en 1[45]:\d\d/);
+    await card.getByTestId("start-plus-5").click();
+    await expect(start).toContainText(/La votación empieza en (19|20):\d\d/);
+    await card.getByTestId("start-in-5").click();
+    await expect(start).toContainText(/La votación empieza en 0[45]:\d\d/);
+    expect(mock.schedules).toEqual([{ addSeconds: 300 }, { inSeconds: 300 }]);
+    await expect(card.getByTestId("start-now")).toBeVisible();
     await expect(card.getByTestId("room-join-url")).toHaveText(new RegExp(`/j/${CODE}$`));
     await expect(card.getByTestId("room-open")).toContainText("Ampliar");
 
@@ -144,6 +153,25 @@ test.describe("proyector · /e/[id]/proyector", () => {
     await expect(other.getByTestId("qr")).toHaveCount(0);
   });
 
+  test("inicio programado: «La votación empieza en mm:ss» junto al QR; «+5 min» mueve la hora; al llegar a 0 pasa sola a la votación", async ({ page }) => {
+    const mock = new MockV1("registration");
+    openRoom(mock, 60, 27);
+    mock.votingStartsAt = new Date(Date.now() + 4 * 60_000 + 32_000).toISOString();
+    await mock.install(page);
+    await page.goto(`/e/${E2E.electionId}/proyector#t=${E2E.orgToken}`);
+    const cd = page.getByTestId("projector-start-countdown");
+    await expect(cd).toContainText(/La votación empieza en 04:3\d/);
+    await page.getByRole("button", { name: "+5 min" }).click();
+    await expect(cd).toContainText(/La votación empieza en 09:3\d/);
+    expect(mock.schedules).toEqual([{ addSeconds: 300 }]);
+    // Sin scroll en pantalla grande, aun con la cuenta y los botones.
+    const overflow = await page.evaluate(() => document.querySelector('[data-testid="projector"] main')!.scrollHeight - document.querySelector('[data-testid="projector"] main')!.clientHeight);
+    if (page.viewportSize()!.width >= 768) expect(overflow).toBeLessThanOrEqual(1);
+    // La hora llega (el mock, como el servidor, abre con la siguiente petición): el proyector cambia solo.
+    mock.votingStartsAt = new Date(Date.now() + 1_500).toISOString();
+    await expect(page.getByTestId("projector")).toHaveAttribute("data-phase", "open", { timeout: 10_000 });
+  });
+
   test("open: participación y desglose sólo cuando el backend lo da", async ({ page }) => {
     const mock = new MockV1("open");
     await mock.install(page);
@@ -160,7 +188,7 @@ test.describe("proyector · /e/[id]/proyector", () => {
     await page.goto(`/e/${E2E.electionId}/proyector`);
     const v = page.getByTestId("projector-verifier");
     await expect(v).toContainText("verificado");
-    await expect(v).toContainText("Ancla on-chain: no verificable");
+    await expect(v).toContainText("Sello público: no verificable");
     await expect(v.getByRole("link")).toHaveAttribute("href", `https://sepolia.basescan.org/tx/0x${"ab".repeat(32)}`);
     await expect(page.getByTestId("projector-result")).toContainText("Resultado publicado: 2");
 

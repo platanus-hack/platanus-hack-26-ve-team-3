@@ -120,8 +120,20 @@ export const Election = z.object({
   packageDigest: z.string().nullable().optional(),
   /** D-19: método de elegibilidad de la sala (forma pública). Ausente = `open-alias`. */
   eligibility: Eligibility.optional(),
+  /**
+   * Inicio programado de la votación (fase `registration`). Al llegar esa hora el servidor pasa solo de `registration`
+   * a `open` (misma transición que `POST /open`). `null` = la abre el organizador a mano. Al abrir (a mano o sola) se
+   * fija a la hora real de apertura. No entra en el manifiesto.
+   */
+  votingStartsAt: z.string().datetime().nullable().optional(),
 });
 export type Election = z.infer<typeof Election>;
+
+/** Hora del servidor (ISO) en la respuesta, para que el cliente corrija el desfase de reloj del teléfono. */
+export const ServerNow = z.string().datetime();
+/** GET /api/elections/:id: la elección + `serverNow`. */
+export const ElectionResponse = Election.extend({ serverNow: ServerNow.optional() });
+export type ElectionResponse = z.infer<typeof ElectionResponse>;
 
 export const CreateElectionInput = Election.pick({ title: true, description: true, kind: true, options: true, startsAt: true, endsAt: true }).extend({
   candidates: z.array(Candidate).max(50).optional(),
@@ -301,7 +313,8 @@ export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_inp
 
 /** GET /api/invite/:token. Nunca el teléfono. */
 export const InviteResponse = z.object({
-  election: Election.pick({ id: true, title: true, kind: true, options: true, status: true, endsAt: true }),
+  election: Election.pick({ id: true, title: true, kind: true, options: true, status: true, endsAt: true, votingStartsAt: true }),
+  serverNow: ServerNow.optional(),
   voter: z.object({
     id: z.string(),
     displayName: z.string().nullable(),
@@ -374,10 +387,18 @@ export type DrawResponse = z.infer<typeof DrawResponse>;
 // Sala abierta (asamblea abierta) — fase `registration`. Ver docs/API_CONTRACT.md § "Sala abierta".
 // ---------------------------------------------------------------------------
 /** POST /api/elections/:id/room (organizador). */
-export const OpenRoomInput = z.object({
-  maxSeats: z.number().int().min(1).max(500),
-  expiresInMin: z.number().int().min(1).max(180),
-});
+export const OpenRoomInput = z
+  .object({
+    maxSeats: z.number().int().min(1).max(500),
+    expiresInMin: z.number().int().min(1).max(180),
+    /**
+     * Inicio programado de la votación. Ausente = el cierre de la sala (`expiresAt`), salvo que ya hubiera una hora
+     * propia distinta; `null` = sin hora (la abre el organizador a mano). Alternativa relativa: `votingStartsInSec`.
+     */
+    votingStartsAt: z.string().datetime().nullable().optional(),
+    votingStartsInSec: z.number().int().min(10).max(7 * 24 * 3600).optional(),
+  })
+  .refine((v) => !(v.votingStartsAt !== undefined && v.votingStartsInSec !== undefined), "Usa votingStartsAt o votingStartsInSec, no ambos");
 export type OpenRoomInput = z.infer<typeof OpenRoomInput>;
 
 export const RoomCloseReason = z.enum(["manual", "expired", "election-opened"]);
@@ -389,10 +410,27 @@ export const RoomStatus = z.object({
   maxSeats: z.number().int().min(1).nullable(),
   expiresAt: z.string().datetime().nullable(),
   closedReason: RoomCloseReason.nullable(),
+  /** Inicio programado de la votación (de la elección); null = sin hora. */
+  votingStartsAt: z.string().datetime().nullable().optional(),
+  serverNow: ServerNow.optional(),
   roomCode: z.string().optional(),
   joinUrl: z.string().optional(),
 });
 export type RoomStatus = z.infer<typeof RoomStatus>;
+
+/**
+ * POST /api/elections/:id/schedule (organizador, fase `registration`): mueve el inicio programado. Exactamente uno:
+ * `votingStartsAt` (ISO futura, o null = sin hora), `inSeconds` (desde ahora, hora del servidor) o `addSeconds`
+ * (suma a la hora vigente; sin hora vigente, desde ahora).
+ */
+export const ScheduleInput = z.union([
+  z.object({ votingStartsAt: z.string().datetime().nullable() }).strict(),
+  z.object({ inSeconds: z.number().int().min(10).max(7 * 24 * 3600) }).strict(),
+  z.object({ addSeconds: z.number().int().min(-3600).max(24 * 3600).refine((n) => n !== 0, "addSeconds no puede ser 0") }).strict(),
+]);
+export type ScheduleInput = z.infer<typeof ScheduleInput>;
+export const ScheduleResult = z.object({ electionId: z.string(), status: ElectionStatus, votingStartsAt: z.string().datetime().nullable(), serverNow: ServerNow });
+export type ScheduleResult = z.infer<typeof ScheduleResult>;
 
 /** Respuesta de POST /api/elections/:id/room. */
 export const OpenRoomResult = RoomStatus.extend({ roomCode: z.string(), joinUrl: z.string() });

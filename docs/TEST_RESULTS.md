@@ -807,3 +807,36 @@ Bytes añadidos (build de producción, `.next/static/chunks`):
 - Total en el peor caso (iPhone): ≈ 139 KB sin comprimir / ≈ 50 KB gzip (< 200 KB).
 
 Capturas 360 px (datos FIXTURE): `docs/screenshots/phase2/credencial-01-inicio-360.png` … `credencial-09-proyector-360.png` (`SCREENSHOTS=1 … e2e/badge.spec.ts --project=mobile-360`).
+
+## 2026-10-24 · Espera con cuenta regresiva e inicio programado (`feat/espera-cuenta`)
+
+Pedido de Jesús: el votante no se entera de wallets ni de blockchain, y en "¡Listo! Ya estás inscrito." ve cuánto falta para votar. Backend: `votingStartsAt` + transición perezosa `registration → open` (la misma de `POST /open`, bajo el lock, idempotente). Salida real (America/Caracas), puertos 3361 (mocks) y 3371 (real):
+
+| Hora | Comando | Resultado |
+|---|---|---|
+| 15:26:52 | `pnpm typecheck` | exit 0 |
+| 15:27:01 | `pnpm lint` | exit 0 |
+| 15:27:05 | `pnpm test` | exit 0 · contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 27 · verifier 59 · web 172 → **380 tests, 0 fallos** |
+| 15:27:23 | `pnpm --filter @quorum/web build` | exit 0 |
+| 15:27:35 | `PORT=3361 playwright test` smoke + phase2 + lab + room + voter-taps | **60 passed**, 4 skipped (capturas sin `SCREENSHOTS=1`); toques: inscripción 2 · voto 2 |
+| 15:25:23 | `SCREENSHOTS=1 QUORUM_E2E_REAL_PORT=3371 pnpm --filter @quorum/web test:e2e:real` | **4 passed** (espera.real **nuevo**, phase2.real, room.real, weight.real) |
+| — | `PORT=3361 SCREENSHOTS=1 playwright test e2e/screenshots.espera.spec.ts --project=chromium` | 2 passed → `docs/screenshots/phase2/espera-*.png` |
+
+- **Unitarias nuevas** (`src/lib/server/__tests__/schedule.test.ts`, 8): por defecto `votingStartsAt` = cierre de la sala y GET público de elección/sala/invitación lo exponen con `serverNow`; explícito/relativo/null y «Ampliar» respeta una hora propia; `POST /schedule` (auth, «Empezar en 5 min», «+5 min», sin hora, errores 400/409, la sala atada se mueve); **transición automática** con la primera lectura tras la hora (padrón congelado = `groupRoot` de los commitments, sala `election-opened`, plantillas faciales borradas, `rollPolicy`, se vota y el cierre queda `auditable`); **mismo estado del motor que `POST /open` manual** (elecciones gemelas); **idempotencia con 24 lecturas concurrentes** (elección, sala, padrón, invitación, tally, sala por código): `deleteFaceTemplates` y el cierre de la sala ocurren **1 vez**; **no ocurre** en `draft`, ni antes de la hora, ni después de abrir a mano o cerrar; con padrón vacío se queda en `registration`. Cliente (`clock.test.ts`, 4): offset con el punto medio del viaje, mejor medición, `mm:ss`/`h:mm:ss`, errores sin jerga. `voter.test.tsx`: "04:32" con el teléfono **1 h atrasado** respecto al servidor, `1:04:3x`, "Abriendo la votación…" y la boleta sola.
+- **Sin jerga**: la lista prohibida de `e2e/voter-taps.spec.ts` y `voter.test.tsx` ahora incluye smart wallet, eoa-demo, FaceBinding, Base Sepolia, ZeroDev, blockchain, testnet, `EIP-?712`, `on-?chain` y "Detalles técnicos", y se comprueba sobre el texto **completo** (también lo plegado y lo `sr-only`), no solo el visible. El voter-taps ahora usa la cuenta regresiva del mock: la boleta aparece sola al llegar a 0.
+- **E2E real nuevo** (`e2e/espera.real.spec.ts`): 2 votantes se inscriben por la sala (sin hora: "Esperando que el organizador abra la votación…") → el organizador fija `votingStartsInSec: 20` → ambos teléfonos muestran la cuenta (`[espera] cuenta visible en los 2 teléfonos: 00:16`) → la boleta aparece sola en ambos (`[espera] boleta visible 528 ms después de la hora programada`) sin `POST /open`; el servidor reporta `open`, padrón congelado con 2 commitments y sala `election-opened`; un voto real → "Tu voto fue contado" con "Código de tu comprobante" y sin detalles técnicos.
+- La primera corrida real falló por dos motivos: una aserción vieja de `phase2.real` buscaba el texto "incluido" que estaba en los detalles técnicos del comprobante (eliminados; ahora se comprueba el título "Tu voto fue contado", que solo sale con `incluido`), y una colisión de artefactos de traza por correr a la vez el spec de capturas en el mismo `test-results/`. Se corrigió la aserción y se repitió sola: 4 passed.
+- Capturas: `espera-01-sin-hora-360`, `espera-02-cuenta-360`, `espera-03-abriendo-360`, `espera-04-boleta-sola-360`, `espera-05-comprobante-360`, `espera-06-panel-360`, `espera-07-proyector-1440` (mocks, FIXTURE) y `espera-real-01-sin-hora-360`, `espera-real-02-cuenta-360`, `espera-real-03-comprobante-360` (servidor real).
+- Límite conocido: el lock es en proceso (igual que el resto del motor); con varias instancias del servidor la transición podría ejecutarse dos veces en paralelo.
+
+### 2026-10-24 · Merge de `integration/phase2` (inicio programado) en `feat/credencial-qr`
+Conflictos resueltos conservando ambos lados (contracts: `votingStartsAt`/`serverNow` + elegibilidad; RoomCard: selector "¿Quién puede votar?" + hora de inicio, cuenta regresiva, "Abrir ahora"/"+5 min"; Proyector: "Escanea este código y luego tu credencial" + cuenta y sello). `badge.spec` ahora termina en la espera con cuenta regresiva (`countdown-value` 19–20 min) y pasa la lista ampliada de voter-taps en `/v` (en `/j` con credencial se permite solo la palabra "credencial", que es el objeto del evento). `badge.real` programa el inicio (`votingStartsInSec: 3600`), comprueba la espera sin jerga y el comprobante nuevo ("Tu voto fue contado").
+
+| Comando | Resultado real |
+|---|---|
+| `pnpm typecheck` · `pnpm lint` · `pnpm --filter @quorum/web build` | OK · OK (0 avisos) · OK (21/21) |
+| `pnpm test` | contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 27 · verifier 61 · web **204** — verde |
+| Playwright con mocks (chromium + mobile-360, `PORT=3343`) | **70 passed**, 128 skipped, 0 failed |
+| `badge.spec.ts --project=webkit-360` | **5 passed** |
+| `test:e2e:real` (`QUORUM_E2E_REAL_PORT=3344`) | **5 passed**: badge.real, espera.real, phase2.real, room.real, weight.real |
+| Tiempos tras el merge (rostro simulado) | Chromium 1,95 s · Pixel 5 1,56 s · WebKit (jsqr) 2,0 s · real 1,6–1,7 s; 1 toque |
