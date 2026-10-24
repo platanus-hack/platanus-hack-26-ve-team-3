@@ -3,16 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LiveLayout as LiveLayoutSchema, type LiveLayout } from "@quorum/contracts";
-import { Badge } from "@/components/ui/badge";
 import { ErrorState, LoadingState } from "@/components/states";
 import { BarTile, CountdownTile, DonutTile, StatTile, TextTile } from "@/components/LiveResultTile";
 import { api, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { PhaseTimeline } from "@/components/election/PhaseTimeline";
-import { phaseLabel } from "@/lib/client/phases";
 import type { Aggregates, ElectionStatus as ElectionPhase } from "@quorum/contracts";
 import { defaultLayout } from "@/lib/client/fixtures";
 import { formatDateTime } from "@/lib/client/format";
+import { PageHeader } from "@/components/ui/page-header";
 
 const POLL_MS = 3000;
 
@@ -83,49 +82,44 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
   const cols = layout?.columns === "3" ? "md:grid-cols-3" : layout?.columns === "2" ? "md:grid-cols-2" : "md:grid-cols-1";
 
   return (
-    <div className="q-container flex flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">Resultados en vivo</Badge>
-          {phase ? <Badge tone={phase === "open" ? "success" : "neutral"}>{phaseLabel[phase]}</Badge> : null}
-        </div>
-        <h1 className="text-title font-bold tracking-tight md:text-display">{title || "Elección"}</h1>
-        <p className="text-small text-muted-foreground" aria-live="polite">
-          Se actualiza cada 3 s{updatedAt ? ` · ${formatDateTime(new Date(updatedAt).toISOString())}` : ""}
-        </p>
-      </header>
-
-      {phase ? <PhaseTimeline phase={phase} /> : null}
+    <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
+      <PageHeader title={title || "Elección"} meta={<span aria-live="polite">Se actualiza cada 3 s{updatedAt ? ` · ${formatDateTime(new Date(updatedAt).toISOString())}` : ""}</span>}>
+        {phase ? <PhaseTimeline phase={phase} /> : null}
+      </PageHeader>
       {phase === "registration" ? (
         <p role="status" className="rounded-md border border-border bg-neutral-soft p-3 text-small">
-          Inscripción en curso: la votación aún no abre. Los agregados aparecerán cuando se congele el padrón.
+          La votación aún no abre. Los resultados aparecen al empezar.
         </p>
       ) : null}
 
       {error && !data ? <ErrorState message={error} onRetry={fetchTally} /> : null}
       {error && data ? (
         <p role="status" className="rounded-md border border-warning/50 bg-warning-soft p-2 text-small">
-          Sin conexión momentánea: mostrando el último dato recibido. {error}
+          Sin conexión: mostrando el último dato.
         </p>
       ) : null}
       {!data && !error ? <LoadingState label="Cargando agregados…" lines={4} /> : null}
 
       {data && layout ? (
-        <div className={`grid grid-cols-1 gap-4 ${cols}`}>
-          {layout.tiles.map((tile, i) => {
-            switch (tile.type) {
-              case "stat":
-                return <StatTile key={i} metric={tile.metric} data={data} />;
-              case "bar-chart":
-                return <BarTile key={i} data={data} orientation={tile.orientation} />;
-              case "donut":
-                return <DonutTile key={i} data={data} />;
-              case "countdown":
-                return <CountdownTile key={i} closesAt={data.closesAt} status={data.status} />;
-              case "text":
-                return <TextTile key={i} template={tile.template} />;
-            }
-          })}
+        <div className={`grid grid-cols-2 gap-3 md:gap-4 ${cols}`}>
+          {layout.tiles.map((tile, i) => (
+            <div key={i} className={tile.type === "stat" ? "min-w-0" : "col-span-2 min-w-0 md:col-span-1"}>
+              {(() => {
+                switch (tile.type) {
+                  case "stat":
+                    return <StatTile metric={tile.metric} data={data} />;
+                  case "bar-chart":
+                    return <BarTile data={data} orientation={tile.orientation} />;
+                  case "donut":
+                    return <DonutTile data={data} />;
+                  case "countdown":
+                    return <CountdownTile closesAt={data.closesAt} status={data.status} />;
+                  case "text":
+                    return <TextTile template={tile.template} />;
+                }
+              })()}
+            </div>
+          ))}
         </div>
       ) : null}
 

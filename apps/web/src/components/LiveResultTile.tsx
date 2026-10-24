@@ -6,6 +6,7 @@ import type { Aggregates } from "@quorum/contracts";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCountdown, formatInt, formatPercent } from "@/lib/client/format";
+import { ProgressRow } from "@/components/ui/progress-row";
 
 const HIDDEN_NOTE = "Desglose oculto hasta 5 votos";
 
@@ -42,11 +43,11 @@ export function StatTile({ metric, data }: { metric: "turnout" | "totalVotes" | 
   const def = {
     turnout: { title: "Participación", value: formatPercent(data.turnout), note: `${formatInt(data.totalVotes)} de ${formatInt(data.eligible)} elegibles` },
     totalVotes: { title: "Votos incluidos", value: formatInt(data.totalVotes), note: "Nunca votos individuales" },
-    leadingShare: { title: "Opción líder", value: data.leadingShare === null ? "—" : formatPercent(data.leadingShare), note: data.leadingShare === null ? HIDDEN_NOTE : "Proporción de la opción con más votos" },
+    leadingShare: { title: "Opción líder", value: data.leadingShare === null ? "—" : formatPercent(data.leadingShare), note: data.leadingShare === null ? HIDDEN_NOTE : "Opción con más votos" },
   }[metric];
   return (
     <TileShell title={def.title} note={def.note}>
-      <p className="q-num text-[2.5rem] font-semibold leading-none">{def.value}</p>
+      <p className="q-num text-[2rem] font-semibold leading-none md:text-[2.5rem]">{def.value}</p>
     </TileShell>
   );
 }
@@ -145,15 +146,17 @@ function BarListTile({ rows, data }: { rows: { name: string; votos: number }[]; 
           const share = total ? r.votos / total : 0;
           return (
             <li key={r.name}>
-              <div className="mb-2 flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate text-body font-medium">{r.name}</span>
-                <span className="q-num shrink-0 text-small text-muted-foreground">
-                  <span className="font-semibold text-foreground">{formatInt(r.votos)}</span> · {total ? formatPercent(share) : "—"}
-                </span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full" style={{ width: `${share * 100}%`, background: SERIES[i % SERIES.length] }} />
-              </div>
+              <ProgressRow
+                label={r.name}
+                value={
+                  <>
+                    <span className="font-semibold text-foreground">{formatInt(r.votos)}</span> · {total ? formatPercent(share) : "—"}
+                  </>
+                }
+                share={share}
+                color={SERIES[i % SERIES.length]}
+                delay={i * 80}
+              />
             </li>
           );
         })}

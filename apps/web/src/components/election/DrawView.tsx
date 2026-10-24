@@ -13,9 +13,9 @@ import { apiV1, fetchAuditPackageBytes } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
 import { compareDraw, recomputeDraw, type DrawComparison, type Recomputed } from "@/lib/client/draw";
 import { formatInt, shortHash } from "@/lib/client/format";
-import { phaseLabel } from "@/lib/client/phases";
 import type { DrawResponse as DrawInfo, Election as ElectionV1 } from "@quorum/contracts";
 import { PhaseTimeline } from "./PhaseTimeline";
+import { PageHeader } from "@/components/ui/page-header";
 
 const comparisonStyle: Record<DrawComparison, { tone: "success" | "danger" | "warning"; text: string }> = {
   coincide: { tone: "success", text: "Coincide: recomputado en tu navegador" },
@@ -129,19 +129,14 @@ export function DrawView({ electionId }: { electionId: string }) {
   const finalHashOk = packageFinalHash && packageFinalHash !== "error" && draw ? packageFinalHash.toLowerCase() === draw.finalHash.toLowerCase() : null;
 
   return (
-    <div className="q-container flex flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">Sorteo verificable</Badge>
-          <Badge tone="neutral">{phaseLabel[election.status]}</Badge>
-        </div>
-        <h1 className="text-title font-bold tracking-tight md:text-display">{election.title}</h1>
+    <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
+      <PageHeader title={election.title} meta="Sorteo verificable">
         <PhaseTimeline phase={election.status} />
-      </header>
+      </PageHeader>
 
       {!draw ? (
         <EmptyState title="El sorteo aún no se ha realizado" action={<Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "secondary" }))}>Centro de transparencia</Link>}>
-          Se hace cuando la votación es auditable. La semilla sale del hash final del registro de boletas, así que nadie la conoce antes del cierre.
+          Se hace al cerrar. La semilla sale del registro final: nadie la conoce antes.
         </EmptyState>
       ) : (
         <>

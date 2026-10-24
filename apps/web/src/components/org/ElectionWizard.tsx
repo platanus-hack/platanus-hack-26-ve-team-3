@@ -15,6 +15,7 @@ import { kindLabel } from "@/lib/client/format";
 import type { Candidate } from "@quorum/contracts";
 import { CandidatesEditor, CandidatesList } from "./CandidatesEditor";
 import { checkLabel, DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, methodLabel, type EligibilityDraft } from "./EligibilityPicker";
+import { PageHeader } from "@/components/ui/page-header";
 
 const STEPS = [
   { id: "question", label: "Pregunta y opciones" },
@@ -167,11 +168,8 @@ export function ElectionWizard() {
   }
 
   return (
-    <div className="q-container flex max-w-3xl flex-col gap-6 py-6 md:py-10">
-      <header>
-        <h1 className="text-title font-bold tracking-tight md:text-display">Crear votación</h1>
-        <p className="mt-1 text-body text-muted-foreground">Tres pasos.</p>
-      </header>
+    <div className="q-fade-in q-container flex max-w-3xl flex-col gap-6 py-6 md:py-10">
+      <PageHeader title="Crear votación" />
       <Stepper steps={STEPS} current={step} />
 
       {step === 0 ? (

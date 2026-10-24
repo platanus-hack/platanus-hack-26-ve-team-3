@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 import type { InviteResponse as InviteV1, Receipt } from "@quorum/contracts";
 import type { z } from "zod";
 import { ObserverPanel } from "@/components/room/ObserverPanel";
@@ -21,6 +21,7 @@ import { BallotScreen } from "./BallotScreen";
 import { Consent } from "./Consent";
 import { VoteReceiptCard, type ReceiptView } from "./VoteReceiptCard";
 import { StepIndicator, VoterShell } from "./VoterUi";
+import { SuccessMark } from "@/components/ui/success-mark";
 
 type ReceiptV1 = z.infer<typeof Receipt>;
 
@@ -272,7 +273,7 @@ export function VoterFlow({ token }: { token: string }) {
     case "waiting":
       return (
         <VoterShell className="items-center text-center">
-          <CheckCircle2 className="size-20 text-success" aria-hidden="true" strokeWidth={1.75} />
+          <SuccessMark />
           <h1 className="text-display font-bold tracking-tight">¡Listo! Ya estás inscrito.</h1>
           <WaitingCountdown startsAt={startsAt} left={left} />
           <p className="text-heading">Deja esta página abierta: la boleta aparecerá aquí sola cuando empiece la votación.</p>
@@ -310,7 +311,7 @@ export function VoterFlow({ token }: { token: string }) {
           : null;
       return (
         <VoterShell>
-          <VoteReceiptCard electionId={electionId} receipt={r} votedAt={invite.voter.votedAt ? formatDate(invite.voter.votedAt) : null} />
+          <VoteReceiptCard electionId={electionId} receipt={r} title={title} votedAt={invite.voter.votedAt ? formatDate(invite.voter.votedAt) : null} />
         </VoterShell>
       );
     }
@@ -430,7 +431,7 @@ function Linking({ electionId, voterId, inviteToken, faceBindingHash, linkedAddr
         <div className="flex flex-col gap-4" role="status" aria-live="polite" data-testid="linking">
           <h1 className="text-title font-bold">Vinculando este teléfono…</h1>
           <div className="h-3 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Progreso">
-            <div className="h-full rounded-full bg-success transition-[width] duration-500" style={{ width: `${pct}%` }} />
+            <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${pct}%` }} />
           </div>
           <p className="text-muted-foreground">{LINK_STEPS[progress.step - 1]}…</p>
         </div>

@@ -16,6 +16,7 @@
   --color-primary-hover: var(--color-primary-hover);
   --color-primary-foreground: var(--color-primary-foreground);
   --color-primary-ink: var(--color-primary-ink);
+  --color-accent: var(--color-accent);
   --color-primary-soft: var(--color-primary-soft);
   --color-primary-soft-foreground: var(--color-primary-soft-foreground);
   --color-primary-muted: var(--color-primary-muted);
@@ -31,6 +32,9 @@
   --color-danger-soft: var(--color-danger-soft);
   --color-neutral-soft: var(--color-neutral-soft);
   --color-grid: var(--color-grid);
+  --color-glass: var(--color-glass);
+  --color-glass-strong: var(--color-glass-strong);
+  --color-glass-border: var(--color-glass-border);
   --color-chart-1: var(--color-chart-1);
   --color-chart-2: var(--color-chart-2);
   --color-chart-3: var(--color-chart-3);
@@ -73,9 +77,6 @@ html {
 
 body {
   background-color: var(--color-background);
-  /* Halo azul difuso arriba a la derecha; no fijo para no costar en móviles */
-  background-image: radial-gradient(56rem 28rem at 92% -6rem, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 70%);
-  background-repeat: no-repeat;
   color: var(--color-foreground);
   font-family: var(--font-sans);
   font-size: var(--text-body);
@@ -93,10 +94,14 @@ body {
 
 /* Movimiento reducido */
 @media (prefers-reduced-motion: reduce) {
+  .q-reveal {
+    animation: none !important;
+  }
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
@@ -188,6 +193,106 @@ body {
 }
 .q-pop {
   animation: q-pop 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes q-print {
+  0% {
+    transform: translateY(-100%);
+  }
+  18% {
+    transform: translateY(-78%);
+  }
+  26% {
+    transform: translateY(-76%);
+  }
+  44% {
+    transform: translateY(-52%);
+  }
+  52% {
+    transform: translateY(-50%);
+  }
+  70% {
+    transform: translateY(-24%);
+  }
+  78% {
+    transform: translateY(-22%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+.q-print {
+  animation: q-print 2.4s linear both;
+}
+@keyframes q-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.q-after-print {
+  animation: q-fade-up 0.4s 2.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.q-ticket::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 8px;
+  background:
+    linear-gradient(135deg, #fff 33.33%, transparent 33.33%) 0 0 / 12px 8px repeat-x,
+    linear-gradient(225deg, #fff 33.33%, transparent 33.33%) 0 0 / 12px 8px repeat-x;
+}
+
+@keyframes q-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+.q-grow {
+  transform-origin: left;
+  animation: q-grow 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes q-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.q-page-in {
+  animation: q-page-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes q-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.q-fade-in {
+  animation: q-fade-in 0.35s ease-out both;
+}
+
+@keyframes q-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+}
+@supports (animation-timeline: view()) {
+  .q-reveal {
+    animation: q-reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 22%;
+  }
+}
+
+.q-grid-bg {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-foreground) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-foreground) 6%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
 }
 
 /* Skeleton */

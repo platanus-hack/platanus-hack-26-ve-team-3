@@ -16,14 +16,14 @@ export const CONSENT_DETAILS = [
 export function Consent({ extra, className, actionLabel = "Continuar" }: { extra?: readonly string[]; className?: string; actionLabel?: string }) {
   return (
     <div className={cn("flex flex-col gap-2", className)} data-testid="voter-consent">
-      <p className="text-heading leading-snug">
+      <p className="text-body leading-relaxed">
         {CONSENT_SHORT} <span className="text-muted-foreground">Al tocar {actionLabel}, aceptas.</span>
       </p>
       <details className="group">
-        <summary className="inline-flex min-h-tap cursor-pointer list-none items-center gap-1 text-heading font-semibold text-primary-ink underline underline-offset-4 [&::-webkit-details-marker]:hidden">
+        <summary className="inline-flex min-h-tap cursor-pointer list-none items-center gap-1 text-body font-semibold text-primary-ink underline underline-offset-4 [&::-webkit-details-marker]:hidden">
           Más detalles <ChevronDown className="size-5 transition-transform group-open:rotate-180" aria-hidden="true" />
         </summary>
-        <ul className="mt-2 list-disc space-y-2 pl-5 text-base text-muted-foreground" data-testid="consent-details">
+        <ul className="mt-2 list-disc space-y-2 pl-5 text-small text-muted-foreground" data-testid="consent-details">
           {[...(extra ?? []), ...CONSENT_DETAILS].map((p) => (
             <li key={p}>{p}</li>
           ))}

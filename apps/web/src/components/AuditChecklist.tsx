@@ -1,5 +1,5 @@
 import type { AuditResult } from "@quorum/contracts";
-import { Download } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { StatusPill, type HonestStatus } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,33 +71,14 @@ export function AuditChecklist({ result, onDownload, runtime, title = "Resultado
           </div>
         </div>
         {status === "verificado" && pending.length > 0 ? (
-          <p className="text-small font-semibold text-warning-strong">
-            Verificación parcial: las comprobaciones evaluadas pasaron, pero {pending.map((n) => checkName[n] ?? n).join(", ")} quedó sin evaluar. Sin ancla evaluada no se garantiza que el registro esté completo.
-          </p>
+          <p className="text-small font-semibold text-warning-strong">Verificación parcial: {pending.map((n) => checkName[n] ?? n).join(", ")} sin evaluar.</p>
         ) : null}
         <CardDescription>
-          Método: <span className="q-mono">{result.protocol}</span>
-          {runtime ? <> · ejecutado en {runtime === "navegador" ? "tu navegador" : "el servidor"}</> : null} · Versión{" "}
-          <span className="q-mono" data-testid="verifier-version">
-            {result.verifierVersion}
-          </span>{" "}
-          · {formatDateTime(result.checkedAt)}
+          Método <span className="q-mono">{result.protocol}</span>
+          {runtime ? <> · {runtime === "navegador" ? "en tu navegador" : "en el servidor"}</> : null}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <dl className="grid grid-cols-1 gap-2 text-small sm:grid-cols-2">
-          <div>
-            <dt className="text-muted-foreground">Elección</dt>
-            <dd className="q-mono font-semibold">{result.electionId}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Hash de entrada (paquete)</dt>
-            <dd className="q-mono font-semibold" title={result.inputArtifactDigest} data-testid="input-artifact-digest">
-              {shortHash(result.inputArtifactDigest, 18, 10)}
-            </dd>
-          </div>
-        </dl>
-
         <section aria-labelledby="checks-h">
           <h3 id="checks-h" className="mb-2 text-body font-bold">
             Comprobaciones ({result.checks.length})
@@ -107,42 +88,74 @@ export function AuditChecklist({ result, onDownload, runtime, title = "Resultado
               El verificador no evaluó ninguna comprobación. No se puede afirmar nada sobre este escrutinio.
             </p>
           ) : (
-            <ul className="flex flex-col gap-2">
+            <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
               {result.checks.map((c, i) => (
-                <li key={`${c.name}-${i}`} data-check={c.name} data-status={checkStatus(c)} className="flex flex-col gap-1 rounded-md border border-border p-3 sm:flex-row sm:items-start sm:justify-between">
+                <li key={`${c.name}-${i}`} data-check={c.name} data-status={checkStatus(c)} className="flex items-start justify-between gap-3 px-3 py-3">
                   <div className="min-w-0">
                     <p className="font-semibold">{checkName[c.name] ?? c.name}</p>
-                    <p className="q-mono text-small text-subtle">{c.name}</p>
-                    {c.reason ? <p className="mt-1 text-small text-muted-foreground">{c.reason}</p> : null}
+                    {c.reason ? <p className="mt-0.5 line-clamp-2 text-small text-muted-foreground">{c.reason}</p> : null}
+                    <p className="q-mono mt-0.5 text-[0.6875rem] text-subtle">{c.name}</p>
                   </div>
-                  <StatusPill status={checkStatus(c)} className="shrink-0" />
+                  <StatusPill status={checkStatus(c)} size="sm" className="shrink-0" />
                 </li>
               ))}
             </ul>
           )}
         </section>
 
-        <section aria-labelledby="unsupported-h">
-          <h3 id="unsupported-h" className="mb-2 text-body font-bold">
-            Propiedades no evaluadas
-          </h3>
+        <details className="group rounded-md border border-border">
+          <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-2 px-3 [&::-webkit-details-marker]:hidden">
+            <h3 id="unsupported-h" className="text-body font-bold">
+              Propiedades no evaluadas ({result.unsupportedGuarantees.length})
+            </h3>
+            <ChevronDown className="size-5 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="border-t border-border p-3">
           {result.unsupportedGuarantees.length === 0 ? (
             <p className="text-small text-muted-foreground">El verificador no declaró propiedades sin evaluar. Esto no significa que todo esté garantizado: ver límites en el centro de transparencia.</p>
           ) : (
             <ul className="flex flex-col gap-2">
               {result.unsupportedGuarantees.map((g) => (
-                <li key={g} className="flex flex-col gap-1 rounded-md border border-border p-2 sm:flex-row sm:items-start sm:gap-2">
+                <li key={g} className="flex flex-col gap-1 py-1 sm:flex-row sm:items-start sm:gap-2">
                   <StatusPill status="no verificable" className="w-fit shrink-0" />
                   <span className="text-small text-muted-foreground">{g}</span>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+          </div>
+        </details>
 
-        <details className="rounded-md border border-border p-3 text-small">
-          <summary className="cursor-pointer font-semibold">Salida completa del verificador (JSON)</summary>
-          <pre className="q-mono mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(result, null, 2)}</pre>
+        <details className="group rounded-md border border-border text-small">
+          <summary className="flex min-h-tap cursor-pointer list-none items-center justify-between gap-2 px-3 font-semibold [&::-webkit-details-marker]:hidden">
+            Detalles técnicos
+            <ChevronDown className="size-5 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="flex flex-col gap-3 border-t border-border p-3">
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Versión</dt>
+                <dd className="q-mono font-semibold" data-testid="verifier-version">
+                  {result.verifierVersion}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Fecha</dt>
+                <dd className="font-semibold">{formatDateTime(result.checkedAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Elección</dt>
+                <dd className="q-mono font-semibold">{result.electionId}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Hash de entrada (paquete)</dt>
+                <dd className="q-mono font-semibold" title={result.inputArtifactDigest} data-testid="input-artifact-digest">
+                  {shortHash(result.inputArtifactDigest, 18, 10)}
+                </dd>
+              </div>
+            </dl>
+            <pre className="q-mono max-h-80 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(result, null, 2)}</pre>
+          </div>
         </details>
 
         {onDownload ? (

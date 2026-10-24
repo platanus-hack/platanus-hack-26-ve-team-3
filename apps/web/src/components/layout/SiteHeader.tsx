@@ -19,7 +19,7 @@ export function SiteHeader() {
         </Link>
         <nav aria-label="Principal" className="flex min-w-0 items-center sm:gap-1">
           {nav.map((n) => (
-            <Link key={n.href} href={n.href} className="inline-flex min-h-tap items-center whitespace-nowrap rounded-full px-2 text-small font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:px-4">
+            <Link key={n.href} href={n.href} className="hidden min-h-tap items-center whitespace-nowrap rounded-full px-2 text-small sm:inline-flex font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:px-4">
               {n.label}
             </Link>
           ))}

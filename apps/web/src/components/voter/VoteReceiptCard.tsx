@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CheckCircle2, Copy } from "lucide-react";
+import { Copy } from "lucide-react";
 import { copyText } from "@/lib/client/download";
 import { formatDateTime } from "@/lib/client/format";
 
@@ -10,15 +10,15 @@ import { formatDateTime } from "@/lib/client/format";
 export type ReceiptView = { inclusionId: string; nullifier: string; state: "pendiente" | "recibido" | "incluido" | "no verificable"; at?: string | null };
 
 /**
- * Comprobante del votante, sin jerga (pedido de producto): check grande, "Tu voto fue contado", la hora,
- * "Comprobar mi voto" y "Ver resultados". El código del comprobante (por debajo, el nullifier de la boleta) se puede
- * copiar; "Comprobar mi voto" lo usa en la página de transparencia, donde sí están los detalles técnicos.
- * NUNCA muestra la opción elegida.
+ * Comprobante del votante como ticket térmico que "sale impreso" de una ranura. Muestra estado, hora y el código del
+ * comprobante (por debajo, el nullifier de la boleta), que "Comprobar mi voto" usa en la página de transparencia.
+ * "Ver resultados" lleva a los porcentajes en vivo. NUNCA muestra la opción elegida.
  */
-export function VoteReceiptCard({ electionId, receipt, votedAt }: { electionId: string; receipt: ReceiptView | null; votedAt?: string | null }) {
+export function VoteReceiptCard({ electionId, receipt, votedAt, title }: { electionId: string; receipt: ReceiptView | null; votedAt?: string | null; title?: string }) {
   const [copied, setCopied] = useState<"ok" | "fail" | null>(null);
   const id = encodeURIComponent(electionId);
   const included = receipt?.state === "incluido";
+  const heading = receipt ? (included ? "Tu voto fue contado" : "Tu voto fue recibido") : "Ya votaste";
   async function copy() {
     if (!receipt) return;
     const ok = await copyText(receipt.nullifier);
@@ -26,43 +26,89 @@ export function VoteReceiptCard({ electionId, receipt, votedAt }: { electionId: 
     setTimeout(() => setCopied(null), 2500);
   }
   return (
-    <section className="flex flex-col items-center gap-5 text-center" data-testid="receipt">
-      <CheckCircle2 className="size-24 text-success" aria-hidden="true" strokeWidth={1.75} />
-      <div>
-        <h1 className="text-display font-bold tracking-tight">{receipt ? (included ? "Tu voto fue contado" : "Tu voto fue recibido") : "Ya votaste"}</h1>
-        {receipt?.at ? (
-          <p className="mt-2 text-heading font-semibold" data-testid="receipt-time">
-            {formatDateTime(receipt.at)}
-          </p>
-        ) : null}
-        <p className="mt-2 text-heading text-muted-foreground" data-testid={!receipt && votedAt ? "voted-at" : undefined}>
-          {receipt ? "Guardamos tu comprobante en este teléfono. No dice qué opción elegiste." : votedAt ? `Votaste el ${votedAt}. Cada persona vota una sola vez.` : "Cada persona vota una sola vez."}
-        </p>
+    <section className="flex flex-col items-center gap-6" data-testid="receipt">
+      <div className="w-full max-w-[22rem]">
+        <div aria-hidden="true" className="relative z-10 h-4 rounded-full bg-gradient-to-b from-[#2b303b] to-[#0d1016] shadow-[inset_0_2px_3px_rgb(255_255_255/0.18),0_8px_16px_-8px_rgb(0_0_0/0.6)]" />
+        <div className="-mt-2 overflow-hidden px-3 pb-4">
+          <article className="q-print q-ticket relative bg-white px-5 pb-5 pt-7 font-mono text-[0.8125rem] leading-snug text-[#111] shadow-elevated">
+            <p className="text-center text-[0.6875rem] tracking-[0.35em]">QUÓRUM</p>
+            <h1 className="mt-4 font-display text-[2.5rem] font-bold uppercase leading-[0.9] tracking-[-0.04em]">{heading}</h1>
+            <TicketRule />
+            {title ? <p className="line-clamp-2 text-center">{title}</p> : null}
+            {receipt?.at ? (
+              <p className="mt-1 text-center" data-testid="receipt-time">
+                {formatDateTime(receipt.at)}
+              </p>
+            ) : null}
+            {!receipt ? (
+              <p className="mt-1 text-center" data-testid={votedAt ? "voted-at" : undefined}>
+                {votedAt ? `Votaste el ${votedAt}.` : null} Cada persona vota una sola vez.
+              </p>
+            ) : null}
+            <TicketRule />
+            <dl className="flex flex-col gap-1 uppercase">
+              <div className="flex justify-between gap-4">
+                <dt>Estado</dt>
+                <dd>{receipt ? (included ? "Contado" : "Recibido") : "Registrado"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt>Opción</dt>
+                <dd>Privada</dd>
+              </div>
+            </dl>
+            {receipt ? (
+              <>
+                <TicketRule />
+                <p className="text-[0.6875rem] uppercase">Código de tu comprobante</p>
+                <p className="mt-1 break-all text-[0.6875rem]" data-testid="receipt-inclusion-id">
+                  {receipt.nullifier}
+                </p>
+                <TicketRule />
+                <Barcode value={receipt.nullifier} />
+              </>
+            ) : null}
+          </article>
+        </div>
       </div>
-      <nav className="flex w-full flex-col gap-2" aria-label="Después de votar">
-        {receipt ? (
-          <Link href={`/e/${id}?comprobar=1#mi-voto`} className="inline-flex min-h-14 items-center justify-center rounded-full bg-primary px-4 text-heading font-semibold text-primary-foreground shadow-primary hover:bg-primary-hover">
-            Comprobar mi voto
-          </Link>
-        ) : null}
-        <Link href={`/e/${id}/live`} className="inline-flex min-h-14 items-center justify-center rounded-md border border-border bg-card px-4 text-heading font-semibold hover:bg-muted">
+
+      <nav className="q-after-print flex w-full flex-col gap-2" aria-label="Después de votar">
+        <Link href={`/e/${id}/live`} className="inline-flex min-h-14 items-center justify-center rounded-full bg-primary px-4 text-heading font-semibold text-primary-foreground shadow-primary hover:bg-primary-hover">
           Ver resultados
         </Link>
+        {receipt ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Link href={`/e/${id}?comprobar=1#mi-voto`} className="inline-flex min-h-tap items-center justify-center whitespace-nowrap rounded-full border border-input bg-card px-2 text-small font-semibold hover:bg-muted">
+              Comprobar mi voto
+            </Link>
+            <button type="button" onClick={copy} className="inline-flex min-h-tap items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-primary-soft px-2 text-small font-semibold text-primary-soft-foreground hover:bg-primary-muted/60 [&_svg]:size-4">
+              <Copy aria-hidden="true" /> {copied === "ok" ? "Copiado" : copied === "fail" ? "No se copió" : "Copiar código"}
+            </button>
+          </div>
+        ) : null}
+        <p role="status" aria-live="polite" className="sr-only">
+          {copied === "ok" ? "Código copiado" : copied === "fail" ? "No se pudo copiar" : ""}
+        </p>
       </nav>
-      {receipt ? (
-        <div className="flex w-full flex-col gap-2 rounded-md border border-border bg-card p-3 text-left text-base">
-          <p className="text-muted-foreground">Código de tu comprobante</p>
-          <p className="q-mono break-all text-small font-semibold" data-testid="receipt-inclusion-id">
-            {receipt.nullifier}
-          </p>
-          <button type="button" onClick={copy} className="inline-flex min-h-tap w-fit items-center gap-2 rounded-md border border-border px-3 font-semibold hover:bg-muted [&_svg]:size-4">
-            <Copy aria-hidden="true" /> {copied === "ok" ? "Copiado" : copied === "fail" ? "No se pudo copiar" : "Copiar código"}
-          </button>
-          <p role="status" aria-live="polite" className="sr-only">
-            {copied === "ok" ? "Código copiado" : copied === "fail" ? "No se pudo copiar" : ""}
-          </p>
-        </div>
-      ) : null}
     </section>
+  );
+}
+
+function TicketRule() {
+  return <hr aria-hidden="true" className="my-3 border-0 border-t border-dashed border-[#111]/40" />;
+}
+
+function Barcode({ value }: { value: string }) {
+  const digits = Array.from(value.replace(/\D/g, "").slice(0, 48) || "0", Number);
+  const bars = digits.reduce<{ x: number; w: number }[]>((acc, d) => {
+    const prev = acc.at(-1);
+    return [...acc, { x: prev ? prev.x + prev.w + 1 + (d % 2) : 0, w: 1 + (d % 3) }];
+  }, []);
+  const width = bars.at(-1)!.x + bars.at(-1)!.w;
+  return (
+    <svg aria-hidden="true" viewBox={`0 0 ${width} 40`} preserveAspectRatio="none" className="h-12 w-full">
+      {bars.map((b, i) => (
+        <rect key={i} x={b.x} y={0} width={b.w} height={40} fill="#111" />
+      ))}
+    </svg>
   );
 }

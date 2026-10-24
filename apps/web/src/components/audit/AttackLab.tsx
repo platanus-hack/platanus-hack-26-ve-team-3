@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AuditResult } from "@quorum/contracts";
-import { FlaskConical, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { AuditChecklist, notEvaluated, overallStatus } from "@/components/AuditChecklist";
 import { LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
-import { Badge, FixtureTag } from "@/components/ui/badge";
+import { FixtureTag } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { describeError } from "@/lib/client/api";
@@ -24,6 +24,7 @@ import { AlterationDiff } from "./AlterationDiff";
 import { PackageLoader } from "./PackageLoader";
 import { ShareAlteration } from "./ShareAlteration";
 import { VerdictBanner } from "./VerdictBanner";
+import { PageHeader } from "@/components/ui/page-header";
 
 type Run = {
   alteration: AlterationId;
@@ -133,22 +134,13 @@ export function AttackLab() {
   const base = baseline[anchor];
 
   return (
-    <div className="q-container flex max-w-5xl flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral" className="w-fit">
-            <FlaskConical className="mr-1 size-3.5" aria-hidden="true" /> Laboratorio del jurado
-          </Badge>
-          {loaded?.isFixture ? <FixtureTag /> : null}
-        </div>
-        <h1 className="text-title font-bold tracking-tight md:text-display">Altera una copia. Mira qué falla.</h1>
-        <p className="max-w-prose text-body text-muted-foreground">
-          Cada botón cambia algo en una <strong>copia</strong> del paquete de auditoría y corre el verificador independiente en este navegador. El paquete original no se toca.
-        </p>
-        <Link href="/audit" className="w-fit text-small underline underline-offset-4">
-          Ir al auditor independiente
+    <div className="q-fade-in q-container flex max-w-5xl flex-col gap-6 py-6 md:py-10">
+      <PageHeader title="Altera una copia. Mira qué falla." description="Cada botón cambia una copia del paquete y corre el verificador aquí. El original no se toca.">
+        {loaded?.isFixture ? <FixtureTag /> : null}
+        <Link href="/audit" className="w-fit text-small font-semibold text-primary-ink underline underline-offset-4">
+          Ir al auditor
         </Link>
-      </header>
+      </PageHeader>
 
       <Card>
         <CardHeader>

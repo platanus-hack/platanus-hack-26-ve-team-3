@@ -20,6 +20,8 @@ import { hasAuditPackage, nextOrganizerAction, phaseLabel } from "@/lib/client/p
 import type { Aggregates as AggregatesV1, Election as ElectionV1, VotersListResponse as VotersListV1 } from "@quorum/contracts";
 import { CandidatesList } from "./CandidatesEditor";
 import { RoomCard, openProjector } from "@/components/room/RoomCard";
+import { ActionBar, PageHeader } from "@/components/ui/page-header";
+import { Stat, StatGrid } from "@/components/ui/stat";
 
 type Channel = "dry-run" | "wame";
 const stateLabel = { invited: "Invitado", registered: "Inscrito", voted: "Votó" } as const;
@@ -210,33 +212,25 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const inviteLinkFor = (id: string) => inviteResults?.find((r) => r.voterId === id)?.link ?? localVoters.find((v) => v.id === id)?.inviteUrl ?? null;
 
   return (
-    <div className="q-container flex flex-col gap-6 py-6 md:py-10">
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">Panel del organizador</Badge>
-          <Badge tone={phase === "failed" ? "danger" : "neutral"}>{phaseLabel[phase]}</Badge>
-        </div>
-        <h1 className="text-title font-bold tracking-tight md:text-display">{election.title}</h1>
-        <p className="text-small text-muted-foreground">
-          Cierra {formatDateTime(election.endsAt)} · manifiesto <span className="q-mono">{election.manifestHash ? `${election.manifestHash.slice(0, 14)}…` : "sin publicar"}</span>
-        </p>
+    <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
+      <PageHeader title={election.title} meta={<>Cierra {formatDateTime(election.endsAt)}</>}>
         <PhaseTimeline phase={phase} />
-        <div className="flex flex-wrap gap-2">
-          <Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
-            Centro de transparencia
+        <ActionBar>
+          <Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "soft", size: "sm" }))}>
+            Transparencia
           </Link>
-          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
-            Resultados en vivo
+          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "soft", size: "sm" }))}>
+            En vivo
           </Link>
-          <Button variant="secondary" size="sm" onClick={() => openProjector(electionId)}>
+          <Button variant="soft" size="sm" onClick={() => openProjector(electionId)}>
             Proyectar
           </Button>
-        </div>
-      </header>
+        </ActionBar>
+      </PageHeader>
 
       {reveal ? (
         <Alert tone="warning" title="Tu token de organizador: guárdalo">
-          <p>Se muestra una sola vez. Sin él no podrás abrir, cerrar ni sortear desde otro navegador. Se guarda sólo en esta pestaña.</p>
+          <p>Se muestra una sola vez. Lo necesitas para abrir, cerrar y sortear.</p>
           <p className="q-mono mt-2 break-all rounded-md border border-border bg-card p-2 text-foreground" data-testid="org-token">
             {reveal}
           </p>
@@ -255,7 +249,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         <Card>
           <CardHeader>
             <CardTitle>Token del organizador</CardTitle>
-            <CardDescription>Las acciones del organizador exigen el token que recibiste al crear la votación. Sólo se guarda en esta pestaña.</CardDescription>
+            <CardDescription>El que recibiste al crear la votación.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-end">
             <Field label="Token" htmlFor="org-token-input">
@@ -269,36 +263,16 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle as="h2" className="text-body text-muted-foreground">
-              Participación
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-display font-bold">{tally ? formatPercent(tally.turnout) : "—"}</p>
-            <p className="text-small text-muted-foreground">{tally ? `${formatInt(tally.totalVotes)} boletas de ${formatInt(tally.eligible)} en el padrón` : "Sin agregados todavía"}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle as="h2" className="text-body text-muted-foreground">
-              Inscripción
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {shownCounts ? (
-              <dl className="grid grid-cols-3 gap-2 text-center text-small">
-                {(["invited", "registered", "voted"] as const).map((k) => (
-                  <div key={k}>
-                    <dt className="text-muted-foreground">{stateLabel[k]}</dt>
-                    <dd className="text-heading font-bold">{formatInt(shownCounts[k])}</dd>
-                  </div>
-                ))}
-              </dl>
-            ) : (
-              <p className="text-small text-muted-foreground">{token ? "No se pudo leer la lista de participantes." : "Requiere el token del organizador."}</p>
-            )}
+        <Card className="md:col-span-2">
+          <CardContent className="pt-5 md:pt-6">
+            <StatGrid className="md:grid-cols-4">
+              <Stat label="Participación" value={tally ? formatPercent(tally.turnout) : "—"} hint={tally ? `${formatInt(tally.totalVotes)} de ${formatInt(tally.eligible)}` : undefined} />
+              {shownCounts ? (
+                (["invited", "registered", "voted"] as const).map((k) => <Stat key={k} label={stateLabel[k]} value={formatInt(shownCounts[k])} />)
+              ) : (
+                <p className="col-span-2 self-center text-small text-muted-foreground md:col-span-3">{token ? "No se pudo leer la lista de participantes." : "Requiere el token del organizador."}</p>
+              )}
+            </StatGrid>
           </CardContent>
         </Card>
         <Card>
@@ -368,8 +342,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         <CardHeader>
           <CardTitle>Proyectos postulados al sorteo</CardTitle>
           <CardDescription>
-            Fijados en el manifiesto al crear la votación (no se pueden editar).{" "}
-            {election.winnersCountFromResult ? "La opción ganadora fija cuántos se financian; el sorteo verificable elige cuáles." : "El sorteo verificable elige los ganadores."}
+            {election.winnersCountFromResult ? "La opción ganadora define cuántos; el sorteo, cuáles." : "El sorteo elige los ganadores."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -381,7 +354,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         <CardHeader>
           <CardTitle>Participantes e invitaciones</CardTitle>
           <CardDescription>
-            Sólo tú ves esta lista (requiere token). La vista pública muestra sólo agregados. El envío real por WhatsApp requiere aprobación; aquí usa <span className="q-mono">dry-run</span> o <span className="q-mono">wa.me</span>.
+            Sólo tú ves esta lista.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

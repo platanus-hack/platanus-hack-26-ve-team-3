@@ -3,7 +3,7 @@ import { cn } from "@/lib/client/cn";
 
 /** Contenedor del flujo del votante: texto base 18 px, una columna, cómodo a una mano desde 360 px. */
 export function VoterShell({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("q-container q-narrow flex flex-col gap-5 py-5 text-heading md:py-10", className)}>{children}</div>;
+  return <div className={cn("q-fade-in q-container q-narrow flex flex-col gap-5 py-5 text-heading md:py-10", className)}>{children}</div>;
 }
 
 /** "Paso 1 de 2": texto + barra. Sólo la inscripción tiene pasos; el voto es una pantalla. */
