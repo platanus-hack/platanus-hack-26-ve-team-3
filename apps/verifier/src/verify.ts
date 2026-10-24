@@ -69,6 +69,19 @@ const ManifestSchema = z.object({
     })
     .optional(),
 });
+/**
+ * Política del censo declarada por el organizador (opcional). Hoy solo `open-room`: sala abierta en la que el público
+ * se inscribió con un alias. No entra en `manifestHash` ni en `checksums` (la sala se abre después de publicar), así que
+ * el verificador NO la comprueba: la muestra como garantía no soportada para que nadie lea el padrón como un censo cerrado.
+ */
+const RollPolicySchema = z.object({
+  kind: z.literal("open-room"),
+  maxSeats: z.number().int().min(1),
+  joined: z.number().int().min(0),
+  enrolled: z.number().int().min(0),
+  eligibility: z.literal("face-dedupe-demo"),
+  note: z.string().optional(),
+});
 const TallySchema = z.object({ counts: z.array(z.number().int().min(0)), invalid: z.number().int().min(0), total: z.number().int().min(0) });
 export const AuditPackageSchema = z.object({
   version: z.literal("quorum-audit/1"),
@@ -97,6 +110,7 @@ export const AuditPackageSchema = z.object({
   versions: z.object({ adapter: z.string(), semaphore: z.string(), artifacts: z.string() }).optional(),
   generatedAt: z.string().optional(),
   draw: DrawSchema.optional(),
+  rollPolicy: RollPolicySchema.optional(),
 });
 export type AuditPackage = z.infer<typeof AuditPackageSchema>;
 
@@ -493,6 +507,16 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
         reason: problems.length ? `sorteo no reproducible: ${problems.join("; ")}` : `sorteo recomputado: N=${draw.n}, ganadores [${draw.winners.join(", ")}] con semilla keccak256(finalHash)`,
       });
     }
+  }
+
+  // 9. Política del censo (declarativa; no es un check: no hay nada criptográfico que recomputar).
+  if (pkg.rollPolicy) {
+    const rp = pkg.rollPolicy;
+    unsupported.push(
+      `censo-abierto-en-sala: censo abierto en sala: la elegibilidad depende de la deduplicación facial demo, no de un padrón ` +
+        `(tope ${rp.maxSeats} asientos, entraron ${rp.joined}, ${rp.enrolled} llegaron al padrón de ${pkg.commitments.length} commitments; ` +
+        `declarado por el organizador fuera de manifestHash/checksums, el verificador no puede comprobarlo)`,
+    );
   }
 
   return finish({ electionId: pkg.electionId, protocol: "semaphore-ledger" });

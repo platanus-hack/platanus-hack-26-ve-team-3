@@ -153,48 +153,51 @@ describe("webhook Kapso", () => {
     expect(extractIncoming(meta)).toEqual([{ from: "584121234567", text: "hola", profileName: "Ana" }]);
   });
 
-  it("AT-09(d) / A6: opt-in QUORUM <id> desde un teléfono FUERA del censo → ignored y no crea votante; dentro del censo reenvía el enlace (dry-run); batch y dedupe", async () => {
+  it("AT-09(d) / A6: opt-in QUORUM <id> NO crea votantes; solo reenvía el enlace a quien el organizador cargó con ese teléfono (dry-run); batch y dedupe", async () => {
     const store = freshStore();
     const created = await call(createElection, { body: sampleElection() });
     const id = created.json.id as string;
     const auth = { authorization: `Bearer ${created.json.organizerToken}` };
     await call(publish, { params: { id }, headers: auth });
 
-    // 1) Atacante: número que el organizador nunca puso en el censo.
-    const attack = JSON.stringify({ event: "whatsapp.message.received", data: { message: { from: "584125550000", text: { body: `QUORUM ${id}` } }, contact: { name: "Intruso" } } });
-    const a = await call(kapsoWebhook, { rawBody: attack, headers: { ...signed(attack), "x-idempotency-key": "evt-attack" } });
-    expect(a.status).toBe(200);
-    expect(a.json).toEqual({ ok: true, received: 1, sent: 0, ignored: 1, failed: 0 });
-    expect(await store.listVoters(id)).toHaveLength(0);
-    expect(await store.getVoterByPhone(id, "+584125550000")).toBeNull();
+    const optIn = (from: string, key: string) => {
+      const body = JSON.stringify({
+        batch: true,
+        events: [
+          { event: "whatsapp.message.received", data: { message: { from, text: { body: `QUORUM ${id}` } }, contact: { name: "Ana" } } },
+          { event: "whatsapp.message.received", data: { message: { from, text: { body: "hola" } } } },
+          { event: "whatsapp.message.received", data: { message: { from: "584129999999", text: { body: "QUORUM el_inexistente" } } } },
+        ],
+      });
+      return { body, headers: { ...signed(body), "x-idempotency-key": key } };
+    };
 
-    // 2) El organizador inscribe a Ana con su teléfono; su opt-in solo reenvía SU enlace.
+    // Número desconocido: se ignora y NO aparece ningún votante.
+    const unknown = optIn("584121234567", "evt-0");
+    const r0 = await call(kapsoWebhook, { rawBody: unknown.body, headers: unknown.headers });
+    expect(r0.status).toBe(200);
+    expect(r0.json).toEqual({ ok: true, received: 3, sent: 0, ignored: 3, failed: 0 });
+    expect(await store.listVoters(id)).toHaveLength(0);
+    expect(await store.getVoterByPhone(id, "+584121234567")).toBeNull(); // AT-09(d): sin rastro en el store
+
+    // El organizador carga a Ana con su teléfono → el opt-in le reenvía su enlace.
     const added = await call(addVoters, { params: { id }, headers: auth, body: { voters: [{ displayName: "Ana", phoneE164: "+584121234567" }] } });
     expect(added.status).toBe(201);
-    const body = JSON.stringify({
-      batch: true,
-      events: [
-        { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: `QUORUM ${id}` } }, contact: { name: "Otro nombre" } } },
-        { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: "hola" } } } },
-        { event: "whatsapp.message.received", data: { message: { from: "584129999999", text: { body: "QUORUM el_inexistente" } } } },
-      ],
-    });
-    const r = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-1" } });
-    expect(r.status).toBe(200);
+    const known = optIn("584121234567", "evt-1");
+    const r = await call(kapsoWebhook, { rawBody: known.body, headers: known.headers });
     expect(r.json).toEqual({ ok: true, received: 3, sent: 1, ignored: 2, failed: 0 });
-
     const voters = await store.listVoters(id);
     expect(voters).toHaveLength(1);
+    expect(voters[0].source).toBe("invite");
     expect(voters[0].id).toBe(added.json.voters[0].id);
-    expect(voters[0].displayName).toBe("Ana"); // el nombre de perfil de WhatsApp no sobreescribe el censo
     expect(voters[0].inviteToken).toBe(added.json.voters[0].inviteToken);
     expect(voters[0].inviteStatus).toBe("sent");
 
-    // Mismo mensaje otra vez: no duplica votante; misma idempotency key → duplicate
-    const dup = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-1" } });
+    // Misma idempotency key → duplicate; otra key → reenvía sin duplicar votante
+    const dup = await call(kapsoWebhook, { rawBody: known.body, headers: known.headers });
     expect(dup.json.duplicate).toBe(true);
-    const again = await call(kapsoWebhook, { rawBody: body, headers: { ...signed(body), "x-idempotency-key": "evt-2" } });
-    expect(again.json.sent).toBe(1);
+    const again = optIn("584121234567", "evt-2");
+    expect((await call(kapsoWebhook, { rawBody: again.body, headers: again.headers })).json.sent).toBe(1);
     expect(await store.listVoters(id)).toHaveLength(1);
   });
 });

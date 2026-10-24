@@ -126,3 +126,22 @@ describe("flujo completo generado en el test + ancla simulada", () => {
     expect(down.checks.find((c) => c.name === "anchor_matches")?.reason).toMatch(/no se pudo leer/);
   }, 60_000);
 });
+
+describe("rollPolicy (sala abierta) — declarativa", () => {
+  it("open-room → sigue valid:true y se declara en unsupportedGuarantees con tope y entradas", async () => {
+    const pkg = { ...load("valid"), rollPolicy: { kind: "open-room", maxSeats: 60, joined: 27, enrolled: 3, eligibility: "face-dedupe-demo", note: "x" } };
+    const r = await verifyPackage(pkg);
+    expect(r.valid).toBe(true);
+    const note = r.unsupportedGuarantees.find((g) => g.startsWith("censo-abierto-en-sala"));
+    expect(note).toMatch(/la elegibilidad depende de la deduplicación facial demo, no de un padrón/);
+    expect(note).toMatch(/tope 60 asientos, entraron 27, 3 llegaron al padrón/);
+  });
+
+  it("sin rollPolicy no aparece la nota; rollPolicy mal formada → package_schema falla", async () => {
+    const r = await verifyPackage(load("valid"));
+    expect(r.unsupportedGuarantees.some((g) => g.startsWith("censo-abierto-en-sala"))).toBe(false);
+    const bad = await verifyPackage({ ...load("valid"), rollPolicy: { kind: "open-room", maxSeats: 0 } });
+    expect(bad.valid).toBe(false);
+    expect(failing(bad)).toEqual(["package_schema"]);
+  });
+});

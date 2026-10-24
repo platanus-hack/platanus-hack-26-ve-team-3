@@ -1,9 +1,8 @@
 /**
  * Webhook de Kapso — plan B4 (opt-in) de research/03:
  * el votante envía "QUORUM <electionId>" al número de Kapso → evento `whatsapp.message.received`
- * → si ese teléfono YA está en el censo de la elección, le reenviamos su enlace único (vía provider;
- * en dev es dry-run, nunca un WhatsApp real sin INVITE_SEND_APPROVED=true). Nunca se crean votantes
- * desde WhatsApp (hallazgo A6: cualquiera podía meterse en el censo).
+ * → buscamos al votante YA CARGADO por el organizador con ese teléfono y le reenviamos su enlace único (vía provider;
+ * en dev es dry-run, nunca un WhatsApp real sin INVITE_SEND_APPROVED=true). Hallazgo A6: nunca crea votantes.
  *
  * Seguridad: `X-Webhook-Signature` = HMAC-SHA256 hex del body crudo con `KAPSO_WEBHOOK_SECRET`.
  * Dedupe por `X-Idempotency-Key`. Soporta envelope batch (`body.batch === true` → `body.events`).
@@ -103,8 +102,9 @@ export async function handleOptIn(msg: Incoming): Promise<"sent" | "ignored" | "
   const election = await store.getElection(electionId);
   if (!election || (election.status !== "registration" && election.status !== "draft")) return "ignored";
 
-  // A6 / AT-09(d): el opt-in NUNCA crea votantes. Solo reenvía el enlace a un teléfono que el organizador
-  // ya puso en el censo de esta elección; cualquier otro número se ignora sin dejar rastro en el store.
+  // A6: el opt-in NO crea votantes (un número cualquiera no puede auto-inscribirse). Solo reenvía el enlace a quien
+  // el organizador ya cargó en el censo con ese teléfono. La única vía abierta es la sala (rooms.ts): explícita,
+  // activada por el organizador, con tope y expiración.
   const voter = await store.getVoterByPhone(electionId, phone);
   if (!voter) return "ignored";
   const { provider } = selectProvider();

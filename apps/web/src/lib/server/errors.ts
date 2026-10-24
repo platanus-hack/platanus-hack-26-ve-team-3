@@ -15,6 +15,8 @@ const STATUS_BY_CODE: Record<ApiCode, number> = {
   duplicate_identity: 409,
   /** Decisión de José (solo ancla on-chain): el voto no admite `onchain`; rechazarlo en vez de ignorarlo. */
   onchain_not_supported: 400,
+  room_full: 409,
+  room_closed: 410,
 };
 
 /** Error tipado que las rutas convierten en una respuesta `ApiError`. */

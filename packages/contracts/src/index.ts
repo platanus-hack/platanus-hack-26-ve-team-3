@@ -96,6 +96,8 @@ export const Voter = z.object({
   walletKind: z.enum(["kernel", "eoa-demo"]).nullable().optional(),
   /** Momento en que la firma FaceBinding se verificó (rostro ↔ wallet). */
   registeredAt: z.string().datetime().nullable().optional(),
+  /** Vía por la que entró al censo: invitación del organizador o sala abierta (alias libre, sin teléfono). Ausente = "invite". */
+  source: z.enum(["invite", "room"]).optional(),
 });
 export type Voter = z.infer<typeof Voter>;
 
@@ -107,6 +109,7 @@ export const VoterSummary = z.object({
   state: VoterState,
   walletAddress: z.string().nullable(),
   hasIdentity: z.boolean(),
+  source: z.enum(["invite", "room"]).optional(),
 });
 export type VoterSummary = z.infer<typeof VoterSummary>;
 
@@ -235,7 +238,7 @@ export const AuditResult = z.object({
 });
 export type AuditResult = z.infer<typeof AuditResult>;
 
-export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity", "onchain_not_supported"]) });
+export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity", "onchain_not_supported", "room_full", "room_closed"]) });
 
 // ---------------------------------------------------------------------------
 // Respuestas HTTP del Contrato v1 tal como las implementa el backend (apps/web/src/lib/server/engine.ts).
@@ -311,3 +314,64 @@ export const DrawResponse = z.object({
   tieBreak: z.string().nullable(),
 });
 export type DrawResponse = z.infer<typeof DrawResponse>;
+
+
+// ---------------------------------------------------------------------------
+// Sala abierta (asamblea abierta) — fase `registration`. Ver docs/API_CONTRACT.md § "Sala abierta".
+// ---------------------------------------------------------------------------
+/** POST /api/elections/:id/room (organizador). */
+export const OpenRoomInput = z.object({
+  maxSeats: z.number().int().min(1).max(500),
+  expiresInMin: z.number().int().min(1).max(180),
+});
+export type OpenRoomInput = z.infer<typeof OpenRoomInput>;
+
+export const RoomCloseReason = z.enum(["manual", "expired", "election-opened"]);
+
+/** GET /api/elections/:id/room (público) — contador del proyector. Con Bearer añade `roomCode` y `joinUrl`. */
+export const RoomStatus = z.object({
+  open: z.boolean(),
+  seatsTaken: z.number().int().min(0),
+  maxSeats: z.number().int().min(1).nullable(),
+  expiresAt: z.string().datetime().nullable(),
+  closedReason: RoomCloseReason.nullable(),
+  roomCode: z.string().optional(),
+  joinUrl: z.string().optional(),
+});
+export type RoomStatus = z.infer<typeof RoomStatus>;
+
+/** Respuesta de POST /api/elections/:id/room. */
+export const OpenRoomResult = RoomStatus.extend({ roomCode: z.string(), joinUrl: z.string() });
+export type OpenRoomResult = z.infer<typeof OpenRoomResult>;
+
+/** GET /api/rooms/:roomCode (público) — lo que necesita la página /j/<roomCode> antes de unirse. */
+export const RoomPublicInfo = RoomStatus.omit({ roomCode: true, joinUrl: true }).extend({ electionId: z.string(), title: z.string() });
+export type RoomPublicInfo = z.infer<typeof RoomPublicInfo>;
+
+/** Alias libre (sin PII): letras, números, espacios y . ' _ - ; 1..32 caracteres; nunca algo que parezca un teléfono. */
+export const RoomAlias = z
+  .string()
+  .transform((s) => s.normalize("NFC").replace(/\s+/g, " ").trim())
+  .pipe(
+    z
+      .string()
+      .min(1, "El alias no puede estar vacío")
+      .max(32, "Máximo 32 caracteres")
+      .regex(/^[\p{L}\p{M}\p{N} .'_-]+$/u, "Solo letras, números, espacios y . ' _ -")
+      .refine((s) => /[\p{L}\p{N}]/u.test(s), "El alias necesita al menos una letra o número")
+      .refine((s) => (s.match(/\p{N}/gu) ?? []).length < 7, "No uses tu teléfono ni números de documento como alias"),
+  );
+
+/** POST /api/rooms/:roomCode/join (público, rate limit por IP). */
+export const JoinRoomInput = z.object({ displayName: RoomAlias });
+export type JoinRoomInput = z.infer<typeof JoinRoomInput>;
+
+/** El `inviteToken` se devuelve UNA sola vez; desde aquí sigue el flujo normal /v/<token>. */
+export const JoinRoomResult = z.object({
+  electionId: z.string(),
+  voterId: z.string(),
+  displayName: z.string(),
+  inviteToken: z.string(),
+  inviteUrl: z.string(),
+});
+export type JoinRoomResult = z.infer<typeof JoinRoomResult>;
