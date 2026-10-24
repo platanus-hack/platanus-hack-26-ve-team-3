@@ -285,3 +285,157 @@ $ DATA_DIR=<tmp> pnpm --filter @quorum/web seed:demo -- --simulate 6 --full
 - Ancla real en Base Sepolia **no ejecutada** (requiere decisión humana; el script la bloquea salvo `--anchor`).
 - La firma Kernel real (ERC-6492) no se probó contra RPC: solo con verificador inyectado.
 - Correlación por tiempo: `POST /voters/:id/voted` (autodeclarado) y el tally en vivo con ≥5 votos permiten inferencias de tiempo; ver informe.
+
+## 2026-10-24 · Fase 2 — adversariales (quorum-qa, rama `feat/p2-qa-adversarial`)
+
+- **Base:** `origin/integration/phase2` @ `71972af` (integration/h3 + motor de fase 2 + wallet). Fuente de los casos: `docs/ADVERSARIAL_TESTS.md` y `docs/THREAT_MODEL.md` de `origin/docs/seguridad`.
+- **Entorno:** macOS (Darwin 25.5), Node v24.14.1, pnpm 10.18.0, Vitest 3.2.7. Ejecución final: 2026-10-24T16:27:23Z.
+- **Regla:** todo contra el código real (`appendBallot`, `verifyPackage`, route handlers de `apps/web`), con pruebas Groth16 y firmas EIP-712 reales. Solo se simulan el store (memoria), la tx del ancla (lector inyectado, AT-02c) y la ausencia de RPC (AT-07d).
+
+### Puerta completa (salida real)
+```
+$ pnpm typecheck && pnpm lint && pnpm test && pnpm --filter @quorum/web build
+typecheck=0
+lint=0
+test=0
+build=0
+packages/contracts test:  Test Files  1 passed (1)
+packages/contracts test:       Tests  63 passed (63)
+packages/wallet test:  Test Files  2 passed (2)
+packages/wallet test:       Tests  30 passed (30)
+packages/protocol-adapter test:  Test Files  3 passed (3)
+packages/protocol-adapter test:       Tests  24 passed (24)
+packages/demo-fixtures test:  Test Files  1 passed (1)
+packages/demo-fixtures test:       Tests  28 passed (28)
+apps/verifier test:  Test Files  3 passed (3)
+apps/verifier test:       Tests  31 passed (31)
+apps/web test:  Test Files  3 passed (3)
+apps/web test:       Tests  36 passed (36)
+apps/web build: ✓ Compiled successfully · ✓ Generating static pages (16/16)
+```
+Total: **212 tests en verde** (antes de esta rama: 185). Nuevos o reescritos: 4 en el adaptador, 12 en el verificador, 11 en `apps/web` + el opt-in de Kapso invertido.
+
+### Resultado por caso
+| ID | Resultado real | Test | Arreglo en esta rama |
+|---|---|---|---|
+| AT-01 | detectado (`proofs_valid`) | `apps/verifier/test/verifier.test.ts` "tampered_proof" (ya existía) | — |
+| AT-02 | (a) detectado `chain_integrity`; (b) **no detectable sin ancla** (`valid:true`, cambia `finalHash`, se declara `completitud-del-ledger`); (c) detectado `anchor_matches` | `apps/verifier/test/adversarial.test.ts` "AT-02" | — (límite documentado) |
+| AT-03a | detectado (`DOUBLE_VOTE` / `nullifiers_unique` / 409) | adaptador + verificador "AT-03a"; `flow.test.ts` | — |
+| AT-03b | detectado (`INVALID_ENCODING`; `package_schema`; 400) | adaptador "AT-03b" (3 variantes + otros campos); verificador "AT-03b" | ya corregido en `445b3ea`; **rojo comprobado contra `b4296ed`** (abajo) |
+| AT-03c | detectado en la entrada; elección honesta `valid:true` | adaptador + verificador "AT-03c"; `flow.test.ts` (400) | ya corregido en `445b3ea`; rojo comprobado contra `b4296ed` |
+| AT-04 | detectado: `/identity` tras `/open` → 409 y `groupRoot`/`/roll` iguales; prueba contra R1 → 403 | `apps/web/.../adversarial.test.ts` "AT-04" | — |
+| AT-05 | (a)(b)(d) detectado `draw_matches`; (c) detectado `manifest_hash` (candidatos en el manifiesto) | verificador "AT-05" | — |
+| AT-06 | detectado (`tally_matches`, incluida la variante `total+1`) | verificador "AT-06" + `verifier.test.ts` | — |
+| AT-07 | (a)(b)(c) 403 sin registrar; (d) 503; 07c plantillas borradas en `/open` | web "AT-07" | — |
+| AT-07b | **limitación (A4)**: σ=0,05 → 409; ruido σ=1 → 201 (esquiva el dedupe) | web "AT-07b" | — (documentado, no es un control) |
+| AT-08 | (a)(b) 409, variante no canónica 400; (c) `commitments_unique` | web "AT-08" + verificador "AT-08c" | — |
+| AT-09 | (a)(c) 401 y nada cambia; (b) no arranca (403/404); (d) **era vulnerable** | web "AT-09"; `units.test.ts` "AT-09(d) / A6" | **sí**: `kapso.ts` ya no crea votantes |
+| AT-10 | **era vulnerable** (2 vectores, ver abajo); ahora sin reconstrucción ni PII en salidas públicas | web "AT-10" (3 tests) | **sí**: `elections.ts` (tally por lotes) y `engine.ts` (`votedAt` por día) |
+
+### Fallos reales encontrados y arreglados (cambio mínimo, solo servidor)
+1. **AT-09(d) / A6 — `apps/web/src/lib/server/kapso.ts`.** `QUORUM <id>` desde cualquier número creaba un `Voter` con `inviteToken`. Ahora el opt-in solo reenvía el enlace si `getVoterByPhone` encuentra el teléfono en el censo; si no, `ignored` y no se escribe nada. Se invirtió el test de `units.test.ts` que afirmaba el comportamiento vulnerable.
+2. **AT-10 / C3 — diferencias del tally en vivo — `apps/web/src/lib/server/elections.ts`.** Con ≥5 votos el desglose cambiaba con cada boleta: el organizador (que ve quién pasa a `voted` en `GET /voters`) restaba dos lecturas de `/tally` y sabía la opción de esa persona. Ahora, en `registration`/`open`, el desglose se calcula sobre lotes completos de 5 boletas (`totalVotes` sigue exacto; al cerrar, recuento exacto).
+3. **AT-10 / C5 — reconstrucción desde la DB — `apps/web/src/lib/server/engine.ts`.** `markVoted` guardaba `votedAt` con milisegundos; ordenando a los votantes por `votedAt` y emparejándolos con el ledger por posición se reconstruía **6/6** votante → opción. Ahora se guarda el inicio del día en America/Caracas (`caracasDayStart`).
+
+### Rojo antes / verde después (salida real)
+```
+   × AT-03b/AT-03c contra el código anterior al fix > AT-03b rechaza nullifier no canónico
+   × AT-03b/AT-03c contra el código anterior al fix > AT-03c rechaza message '0x1'
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  test/zz-red.test.ts > AT-03b/AT-03c contra el código anterior al fix > AT-03b rechaza nullifier no canónico
+AssertionError: expected 'accepted' not to be 'accepted' // Object.is equality
+ FAIL  test/zz-red.test.ts > AT-03b/AT-03c contra el código anterior al fix > AT-03c rechaza message '0x1'
+AssertionError: expected 'accepted' not to be 'accepted' // Object.is equality
+      Tests  2 failed (2)
+--- después del fix (HEAD) ---
+ ✓ test/zz-red.test.ts (2 tests)
+   ✓ AT-03b/AT-03c contra el código anterior al fix > AT-03b rechaza nullifier no canónico 
+      Tests  2 passed (2)
+--- verificador anterior al fix (b4296ed) ---
+stdout | test/zz-red.test.ts > AT-03b paquete con nullifier '0'+n y total inflado coherente → valid:false
+valid: true counts: [1,2,0] failing: []
+   × AT-03b paquete con nullifier '0'+n y total inflado coherente → valid:false
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  test/zz-red.test.ts > AT-03b paquete con nullifier '0'+n y total inflado coherente → valid:false
+AssertionError: expected true to be false // Object.is equality
+     14|   console.log("valid:", r.valid, "counts:", JSON.stringify(t.tally.cou…
+      Tests  1 failed (1)
+--- verificador HEAD ---
+stdout | test/zz-red.test.ts > AT-03b paquete con nullifier '0'+n y total inflado coherente → valid:false
+valid: false counts: [1,2,0] failing: ["package_schema"]
+ ✓ test/zz-red.test.ts (1 test)
+   ✓ AT-03b paquete con nullifier '0'+n y total inflado coherente → valid:false 
+      Tests  1 passed (1)
+--- kapso.ts HEAD (vulnerable) ---
+   × webhook Kapso > AT-09(d) / A6: opt-in QUORUM <id> desde un teléfono FUERA del censo → ignored y no crea votante; dentro del censo reenvía el enlace (dry-run); batch y dedupe
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected { Object (ok, received, ...) } to deeply equal { ok: true, received: 1, …(3) }
+      Tests  1 failed | 10 skipped (11)
+--- kapso.ts con el fix ---
+ ✓ src/lib/server/__tests__/units.test.ts (11 tests)
+      Tests  11 passed (11)
+--- AT-10 antes de los fixes (tally en vivo por voto) ---
+   × AT-10 privacidad de datos públicos y de la DB (public_data_privacy) > 6 votantes en orden conocido: ni las rutas públicas ni el store permiten reconstruir votante → opción
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: votos ligados persona → opción por diferencias del tally en vivo: expected 1 to be +0 // Object.is equality
+      Tests  1 failed | 8 skipped (9)
+--- AT-10 con tally por lotes, antes del fix de votedAt ---
+   × AT-10 privacidad de datos públicos y de la DB (public_data_privacy) > 6 votantes en orden conocido: ni las rutas públicas ni el store permiten reconstruir votante → opción
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: votedAt no debe ordenar a los votantes: expected 6 to be 1 // Object.is equality
+      Tests  1 failed | 8 skipped (9)
+--- AT-10 DB: reconstrucción por votedAt (ms) sin el fix ---
+   × AT-10 privacidad de datos públicos y de la DB (public_data_privacy) > 6 votantes en orden conocido: ni las rutas públicas ni el store permiten reconstruir votante → opción
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: reconstrucción votante → opción desde la DB: expected 6 to be less than 6
+      Tests  1 failed | 8 skipped (9)
+```
+(Para AT-03b/03c se copiaron temporalmente `ledger.ts` y `verify.ts` de `b4296ed`, anterior al fix `445b3ea`, se corrió un test equivalente y se restauró con `git checkout`; el archivo temporal no se versionó.)
+
+### Listado de los tests adversariales (`--reporter=verbose`)
+```
+ ✓ test/adversarial.test.ts > codificación canónica (hallazgos C1 y A1) > isCanonicalField: rechaza ceros a la izquierda, hex, signo y valores ≥ r
+ ✓ test/adversarial.test.ts > codificación canónica (hallazgos C1 y A1) > C1: re-enviar la misma boleta con nullifier '0'+n o hex → INVALID_ENCODING (nunca se acepta un doble voto)
+ ✓ test/adversarial.test.ts > codificación canónica (hallazgos C1 y A1) > A1: message en hex o fuera de rango → INVALID_ENCODING antes de entrar al ledger
+ ✓ test/adversarial.test.ts > AT-03 nullifier repetido (adaptador) > AT-03a: la misma prueba reinsertada tal cual → DOUBLE_VOTE y el ledger no crece
+ ✓ test/adversarial.test.ts > AT-03 nullifier repetido (adaptador) > AT-03b: rechaza nullifier no canónico en sus tres variantes ('0'+n, '00'+n, '0x'+hex) y no infla el ledger
+ ✓ test/adversarial.test.ts > AT-03 nullifier repetido (adaptador) > AT-03b (otros campos): '0'+x en message, scope, merkleTreeRoot o points[] → INVALID_ENCODING
+ ✓ test/adversarial.test.ts > AT-03 nullifier repetido (adaptador) > AT-03c: message '0x1' (la prueba Groth16 sigue verificando) se rechaza en la entrada; el recuento honesto queda sin inválidas
+      Tests  7 passed (7)
+ ✓ test/adversarial.test.ts > verificador: hallazgos C1 y M3 > AT-03b / C1: doble voto con nullifier '0'+n (cadena rehecha) → valid:false (package_schema: decimal canónico)
+ ✓ test/adversarial.test.ts > verificador: hallazgos C1 y M3 > AT-08c / M3: commitment duplicado en el padrón (raíz y génesis recalculadas) → commitments_unique falla
+ ✓ test/adversarial.test.ts > verificador: hallazgos C1 y M3 > paquete legítimo → commitments_unique pasa
+ ✓ test/adversarial.test.ts > AT-02 ledger reordenado > (a) intercambiar #0 y #1 sin rehacer hashes → chain_integrity 'cadena rota en #0'
+ ✓ test/adversarial.test.ts > AT-02 ledger reordenado > (b) intercambiar y rehacer cadena + finalHash + checksums → valid:true sin ancla (indetectable), cambia finalHash y se declara completitud-del-ledger no garantizada
+ ✓ test/adversarial.test.ts > AT-02 ledger reordenado > (c) igual que (b) pero con ancla del finalHash original → anchor_matches 'hash final ≠ ancla'
+ ✓ test/adversarial.test.ts > AT-03 nullifier repetido (verificador) > AT-03a: la boleta #0 duplicada tal cual (cadena rehecha) → nullifiers_unique '#2 repite el nullifier de #0'
+ ✓ test/adversarial.test.ts > AT-03 nullifier repetido (verificador) > AT-03b: variantes '00'+n y '0x'+hex con cadena, tally y checksums rehechos → valid:false (nunca un total inflado válido)
+ ✓ test/adversarial.test.ts > AT-03 nullifier repetido (verificador) > AT-03c: con la entrada canónica la elección honesta sigue valid:true; un message '0x1' colado en el paquete hace fallar package_schema
+ ✓ test/adversarial.test.ts > AT-05 sorteo > legítimo → valid:true y draw_matches pasa
+ ✓ test/adversarial.test.ts > AT-05 sorteo > (a) seed ≠ keccak256(finalHash) → draw_matches
+ ✓ test/adversarial.test.ts > AT-05 sorteo > (b) seed correcta pero ganadores permutados o cambiados → draw_matches
+ ✓ test/adversarial.test.ts > AT-05 sorteo > (c) candidato añadido tras publicar y ganadores recomputados con la semilla correcta → manifest_hash falla (candidatos en el manifiesto, fix A5)
+ ✓ test/adversarial.test.ts > AT-05 sorteo > (d) N distinto del que sale del recuento → draw_matches 'N publicado ≠ N recomputado'
+ ✓ test/adversarial.test.ts > AT-06 tally inflado > total += 1 sin tocar el ledger (tallyHash y checksum rehechos) → tally_matches 'total: publicado 3, boletas en el ledger 2'
+      Tests  15 passed (15)
+ ✓ src/lib/server/__tests__/units.test.ts > webhook Kapso > AT-09(d) / A6: opt-in QUORUM <id> desde un teléfono FUERA del censo → ignored y no crea votante; dentro del censo reenvía el enlace (dry-run); batch y dedupe
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-09 un tercero infla el censo o cierra la elección (C4) > (a) POST /voters sin credenciales o con token ajeno → 401, sin inviteToken y sin crear votantes
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-09 un tercero infla el censo o cierra la elección (C4) > (b) sin token de invitación el atacante no puede empezar la inscripción (enroll / wallet / identity → 403/404)
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-09 un tercero infla el censo o cierra la elección (C4) > (c) POST /close, /open, /invites y /draw sin credenciales → 401 y la elección no cambia de estado
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-04 groupRoot cambiado tras /open > (1) /identity después de /open → 409 y groupRoot y /roll no cambian; (2) prueba contra un padrón con un miembro extra → 403 not_eligible
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-07 FaceBinding con firma ajena o reenviada > (a) firma de W2 sobre {wallet: W1}, (b) replay para otro voterId u otra elección, (c) faceBindingHash ≠ H1 → 403 y el votante NO queda registrado; (d) kernel sin RPC → 503
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-07 FaceBinding con firma ajena o reenviada > AT-07b (A4, limitación documentada): el dedupe 1:N detecta ruido pequeño (σ=0,05) pero un descriptor con ruido grande lo esquiva — no es un control de unicidad
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-07 FaceBinding con firma ajena o reenviada > AT-07c (A2): después de /open no queda ninguna plantilla facial de la elección
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-08 commitment duplicado inyectado (M3) > (a) V2 inscribe el commitment público de V1 → 409; (b) V1 lo reenvía → 409; el padrón congelado no tiene duplicados
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-10 privacidad de datos públicos y de la DB (public_data_privacy) > votedAt se guarda con granularidad de día en America/Caracas (UTC−4)
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-10 privacidad de datos públicos y de la DB (public_data_privacy) > tally en vivo por lotes de 5: el 6.º voto no cambia el desglose hasta completar el lote; al cerrar, recuento exacto
+ ✓ src/lib/server/__tests__/adversarial.test.ts > AT-10 privacidad de datos públicos y de la DB (public_data_privacy) > 6 votantes en orden conocido: ni las rutas públicas ni el store permiten reconstruir votante → opción
+      Tests  12 passed | 10 skipped (22)
+```
+
+### Límites que siguen abiertos (no ocultos)
+- AT-02(b): sin ancla, reordenar boletas y rehacer la cadena es indetectable y cambia la semilla del sorteo (A5). Solo el ancla o el recibo del votante (índice/hash) lo delatan.
+- AT-07b (A4): el dedupe facial no garantiza "una persona = una wallet"; el descriptor lo pone el cliente.
+- AT-10: el lote de 5 da k-anonimato 5 frente al organizador, no anonimato perfecto (un lote unánime revela la opción de sus 5 votantes). `votedAt` por día aún separa a quienes votan en días distintos.
+- C2: `onchain.txHash` en `POST /vote` se **ignora** (no se guarda) con `QUORUM_ONCHAIN_CAST` apagado; no se rechaza con 400. Decisión pendiente de José.
+- La UI (`InviteStep`) muestra `votedAt` con hora: tras el fix verá las 00:00; conviene mostrar solo la fecha (no se tocó la UI en esta rama).

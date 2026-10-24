@@ -14,6 +14,7 @@ import { POST as kapsoWebhook } from "@/app/api/webhooks/kapso/route";
 import { extractIncoming } from "../kapso";
 import { POST as createElection } from "@/app/api/elections/route";
 import { POST as publish } from "@/app/api/elections/[id]/publish/route";
+import { POST as addVoters } from "@/app/api/elections/[id]/voters/route";
 import { call, freshStore, sampleElection } from "./helpers";
 
 describe("crypto y manifiesto", () => {
@@ -152,16 +153,28 @@ describe("webhook Kapso", () => {
     expect(extractIncoming(meta)).toEqual([{ from: "584121234567", text: "hola", profileName: "Ana" }]);
   });
 
-  it("opt-in QUORUM <id> crea al votante por teléfono y responde con el enlace (dry-run); batch y dedupe", async () => {
+  it("AT-09(d) / A6: opt-in QUORUM <id> desde un teléfono FUERA del censo → ignored y no crea votante; dentro del censo reenvía el enlace (dry-run); batch y dedupe", async () => {
     const store = freshStore();
     const created = await call(createElection, { body: sampleElection() });
     const id = created.json.id as string;
-    await call(publish, { params: { id }, headers: { authorization: `Bearer ${created.json.organizerToken}` } });
+    const auth = { authorization: `Bearer ${created.json.organizerToken}` };
+    await call(publish, { params: { id }, headers: auth });
 
+    // 1) Atacante: número que el organizador nunca puso en el censo.
+    const attack = JSON.stringify({ event: "whatsapp.message.received", data: { message: { from: "584125550000", text: { body: `QUORUM ${id}` } }, contact: { name: "Intruso" } } });
+    const a = await call(kapsoWebhook, { rawBody: attack, headers: { ...signed(attack), "x-idempotency-key": "evt-attack" } });
+    expect(a.status).toBe(200);
+    expect(a.json).toEqual({ ok: true, received: 1, sent: 0, ignored: 1, failed: 0 });
+    expect(await store.listVoters(id)).toHaveLength(0);
+    expect(await store.getVoterByPhone(id, "+584125550000")).toBeNull();
+
+    // 2) El organizador inscribe a Ana con su teléfono; su opt-in solo reenvía SU enlace.
+    const added = await call(addVoters, { params: { id }, headers: auth, body: { voters: [{ displayName: "Ana", phoneE164: "+584121234567" }] } });
+    expect(added.status).toBe(201);
     const body = JSON.stringify({
       batch: true,
       events: [
-        { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: `QUORUM ${id}` } }, contact: { name: "Ana" } } },
+        { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: `QUORUM ${id}` } }, contact: { name: "Otro nombre" } } },
         { event: "whatsapp.message.received", data: { message: { from: "584121234567", text: { body: "hola" } } } },
         { event: "whatsapp.message.received", data: { message: { from: "584129999999", text: { body: "QUORUM el_inexistente" } } } },
       ],
@@ -172,8 +185,9 @@ describe("webhook Kapso", () => {
 
     const voters = await store.listVoters(id);
     expect(voters).toHaveLength(1);
-    expect(voters[0].phoneE164).toBe("+584121234567");
-    expect(voters[0].displayName).toBe("Ana");
+    expect(voters[0].id).toBe(added.json.voters[0].id);
+    expect(voters[0].displayName).toBe("Ana"); // el nombre de perfil de WhatsApp no sobreescribe el censo
+    expect(voters[0].inviteToken).toBe(added.json.voters[0].inviteToken);
     expect(voters[0].inviteStatus).toBe("sent");
 
     // Mismo mensaje otra vez: no duplica votante; misma idempotency key → duplicate
