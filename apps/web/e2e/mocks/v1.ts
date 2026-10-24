@@ -71,7 +71,7 @@ export class MockV1 {
   authSeen: string[] = [];
   /** Sala abierta (docs/API_CONTRACT.md § "Sala abierta"). `null` = nunca se abrió. */
   room: { code: string; open: boolean; seatsTaken: number; maxSeats: number; expiresAt: string; closedReason: null | "manual" | "expired" | "election-opened" | "election-closed" } | null = null;
-  /** D-23: modo continuo (al instante). `groupSize` = inscritos en el grupo; `votes` = boletas; K = 5. */
+  /** D-22: modo continuo (al instante). `groupSize` = inscritos en el grupo; `votes` = boletas; K = 5. */
   continuous = false;
   groupSize = 0;
   votes = 0;
@@ -373,7 +373,7 @@ export class MockV1 {
     if (m === "POST" && transitions[action]) {
       if (!this.isOrg(route)) return this.json(route, { error: "falta token", code: "forbidden" }, 401);
       if (this.continuous && (action === "publish" || action === "open") && this.phase === "draft") {
-        this.phase = "open"; // D-23: publicar = abrir inscripción + votación
+        this.phase = "open"; // D-22: publicar = abrir inscripción + votación
         this.votingStartsAt = new Date().toISOString();
         return this.json(route, this.election());
       }

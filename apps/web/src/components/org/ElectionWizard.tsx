@@ -76,7 +76,7 @@ export function ElectionWizard() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [winnersRule, setWinnersRule] = useState<"fixed" | "fromResult">("fromResult");
   const [winnersCount, setWinnersCount] = useState("1");
-  // D-23: ¿cuándo se vota? Al instante (predeterminado) o con hora de inicio.
+  // D-22: ¿cuándo se vota? Al instante (predeterminado) o con hora de inicio.
   const [votingMode, setVotingMode] = useState<VotingMode>("continuous");
 
   // Paso 2 — D-19: ¿quién puede votar? (credencial del evento por defecto) + invitados opcionales

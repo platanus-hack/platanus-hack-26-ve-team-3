@@ -1,5 +1,5 @@
 /**
- * D-23 modo continuo contra los route handlers reales, con pruebas Semaphore REALES (Groth16):
+ * D-22 modo continuo contra los route handlers reales, con pruebas Semaphore REALES (Groth16):
  * crear (sin votingMode → continuo) → publicar = abrir (draft → open) → sala abierta DURANTE la votación → la gente entra,
  * se inscribe (member_added) y vota en el momento → K mínimo → raíces históricas dentro de la ventana → doble voto
  * rechazado → concurrencia bajo el lock → cerrar (sala + votación) → paquete verificado con root_history y anonymity_set_min.
@@ -88,7 +88,7 @@ async function proofFor(org: Org, privateKey: string, option: number) {
   return castBallot(privateKey, r.json.commitments, org.id, option, artifactsPaths);
 }
 
-describe("modo continuo (D-23): se inscriben y votan en el mismo momento", () => {
+describe("modo continuo (D-22): se inscriben y votan en el mismo momento", () => {
   it("publicar abre la votación; la sala sigue abierta; K=5; raíz vieja dentro de la ventana; doble voto; cerrar → paquete verificado", async () => {
     const org = await setupContinuous();
     const el = await call(getElection, { params: { id: org.id } });

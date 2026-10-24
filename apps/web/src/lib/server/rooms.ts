@@ -108,7 +108,7 @@ export async function openRoom(electionId: string, input: OpenRoomInput): Promis
     // Inicio programado: explícito (ISO o relativo), null = a mano; ausente = el cierre de la sala, salvo que el
     // organizador ya hubiera fijado una hora propia (distinta del cierre de la sala vigente), que se respeta.
     let votingStartsAt: string | null;
-    // D-23: en modo continuo ya se está votando; no hay hora de inicio que programar.
+    // D-22: en modo continuo ya se está votando; no hay hora de inicio que programar.
     if (isContinuous(e)) votingStartsAt = e.votingStartsAt ?? null;
     else if (input.votingStartsInSec !== undefined) votingStartsAt = validStart(now + input.votingStartsInSec * 1000, now);
     else if (input.votingStartsAt !== undefined) votingStartsAt = input.votingStartsAt === null ? null : validStart(Date.parse(input.votingStartsAt), now);

@@ -80,7 +80,7 @@ export function Projector({ electionId }: { electionId: string }) {
   }, [loadElection]);
 
   const phase = election?.status ?? null;
-  // D-23: en modo continuo la sala sigue abierta mientras se vota.
+  // D-22: en modo continuo la sala sigue abierta mientras se vota.
   const continuousLive = election?.votingMode === "continuous" && (phase === "draft" || phase === "open");
 
   // Poll rápido según la fase: sala + inscritos en registration; agregados desde open.
@@ -241,7 +241,7 @@ function RegistrationView({ election, room, counts, hasToken, now, offset }: { e
   );
 }
 
-/** D-23, modo continuo: QR de la sala + "27 inscritos · 19 votaron" en vivo (y el desglose por lotes cuando lo hay). */
+/** D-22, modo continuo: QR de la sala + "27 inscritos · 19 votaron" en vivo (y el desglose por lotes cuando lo hay). */
 function ContinuousView({ election, room, tally, hasToken }: { election: ElectionV1; room: RoomStatus | null; tally: AggregatesV1 | null; hasToken: boolean }) {
   const joinUrl = room?.joinUrl ?? null;
   const enrolled = tally?.eligible ?? null;

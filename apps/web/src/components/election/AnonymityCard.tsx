@@ -21,7 +21,7 @@ export function groupSizesOf(pkg: unknown): number[] {
 }
 
 /**
- * D-23, modo continuo: tamaño del grupo (conjunto de anonimato) de cada boleta. Quien vota temprano se esconde entre
+ * D-22, modo continuo: tamaño del grupo (conjunto de anonimato) de cada boleta. Quien vota temprano se esconde entre
  * menos personas. Mientras se vota solo se muestra el grupo actual; al cerrar, mínimo y mediana desde el paquete.
  */
 export function AnonymityCard({ electionId, k, closed }: { electionId: string; k: number; closed: boolean }) {

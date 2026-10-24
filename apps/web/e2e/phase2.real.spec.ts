@@ -67,7 +67,7 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   await org.getByLabel("Título de la votación").fill(TITLE);
   await org.locator("#opt-0").fill("1");
   await org.locator("#opt-1").fill("2");
-  // D-23: el modo al instante es el predeterminado; este flujo prueba el modo con fases.
+  // D-22: el modo al instante es el predeterminado; este flujo prueba el modo con fases.
   await org.getByRole("radio", { name: /Con hora de inicio/ }).check();
   await org.getByText("Más ajustes").click();
   for (const p of PROJECTS) {

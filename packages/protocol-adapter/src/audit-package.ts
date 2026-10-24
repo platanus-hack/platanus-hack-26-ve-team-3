@@ -26,7 +26,7 @@ export type ElectionManifest = {
    */
   anchorPolicy?: AnchorPolicy;
   /**
-   * D-23, modo continuo: se inscriben y votan a la vez. Ausente = modo con fases (padrón congelado al abrir).
+   * D-22, modo continuo: se inscriben y votan a la vez. Ausente = modo con fases (padrón congelado al abrir).
    * Entra en `manifestHash`: K (mínimo de miembros para aceptar votos) y la ventana de raíces se fijan antes de votar.
    */
   enrollment?: EnrollmentPolicy;

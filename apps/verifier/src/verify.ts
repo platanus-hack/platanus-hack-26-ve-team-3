@@ -33,9 +33,9 @@ const ProofSchema = z.object({
 }).strict();
 /** Boleta del modo con fases (sin `kind`). */
 const PhasedEntrySchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, proof: ProofSchema }).strict();
-/** D-23 modo continuo: boleta con el tamaño del grupo en la raíz de su prueba (conjunto de anonimato). */
+/** D-22 modo continuo: boleta con el tamaño del grupo en la raíz de su prueba (conjunto de anonimato). */
 const ContinuousBallotSchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, kind: z.literal("ballot"), proof: ProofSchema, groupSize: z.number().int().min(1) }).strict();
-/** D-23 modo continuo: inscripción completada (sin voterId). */
+/** D-22 modo continuo: inscripción completada (sin voterId). */
 const MemberAddedSchema = z.object({
   idx: z.number().int().min(0),
   prevHash: Hex32,
@@ -151,7 +151,7 @@ export const AuditPackageSchema = z.object({
   rollPolicy: RollPolicySchema.optional(),
   manualApprovals: ManualApprovalsSchema.optional(),
 }).strict();
-/** D-23: el modo continuo (manifest.enrollment) usa el mismo esquema estricto con entradas member_added / ballot. */
+/** D-22: el modo continuo (manifest.enrollment) usa el mismo esquema estricto con entradas member_added / ballot. */
 export const ContinuousAuditPackageSchema = AuditPackageSchema.extend({ ledger: z.array(ContinuousEntrySchema) });
 export type AuditPackage = z.infer<typeof AuditPackageSchema> | z.infer<typeof ContinuousAuditPackageSchema>;
 /** Elige el esquema por el modo que declara el manifiesto (sin `enrollment` = con fases, formato original). */

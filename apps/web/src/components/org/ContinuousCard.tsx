@@ -28,7 +28,7 @@ export async function fetchLiveCounts(electionId: string): Promise<LiveCounts> {
 }
 
 /**
- * D-23, panel del organizador en modo continuo: solo "Abrir" (inscripción + votación a la vez) y "Cerrar"
+ * D-22, panel del organizador en modo continuo: solo "Abrir" (inscripción + votación a la vez) y "Cerrar"
  * (sala + votación), con contadores en vivo (inscritos / votaron), el enlace de la sala y "Proyectar".
  */
 export function ContinuousCard({ election, hasToken, onChanged }: { election: Election; hasToken: boolean; onChanged: (e?: Election) => void }) {

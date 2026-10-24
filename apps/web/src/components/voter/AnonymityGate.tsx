@@ -12,7 +12,7 @@ export function anonymityGateText(k: number, size: number): string {
 }
 
 /**
- * D-23, modo continuo: no se aceptan votos mientras el grupo tenga menos de K personas inscritas (privacidad: con muy
+ * D-22, modo continuo: no se aceptan votos mientras el grupo tenga menos de K personas inscritas (privacidad: con muy
  * pocas, se sabría quién votó qué). Muestra el aviso y consulta cada 3 s; la boleta aparece sola al alcanzar K.
  * Sin K (modo con fases) o ya alcanzado: muestra la boleta directamente.
  */

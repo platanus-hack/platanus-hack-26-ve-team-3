@@ -218,7 +218,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const phase = election.status;
   const action = nextOrganizerAction(phase, { candidates: (election.candidates?.length ?? 0) });
   const shownCounts = counts ?? (voters ? { invited: voters.filter((v) => v.state === "invited").length, registered: voters.filter((v) => v.state === "registered").length, voted: voters.filter((v) => v.state === "voted").length } : null);
-  // D-23: en modo continuo la inscripción sigue abierta mientras se vota.
+  // D-22: en modo continuo la inscripción sigue abierta mientras se vota.
   const continuous = election.votingMode === "continuous";
   const enrolling = phase === "registration" || (continuous && phase === "open");
   const canAddVoters = phase === "draft" || enrolling;

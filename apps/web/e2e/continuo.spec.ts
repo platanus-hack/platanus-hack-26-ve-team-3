@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { E2E, MockV1 } from "./mocks/v1";
 
 /**
- * D-23 modo continuo (al instante) contra MOCKS del contrato (e2e/mocks/v1.ts). La prueba Semaphore sí se genera de
+ * D-22 modo continuo (al instante) contra MOCKS del contrato (e2e/mocks/v1.ts). La prueba Semaphore sí se genera de
  * verdad en el navegador. El E2E real sin mocks es `continuo.real.spec.ts`.
  */
 const CODE = "K7M3QP";

@@ -1,5 +1,5 @@
 /**
- * D-23 modo continuo en el verificador independiente: recomputa la secuencia de raíces desde los member_added,
+ * D-22 modo continuo en el verificador independiente: recomputa la secuencia de raíces desde los member_added,
  * exige que cada boleta use una raíz histórica dentro de la ventana y con al menos K miembros, y sigue validando
  * igual los paquetes con fases (compatibilidad).
  */

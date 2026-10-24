@@ -21,7 +21,7 @@ export const ENGINE = { protocol: "semaphore-ledger" as const, version: "protoco
 /** Etiqueta honesta del manifiesto: la demo corre en testnet con datos ficticios. */
 export const MANIFEST_LABEL = "simulación";
 
-/** D-23: ¿modo continuo (se inscriben y votan a la vez)? Ausente = con fases (datos anteriores). */
+/** D-22: ¿modo continuo (se inscriben y votan a la vez)? Ausente = con fases (datos anteriores). */
 export function isContinuous(e: Pick<Election, "votingMode">): boolean {
   return e.votingMode === "continuous";
 }
@@ -73,7 +73,7 @@ export async function createElection(input: CreateElectionInput, opts: { id?: st
   const ids = new Set(input.options.map((o) => o.id));
   if (ids.size !== input.options.length) throw new HttpError("invalid_input", "Ids de opciones repetidos");
   validateDrawConfig(input);
-  // D-23: el modo continuo es el predeterminado para votaciones nuevas.
+  // D-22: el modo continuo es el predeterminado para votaciones nuevas.
   const votingMode = input.votingMode ?? "continuous";
   const election = Election.parse({
     id: opts.id ?? randomId("el"),
@@ -151,7 +151,7 @@ export function manifestOf(e: Election): ElectionManifest {
 
 /**
  * Con fases: `draft → registration` (fija manifiesto y layout; abre la inscripción: rostro + wallet + identidad).
- * Continuo (D-23): `draft → open` directamente: inscripción y votación a la vez; el ledger nace vacío y crece con
+ * Continuo (D-22): `draft → open` directamente: inscripción y votación a la vez; el ledger nace vacío y crece con
  * cada inscripción (`member_added`).
  */
 export async function publishElection(id: string, opts: { now?: () => Date } = {}): Promise<Election> {

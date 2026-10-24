@@ -45,7 +45,7 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
     try {
       setDetail("Preparando…");
       const id = await openIdentity(electionId, { legacyUnlock: (info) => legacyUnlock(info, electionId) });
-      // D-23: la prueba se genera contra el grupo VIGENTE. Si entra mucha gente mientras tanto (raíz fuera de la
+      // D-22: la prueba se genera contra el grupo VIGENTE. Si entra mucha gente mientras tanto (raíz fuera de la
       // ventana), el servidor responde `stale_root` y se reintenta solo con el grupo nuevo.
       let receipt: ReceiptV1 | null = null;
       let nullifier = "";

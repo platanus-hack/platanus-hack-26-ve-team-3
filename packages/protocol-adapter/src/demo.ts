@@ -59,7 +59,7 @@ export type ContinuousStep = "join" | { vote: number; option: number; rootOfSize
 export type ContinuousDemoElection = DemoElection & { rejections: { step: number; code: string }[] };
 
 /**
- * Modo continuo (D-23) de punta a punta con pruebas reales: el grupo crece con cada `join` (member_added en la cadena)
+ * Modo continuo (D-22) de punta a punta con pruebas reales: el grupo crece con cada `join` (member_added en la cadena)
  * y las boletas entran intercaladas, cada una contra la raíz vigente (o una anterior dentro de la ventana).
  * Las boletas que el ledger rechaza (K no alcanzado, raíz fuera de ventana…) se anotan en `rejections`, no lanzan.
  */

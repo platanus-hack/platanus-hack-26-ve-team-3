@@ -13,7 +13,7 @@ export function ownsInvite(invite: InviteResponse, local: Local): boolean {
   if (local.receipt || local.identity) return true;
   const phase = invite.election.status;
   if (phase === "draft") return true;
-  // D-23: en modo continuo la inscripción sigue abierta mientras se vota.
+  // D-22: en modo continuo la inscripción sigue abierta mientras se vota.
   if (phase === "registration" || (phase === "open" && invite.election.votingMode === "continuous")) return !invite.voter.livenessPassedAt || Boolean(local.pendingFace);
   return false;
 }

@@ -77,7 +77,7 @@ export async function registerIdentity(voterId: string, input: { inviteToken: st
     if (fresh.credentialIssuedAt || engine.roll.some((r) => r.voterId === voterId)) throw new HttpError("already_voted", "Este votante ya registró su identidad", 409);
     if (engine.roll.some((r) => r.commitment === input.commitment) || engine.commitments.includes(input.commitment)) throw new HttpError("invalid_input", "Ese commitment ya está en el padrón", 409);
     if (isContinuous(e) && engine.ledger?.enrollment) {
-      // D-23: el commitment entra YA al grupo (member_added encadenado, nueva raíz), bajo el mismo lock que los votos.
+      // D-22: el commitment entra YA al grupo (member_added encadenado, nueva raíz), bajo el mismo lock que los votos.
       // Sin voterId en el ledger ni en `roll`: solo el commitment.
       try {
         appendMember(engine.ledger, input.commitment);
@@ -106,7 +106,7 @@ export async function registerIdentity(voterId: string, input: { inviteToken: st
  * nada y devuelve la elección tal cual (idempotente).
  */
 export async function openElection(id: string, opts: { auto?: boolean } = {}): Promise<Election> {
-  // D-23: en modo continuo no hay padrón que congelar: "Abrir" en borrador publica y abre inscripción + votación a la vez.
+  // D-22: en modo continuo no hay padrón que congelar: "Abrir" en borrador publica y abre inscripción + votación a la vez.
   const pre = await requireElection(id);
   if (isContinuous(pre)) {
     if (pre.status === "draft") return publishElection(id, { now });
@@ -165,7 +165,7 @@ export async function getRoll(id: string) {
   const e = await requireElection(id);
   const engine = await requireEngine(id);
   if (engine.ledger?.enrollment) {
-    // D-23: grupo vivo. La raíz es la vigente; una prueba contra ella sigue valiendo aunque entren otros (ventana).
+    // D-22: grupo vivo. La raíz es la vigente; una prueba contra ella sigue valiendo aunque entren otros (ventana).
     return {
       electionId: id,
       status: e.status,
@@ -372,7 +372,7 @@ async function closeLocked(id: string): Promise<Election> {
     let engine = await requireEngine(id);
     if (!engine.ledger) throw new HttpError("closed", "Padrón no congelado", 409);
     if (engine.ledger.enrollment) {
-      // D-23: cerrar = cerrar sala + votación. La política del censo y las aprobaciones manuales se fijan aquí; las
+      // D-22: cerrar = cerrar sala + votación. La política del censo y las aprobaciones manuales se fijan aquí; las
       // revisiones pendientes se rechazan y las plantillas faciales se borran (en continuo vivían hasta el cierre).
       const rollPolicy = await freezeRoomPolicy(id, "election-closed");
       const { manualApprovals } = await freezeReviews(id, e.eligibility?.method);

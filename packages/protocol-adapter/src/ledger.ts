@@ -33,7 +33,7 @@ export type MemberAddedEntry = {
 export type LedgerEntry = BallotEntry | MemberAddedEntry;
 
 /**
- * Modo continuo (D-23): el grupo crece mientras se vota. Una boleta es válida si su raíz es una raíz histórica del
+ * Modo continuo (D-22): el grupo crece mientras se vota. Una boleta es válida si su raíz es una raíz histórica del
  * grupo, de un estado anterior o igual del ledger, entre las últimas `rootWindow` raíces (como el historial de raíces
  * de los contratos de Semaphore v4), y el grupo en esa raíz tiene al menos `minAnonymitySet` miembros.
  */

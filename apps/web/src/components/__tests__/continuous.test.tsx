@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * D-23 modo continuo en la UI: a qué pantalla va el votante, el aviso de K que se convierte solo en boleta y las
+ * D-22 modo continuo en la UI: a qué pantalla va el votante, el aviso de K que se convierte solo en boleta y las
  * estadísticas del tamaño del grupo del centro de transparencia.
  */
 import { cleanup, render, screen } from "@testing-library/react";

@@ -922,3 +922,40 @@ Ejecutado en el worktree `wt/aprobacion` (macOS, Node 22, pnpm 10.18):
 - Manipulación: el mismo paquete con `tally.counts[0] + 1` → verificador CLI `valid=false`, `tally_matches` = fallo detectado (exit 1).
 - Observación: el ancla fija `finalHash` (ledger), no el recuento; un recuento alterado se detecta por recomputación, no por el ancla.
 - Render ahora ignora cambios solo en `apps/web/e2e/**`, `docs/**`, `**/*.md`, `oficina/**`, `research/**` (no redespliega ni corta el servicio por ellos).
+
+## 2026-10-24 18:39 (America/Caracas) · Modo continuo «Al instante» (D-22, rama `feat/modo-continuo`)
+
+Entorno: node v24.14.1 · pnpm 10.18.0 (`npx --yes pnpm@10`) · vitest 3.2.7 · @playwright/test 1.64.1 · next 16.4.3. Puertos: mocks en 3331, E2E real en 3332 (no 3317).
+
+| Comando | Resultado real |
+|---|---|
+| `pnpm typecheck` | exit 0 |
+| `pnpm lint` | exit 0 |
+| `pnpm test` | exit 0 · contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 36 (5 archivos, nuevo `test/continuous.test.ts`: 9) · verifier 76 (6 archivos, nuevo `test/continuous.test.ts`: 13) · web 249 (28 archivos; nuevos `lib/server/__tests__/continuous.test.ts`: 4 y `components/__tests__/continuous.test.tsx`: 8) = **483 tests** |
+| `pnpm --filter @quorum/web build` | exit 0 («Compiled successfully», 23/23 páginas) |
+| `PORT=3331 playwright test` (mocks, chromium + mobile-360) | **86 passed**, 128 skipped (capturas con `SCREENSHOTS=1`), 45.7 s; incluye `e2e/continuo.spec.ts` (4 × 2 proyectos) y `voter-taps` («inscripción 2 · voto 2», sin jerga) |
+| `QUORUM_E2E_REAL_PORT=3332 pnpm --filter @quorum/web test:e2e:real` | **7 passed** (1.7 min): badge, **continuo (nuevo, 25.8 s)**, espera, phase2 (ahora elige «Con hora de inicio»), review, room, weight (7.40 MB por teléfono) |
+
+**E2E real `e2e/continuo.real.spec.ts`** (servidor `next start`, DATA_DIR temporal, sin claves on-chain, pruebas Groth16 reales en cada navegador): votación creada sin `votingMode` → `continuous`, K=5 · panel 360 con solo «Abrir» → publica + abre sala · 4 personas entran por `/j`, cada una ve «Tu voto se habilita cuando haya 5 personas inscritas (ahora n)» sin boleta · entra la 5.ª → boleta inmediata y a las otras 4 les aparece sola · votan 1 y 2 **mientras** entra la 6.ª · votan las demás · panel `Inscritos 6 / Votaron 6`, proyector «6 inscritos · 6 votaron» con el QR de la sala · repetir la prueba → 409 `already_voted` · «Cerrar» → `auditable`, sala `election-closed`, `join` tardío 410 · `GET /audit` válido con `root_history` y `anonymity_set_min` («mínimo 5, mediana 5|6»), `correlacion-temporal-en-modo-continuo` declarada · paquete con 6 `member_added` + 6 boletas, `tally [4,2]`, sin alias ni tokens · **CLI** `pnpm --filter @quorum/verifier verify <paquete>` → `"valid":true` · **navegador** «Verificar ahora» → verificado (parcial por ancla no evaluada), «Mismo paquete que verificó el servidor», tamaño mínimo del grupo 5 · sorteo `POST /draw` → `drawn`, `draw_matches` verificado.
+
+**Verificador CLI sobre el fixture continuo** (`packages/demo-fixtures/protocol/continuous_valid.json`, generado con `tsx scripts/make-continuous-fixture.ts`: «7 inscripciones, 4 boletas, tally={"counts":[1,2,1],"invalid":0,"total":4}, rechazos=[]»):
+
+```
+$ pnpm --filter @quorum/verifier verify packages/demo-fixtures/protocol/continuous_valid.json --pretty   # exit 0
+valid true
+package_schema verificado - quorum-audit/1 (modo continuo: K=5, ventana 32 raíces), 7 inscripciones y 4 boletas en el ledger, 7 commitments
+group_root verificado - secuencia de 7 raíces recomputada desde los eventos member_added; la raíz final coincide
+chain_integrity verificado - cadena SHA-256 íntegra: génesis → 7 inscripciones + 4 boletas → finalHash 0xbb2a585f8149c524…
+root_history verificado - 4/4 boletas usan una raíz histórica válida dentro de la ventana de 32 raíces
+anonymity_set_min verificado - conjunto de anonimato por boleta (tamaño del grupo en la raíz de su prueba): mínimo 5, mediana 5; todas ≥ K=5
+proofs_valid verificado - 4/4 pruebas Semaphore verifican contra su raíz histórica y el scope de la elección
+tally_matches verificado - recuento reproducido: [1,2,1] (4 boletas, 0 inválidas)
+anchor_matches no evaluado - no evaluado: el paquete no declara ancla on-chain
+UNSUPPORTED anonimato-variable-en-modo-continuo: … (mínimo 5, mediana 5; K=5); quien vota temprano se esconde entre menos personas
+UNSUPPORTED correlacion-temporal-en-modo-continuo: el servidor ve cuándo se completa cada inscripción y cuándo llega cada boleta …
+$ pnpm --filter @quorum/verifier verify packages/demo-fixtures/protocol/valid.json   # paquete con fases: exit 0, mismos 9 checks de siempre
+```
+
+**Manipulaciones detectadas (verifier `test/continuous.test.ts`, pruebas reales):** ventana declarada 2 con una boleta cuya raíz tiene 3 encima → `root_history` «fuera de la ventana de 2» · prueba Groth16 válida contra un grupo que nunca existió → `root_history` «no es ninguna raíz histórica del grupo» · K declarado 6 con boletas de 5 → `anonymity_set_min` «K no alcanzado» · `groupSize` falso → `root_history` · `rootAfter` alterado → `group_root` · `commitments` ≠ secuencia → `group_root` · doble voto → `nullifiers_unique` · `voterId` en un `member_added` → `package_schema` · formato mezclado → `package_schema` · `valid.json`/`tampered_*`/`wrong_root`/`double_vote` con fases → mismo resultado que antes.
+
+Capturas 360 (servidor real, del E2E): `docs/screenshots/phase2/continuo-aviso-k-360.png`, `continuo-boleta-360.png`, `continuo-panel-360.png`, `continuo-proyector-360.png`.

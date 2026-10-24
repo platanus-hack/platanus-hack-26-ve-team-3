@@ -3,7 +3,7 @@
 import type { VotingMode } from "@quorum/contracts";
 import { Badge } from "@/components/ui/badge";
 
-/** D-23: "¿Cuándo se vota?" — asistente de creación. El modo continuo es el predeterminado. */
+/** D-22: "¿Cuándo se vota?" — asistente de creación. El modo continuo es el predeterminado. */
 export const VOTING_MODES: { id: VotingMode; label: string; cost: string; badge?: string }[] = [
   { id: "continuous", label: "Al instante", cost: "Se inscriben y votan en el momento.", badge: "Recomendado para eventos" },
   { id: "phased", label: "Con hora de inicio", cost: "Primero se inscriben todos; la votación empieza a la hora que elijas o cuando la abras." },

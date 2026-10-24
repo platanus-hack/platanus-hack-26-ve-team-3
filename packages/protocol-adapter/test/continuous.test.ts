@@ -1,5 +1,5 @@
 /**
- * D-23 modo continuo: el grupo Semaphore crece mientras se vota. Pruebas Groth16 reales (sin mocks).
+ * D-22 modo continuo: el grupo Semaphore crece mientras se vota. Pruebas Groth16 reales (sin mocks).
  * Raíces históricas, ventana de N raíces, K mínimo de anonimato, cadena con member_added y compatibilidad con fases.
  */
 import { beforeAll, describe, expect, it } from "vitest";

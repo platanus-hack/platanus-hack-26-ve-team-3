@@ -55,7 +55,7 @@ export function autoView(invite: InviteV1, local: Local, roomConsent: boolean): 
   const phase = invite.election.status;
   // `votedAt` (autodeclarado, granularidad de día) también cuenta: otro navegador no ofrece votar de nuevo.
   if (local.receipt || invite.voter.votedAt) return "voted";
-  // D-23, modo continuo: inscripción y votación a la vez. Inscrito → boleta (o el aviso de K) de inmediato.
+  // D-22, modo continuo: inscripción y votación a la vez. Inscrito → boleta (o el aviso de K) de inmediato.
   const continuousOpen = phase === "open" && invite.election.votingMode === "continuous";
   if (phase === "registration" || continuousOpen) {
     // D-21: coincidencia facial con credencial propia → el organizador revisa el caso.

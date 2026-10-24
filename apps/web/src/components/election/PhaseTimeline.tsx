@@ -8,7 +8,7 @@ import type { ElectionStatus as ElectionPhase } from "@quorum/contracts";
  * Texto siempre visible (no sólo color); `aria-current="step"` en la fase actual; `failed` se marca en rojo con texto.
  */
 export function PhaseTimeline({ phase, className, continuous = false }: { phase: ElectionPhase; className?: string; continuous?: boolean }) {
-  // D-23, modo continuo: no hay fase de inscripción aparte; se inscriben y votan a la vez.
+  // D-22, modo continuo: no hay fase de inscripción aparte; se inscriben y votan a la vez.
   const line = continuous ? PHASE_LINE.filter((p) => p.id !== "registration").map((p) => (p.id === "open" ? { ...p, label: "Inscripción y votación", hint: "Se inscriben y votan en el momento" } : p)) : PHASE_LINE;
   const current = continuous ? (phase === "draft" ? -1 : phaseIndex(phase) - 1) : phaseIndex(phase);
   const failed = phase === "failed";

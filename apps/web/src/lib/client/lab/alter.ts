@@ -56,7 +56,7 @@ export function isLabPackage(v: unknown): v is LabPackage {
 /** Motivo por el que una alteración no aplica a este paquete, o null si aplica. */
 export function unavailableReason(pkg: unknown, id: AlterationId): string | null {
   if (!isLabPackage(pkg)) return "El paquete no tiene el formato semaphore-ledger v1.";
-  // D-23: los paquetes en modo continuo intercalan inscripciones (member_added) y boletas; las recetas del laboratorio
+  // D-22: los paquetes en modo continuo intercalan inscripciones (member_added) y boletas; las recetas del laboratorio
   // están escritas para el formato con fases. Se verifican igual en el centro de transparencia.
   if ((pkg.manifest as { enrollment?: unknown }).enrollment) return "El laboratorio trabaja con paquetes con hora de inicio; este es de una votación al instante.";
   const spec = alterationById(id);
