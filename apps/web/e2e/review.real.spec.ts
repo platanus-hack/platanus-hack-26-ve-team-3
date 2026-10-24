@@ -32,6 +32,7 @@ test("gemelos con credenciales distintas: el segundo queda en revisión → el o
         { id: "a", label: "Demo A" },
         { id: "b", label: "Demo B" },
       ],
+      votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
       startsAt: new Date(now - 60_000).toISOString(),
       endsAt: new Date(now + 3_600_000).toISOString(),
       eligibility: { method: "event-badge", badgeCheck: "list", badgeAllowlist: [...USERS] },

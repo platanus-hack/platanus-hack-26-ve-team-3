@@ -3,6 +3,7 @@
  * crear → publicar (registration) → censo → rostro (dedupe 1:N) → wallet (EIP-712 FaceBinding) → identidad
  * → open (groupRoot) → voto {proof} → ledger/recibo → close (paquete + verifyPackage real) → draw → audit/verify.
  */
+import type { BallotEntry } from "@quorum/protocol-adapter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { FaceBindingTypes } from "@quorum/contracts";
@@ -65,6 +66,7 @@ function samanes() {
       { id: "p-05", label: "Techo del salón de fiestas", amount: 3000 },
       { id: "p-06", label: "Pintura de la fachada", amount: 2200 },
     ],
+    votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
     startsAt: new Date(now - 60_000).toISOString(),
     endsAt: new Date(now + 3_600_000).toISOString(),
   };
@@ -590,7 +592,7 @@ describe("cierre: ancla y fallos", () => {
     await openIt(org);
     await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, v.identity.privateKey, 1) } });
     const eng = await store.getEngine(org.id);
-    eng!.ledger!.entries[0].proof.message = "0"; // el organizador "corrige" el voto en su base
+    (eng!.ledger!.entries[0] as BallotEntry).proof.message = "0"; // el organizador "corrige" el voto en su base
     await store.putEngine(eng!);
     const closed = await call(close, { params: { id: org.id }, headers: org.auth });
     expect(closed.json.status).toBe("failed");

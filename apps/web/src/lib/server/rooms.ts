@@ -10,7 +10,7 @@
  */
 import { randomInt } from "node:crypto";
 import { Election as ElectionSchema, type Election, type OpenRoomInput, type RoomStatus, type ScheduleInput, type Voter } from "@quorum/contracts";
-import { inviteUrlFor, requireElection } from "./elections";
+import { enrollmentOpen, inviteUrlFor, isContinuous, requireElection } from "./elections";
 import { env } from "./env";
 import { HttpError } from "./errors";
 import { withLock } from "./lock";
@@ -41,7 +41,7 @@ type CloseReason = RoomStatus["closedReason"];
 /** Razón por la que la sala NO admite entradas ahora mismo (null = abierta). */
 function closedReasonOf(room: Room, election: Election, nowMs = Date.now()): CloseReason {
   if (room.closedReason) return room.closedReason;
-  if (election.status !== "registration") return "election-opened";
+  if (!enrollmentOpen(election)) return isContinuous(election) ? "election-closed" : "election-opened";
   if (Date.parse(room.expiresAt) <= nowMs) return "expired";
   return null;
 }
@@ -89,7 +89,7 @@ export async function openRoom(electionId: string, input: OpenRoomInput): Promis
   return withLock(`engine:${electionId}`, () => withLock(`room:${electionId}`, async () => {
     const store = await getStore();
     const e = await requireElection(electionId);
-    if (e.status !== "registration") throw new HttpError("closed", e.status === "draft" ? "Primero abre la inscripción; después puedes abrir la sala y proyectar el QR." : "La sala solo existe durante la inscripción: la votación ya se abrió o ya terminó.", 409);
+    if (!enrollmentOpen(e)) throw new HttpError("closed", e.status === "draft" ? "Primero abre la inscripción; después puedes abrir la sala y proyectar el QR." : isContinuous(e) ? "La votación ya terminó: la sala no se puede abrir." : "La sala solo existe durante la inscripción: la votación ya se abrió o ya terminó.", 409);
     const taken = await seatsTaken(electionId);
     if (input.maxSeats < taken) throw new HttpError("invalid_input", `maxSeats (${input.maxSeats}) es menor que los asientos ya ocupados (${taken})`);
     const now = Date.now();
@@ -108,7 +108,9 @@ export async function openRoom(electionId: string, input: OpenRoomInput): Promis
     // Inicio programado: explícito (ISO o relativo), null = a mano; ausente = el cierre de la sala, salvo que el
     // organizador ya hubiera fijado una hora propia (distinta del cierre de la sala vigente), que se respeta.
     let votingStartsAt: string | null;
-    if (input.votingStartsInSec !== undefined) votingStartsAt = validStart(now + input.votingStartsInSec * 1000, now);
+    // D-23: en modo continuo ya se está votando; no hay hora de inicio que programar.
+    if (isContinuous(e)) votingStartsAt = e.votingStartsAt ?? null;
+    else if (input.votingStartsInSec !== undefined) votingStartsAt = validStart(now + input.votingStartsInSec * 1000, now);
     else if (input.votingStartsAt !== undefined) votingStartsAt = input.votingStartsAt === null ? null : validStart(Date.parse(input.votingStartsAt), now);
     else {
       const prev = e.votingStartsAt ?? null;
@@ -151,7 +153,7 @@ export async function setSchedule(electionId: string, input: ScheduleInput) {
 }
 
 /** DELETE /api/elections/:id/room — cierra la sala (idempotente). Los votantes ya creados siguen en el censo. */
-export async function closeRoom(electionId: string, reason: "manual" | "election-opened" = "manual"): Promise<RoomStatus> {
+export async function closeRoom(electionId: string, reason: "manual" | "election-opened" | "election-closed" = "manual"): Promise<RoomStatus> {
   return withLock(`room:${electionId}`, async () => {
     const store = await getStore();
     const e = await requireElection(electionId);
@@ -198,6 +200,7 @@ const CLOSED_MESSAGE: Record<NonNullable<CloseReason>, string> = {
   manual: "La sala está cerrada",
   expired: "La sala expiró",
   "election-opened": "La votación ya comenzó: la inscripción está cerrada",
+  "election-closed": "La votación terminó: la inscripción está cerrada",
 };
 
 /**
@@ -244,11 +247,11 @@ export async function joinRoom(rawCode: string, input: { displayName: string }, 
  * Al congelar el padrón (`open`): cierra la sala y fija la política del censo para el paquete de auditoría.
  * Devuelve `null` si la elección nunca tuvo sala (censo solo por invitación).
  */
-export async function freezeRoomPolicy(electionId: string): Promise<RollPolicy | null> {
+export async function freezeRoomPolicy(electionId: string, reason: "election-opened" | "election-closed" = "election-opened"): Promise<RollPolicy | null> {
   const store = await getStore();
   const room = await store.getLatestRoom(electionId);
   if (!room) return null;
-  if (!room.closedReason) await store.putRoom({ ...room, closedAt: new Date().toISOString(), closedReason: "election-opened" });
+  if (!room.closedReason) await store.putRoom({ ...room, closedAt: new Date().toISOString(), closedReason: reason });
   const roomVoters = (await store.listVoters(electionId)).filter((v) => v.source === "room" || v.source === "badge");
   const e = await store.getElection(electionId);
   if (e?.eligibility?.method === "event-badge") {

@@ -3,8 +3,8 @@
  * resumen de inscritos y agregados. El motor (padrón, ledger, cierre, sorteo) vive en `engine.ts`.
  * Sin PII en nada que salga hacia afuera.
  */
-import { Aggregates, Election, Voter, VoterSummary, type CreateElectionInput } from "@quorum/contracts";
-import { manifestHash, MERKLE_TREE_DEPTH, type AnchorPolicy, type DrawRule, type ElectionManifest } from "@quorum/protocol-adapter";
+import { Aggregates, DEFAULT_MIN_ANONYMITY_SET, Election, Voter, VoterSummary, type CreateElectionInput } from "@quorum/contracts";
+import { ballotEntries, createContinuousLedger, DEFAULT_ROOT_WINDOW, manifestHash, MERKLE_TREE_DEPTH, type AnchorPolicy, type DrawRule, type ElectionManifest, type EnrollmentPolicy } from "@quorum/protocol-adapter";
 import { getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
@@ -20,6 +20,22 @@ export const APP_VERSION = "0.2.0";
 export const ENGINE = { protocol: "semaphore-ledger" as const, version: "protocol-adapter 0.1.0 / semaphore 4.14.5" };
 /** Etiqueta honesta del manifiesto: la demo corre en testnet con datos ficticios. */
 export const MANIFEST_LABEL = "simulación";
+
+/** D-23: ¿modo continuo (se inscriben y votan a la vez)? Ausente = con fases (datos anteriores). */
+export function isContinuous(e: Pick<Election, "votingMode">): boolean {
+  return e.votingMode === "continuous";
+}
+
+/** ¿Se aceptan inscripciones (rostro, wallet, identidad, sala) ahora? Con fases: solo `registration`; continuo: también `open`. */
+export function enrollmentOpen(e: Pick<Election, "status" | "votingMode">): boolean {
+  return e.status === "registration" || (isContinuous(e) && e.status === "open");
+}
+
+/** Política del modo continuo que va al manifiesto (K y ventana de raíces). */
+export function enrollmentOf(e: Pick<Election, "votingMode" | "minAnonymitySet">): EnrollmentPolicy | undefined {
+  if (!isContinuous(e)) return undefined;
+  return { mode: "continuous", minAnonymitySet: e.minAnonymitySet ?? DEFAULT_MIN_ANONYMITY_SET, rootWindow: DEFAULT_ROOT_WINDOW };
+}
 
 export async function requireElection(id: string): Promise<Election> {
   const store = await getStore();
@@ -57,6 +73,8 @@ export async function createElection(input: CreateElectionInput, opts: { id?: st
   const ids = new Set(input.options.map((o) => o.id));
   if (ids.size !== input.options.length) throw new HttpError("invalid_input", "Ids de opciones repetidos");
   validateDrawConfig(input);
+  // D-23: el modo continuo es el predeterminado para votaciones nuevas.
+  const votingMode = input.votingMode ?? "continuous";
   const election = Election.parse({
     id: opts.id ?? randomId("el"),
     title: input.title,
@@ -77,6 +95,8 @@ export async function createElection(input: CreateElectionInput, opts: { id?: st
     optionValues: input.optionValues ?? null,
     registryAddress: env.registryAddress ?? null,
     votingStartsAt: null,
+    votingMode,
+    ...(votingMode === "continuous" ? { minAnonymitySet: input.minAnonymitySet ?? DEFAULT_MIN_ANONYMITY_SET } : {}),
   });
   // D-19: método de elegibilidad de la sala (la lista de usuarios se guarda solo como HMAC, aparte).
   if (input.eligibility) election.eligibility = await applyEligibility(election.id, input.eligibility);
@@ -112,6 +132,7 @@ export function anchorPolicyOf(e: Election): AnchorPolicy | undefined {
 export function manifestOf(e: Election): ElectionManifest {
   const drawRule = drawRuleOf(e);
   const anchorPolicy = anchorPolicyOf(e);
+  const enrollment = enrollmentOf(e);
   return {
     electionId: e.id,
     title: e.title,
@@ -124,23 +145,31 @@ export function manifestOf(e: Election): ElectionManifest {
     label: MANIFEST_LABEL,
     ...(drawRule ? { drawRule } : {}),
     ...(anchorPolicy ? { anchorPolicy } : {}),
+    ...(enrollment ? { enrollment } : {}),
   };
 }
 
-/** `draft → registration`: fija manifiesto y layout; abre la inscripción (rostro + wallet + identidad). */
-export async function publishElection(id: string): Promise<Election> {
+/**
+ * Con fases: `draft → registration` (fija manifiesto y layout; abre la inscripción: rostro + wallet + identidad).
+ * Continuo (D-23): `draft → open` directamente: inscripción y votación a la vez; el ledger nace vacío y crece con
+ * cada inscripción (`member_added`).
+ */
+export async function publishElection(id: string, opts: { now?: () => Date } = {}): Promise<Election> {
   const store = await getStore();
   const e = await requireElection(id);
   if (e.status !== "draft") throw new HttpError("closed", `La elección ya está en estado ${e.status}`, 409);
   const manifest = manifestOf(e);
   const { layout } = await generateLayout(layoutHints(e));
-  const published: Election = { ...e, status: "registration", manifestHash: manifestHash(manifest), layout };
+  const continuous = manifest.enrollment;
+  const published: Election = continuous
+    ? { ...e, status: "open", manifestHash: manifestHash(manifest), layout, votingStartsAt: (opts.now?.() ?? new Date()).toISOString() }
+    : { ...e, status: "registration", manifestHash: manifestHash(manifest), layout };
   await store.putEngine({
     electionId: id,
     manifest,
     roll: [],
     commitments: [],
-    ledger: null,
+    ledger: continuous ? createContinuousLedger(id, { minAnonymitySet: continuous.minAnonymitySet, rootWindow: continuous.rootWindow }) : null,
     receipts: {},
     tally: null,
     packageJson: null,
@@ -162,9 +191,9 @@ export const AddVotersInput = z.object({
     .max(500),
 });
 
-/** Fases en las que se admiten nuevos votantes/invitaciones: antes de congelar el padrón. */
-export function acceptsVoters(status: Election["status"]): boolean {
-  return status === "draft" || status === "registration";
+/** Fases en las que se admiten nuevos votantes/invitaciones: antes de congelar el padrón (continuo: también mientras se vota). */
+export function acceptsVoters(e: Pick<Election, "status" | "votingMode">): boolean {
+  return e.status === "draft" || enrollmentOpen(e);
 }
 
 export function inviteUrlFor(token: string): string {
@@ -174,7 +203,7 @@ export function inviteUrlFor(token: string): string {
 export async function addVoters(electionId: string, input: z.infer<typeof AddVotersInput>) {
   const store = await getStore();
   const e = await requireElection(electionId);
-  if (!acceptsVoters(e.status)) throw new HttpError("closed", "El padrón ya está congelado", 409);
+  if (!acceptsVoters(e)) throw new HttpError("closed", "El padrón ya está congelado", 409);
   const created: Voter[] = [];
   for (const v of input.voters) {
     const voter: Voter = {
@@ -251,7 +280,7 @@ export async function listVoterSummaries(electionId: string) {
 // ---------------------------------------------------------------------------
 export async function computeAggregates(e: Election): Promise<Aggregates> {
   const engine = await (await getStore()).getEngine(e.id);
-  const entries = engine?.ledger?.entries ?? [];
+  const entries = engine?.ledger ? ballotEntries(engine.ledger) : [];
   const total = entries.length;
   const eligible = engine ? (engine.commitments.length || engine.roll.length) : 0;
   const counts = new Array<number>(e.options.length).fill(0);

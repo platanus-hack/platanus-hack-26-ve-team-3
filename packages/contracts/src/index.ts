@@ -11,6 +11,17 @@ export type ElectionKind = z.infer<typeof ElectionKind>;
  */
 export const ElectionStatus = z.enum(["draft", "registration", "open", "closed", "tallying", "auditable", "drawn", "failed"]);
 export type ElectionStatus = z.infer<typeof ElectionStatus>;
+/**
+ * D-23: cuándo se vota. `continuous` (por defecto en votaciones nuevas): se inscriben y votan en el mismo momento; el
+ * grupo crece mientras se vota. `phased` ("Con hora de inicio"): primero se inscriben todos y el padrón se congela al abrir.
+ * Ausente en datos guardados = `phased` (compatibilidad).
+ */
+export const VotingMode = z.enum(["continuous", "phased"]);
+export type VotingMode = z.infer<typeof VotingMode>;
+/** K por defecto: no se aceptan votos mientras el grupo tenga menos miembros. */
+export const DEFAULT_MIN_ANONYMITY_SET = 5;
+export const MinAnonymitySet = z.number().int().min(2).max(100);
+
 export const Protocol = z.enum(["semaphore-ledger", "davinci", "helios", "integrity-demo"]);
 
 export const Option = z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(120) });
@@ -126,6 +137,10 @@ export const Election = z.object({
    * fija a la hora real de apertura. No entra en el manifiesto.
    */
   votingStartsAt: z.string().datetime().nullable().optional(),
+  /** D-23: modo de votación. Ausente = `phased` (elecciones creadas antes del modo continuo). */
+  votingMode: VotingMode.optional(),
+  /** D-23 (solo continuo): K, mínimo de inscritos para aceptar votos. Entra en el manifiesto (`enrollment`). */
+  minAnonymitySet: MinAnonymitySet.optional(),
 });
 export type Election = z.infer<typeof Election>;
 
@@ -141,6 +156,9 @@ export const CreateElectionInput = Election.pick({ title: true, description: tru
   winnersCount: z.number().int().min(1).optional(),
   optionValues: z.array(z.number().int().min(0)).optional(),
   eligibility: EligibilityInput.optional(),
+  /** D-23: ausente = `continuous` (el modo por defecto para votaciones nuevas). */
+  votingMode: VotingMode.optional(),
+  minAnonymitySet: MinAnonymitySet.optional(),
 });
 export type CreateElectionInput = z.infer<typeof CreateElectionInput>;
 
@@ -341,7 +359,7 @@ export const AuditResult = z.object({
 });
 export type AuditResult = z.infer<typeof AuditResult>;
 
-export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity", "onchain_not_supported", "room_full", "room_closed", "badge_invalid", "badge_unknown", "badge_used"]) });
+export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity", "onchain_not_supported", "room_full", "room_closed", "badge_invalid", "badge_unknown", "badge_used", "stale_root", "anonymity_pending"]) });
 
 // ---------------------------------------------------------------------------
 // Respuestas HTTP del Contrato v1 tal como las implementa el backend (apps/web/src/lib/server/engine.ts).
@@ -350,7 +368,7 @@ export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_inp
 
 /** GET /api/invite/:token. Nunca el teléfono. */
 export const InviteResponse = z.object({
-  election: Election.pick({ id: true, title: true, kind: true, options: true, status: true, endsAt: true, votingStartsAt: true }),
+  election: Election.pick({ id: true, title: true, kind: true, options: true, status: true, endsAt: true, votingStartsAt: true, votingMode: true, minAnonymitySet: true }),
   serverNow: ServerNow.optional(),
   voter: z.object({
     id: z.string(),
@@ -374,7 +392,11 @@ export type VotersListResponse = z.infer<typeof VotersListResponse>;
 /** POST /api/voters/:id/voted (autodeclaración, separada del voto). */
 export const MarkVotedResult = z.object({ ok: z.literal(true), votedAt: z.string() });
 
-/** GET /api/elections/:id/roll. `groupRoot`/`scope` son null hasta `POST /open`. */
+/**
+ * GET /api/elections/:id/roll (y su alias GET /group). Con fases: `groupRoot`/`scope` son null hasta `POST /open`.
+ * Continuo (D-23): el grupo crece mientras se vota; `groupRoot` es la raíz VIGENTE, `size` los miembros y
+ * `minAnonymitySet`/`rootWindow` la regla de validez (K y ventana de raíces).
+ */
 export const RollResponse = z.object({
   electionId: z.string(),
   status: ElectionStatus,
@@ -383,11 +405,21 @@ export const RollResponse = z.object({
   scope: z.string().nullable(),
   merkleTreeDepth: z.number().int(),
   commitments: z.array(z.string()),
+  votingMode: VotingMode.optional(),
+  size: z.number().int().min(0).optional(),
+  minAnonymitySet: z.number().int().optional(),
+  rootWindow: z.number().int().optional(),
 });
 export type RollResponse = z.infer<typeof RollResponse>;
 
-/** Entrada del ledger público (desde `closed`; durante `open` no se publican entradas, hallazgo C3). */
-export const LedgerEntry = z.object({ idx: z.number().int().min(0), prevHash: z.string(), hash: z.string(), proof: SemaphoreProofSchema });
+/**
+ * Entrada del ledger público (desde `closed`; durante `open` no se publican entradas, hallazgo C3).
+ * Con fases: boleta `{ idx, prevHash, hash, proof }`. Continuo (D-23): boleta con `kind:"ballot"` + `groupSize`, o
+ * inscripción `kind:"member_added"` `{ index, commitment, rootAfter }` (sin voterId).
+ */
+export const LedgerBallotEntry = z.object({ idx: z.number().int().min(0), prevHash: z.string(), hash: z.string(), proof: SemaphoreProofSchema, kind: z.literal("ballot").optional(), groupSize: z.number().int().optional() });
+export const LedgerMemberEntry = z.object({ idx: z.number().int().min(0), prevHash: z.string(), hash: z.string(), kind: z.literal("member_added"), member: z.object({ index: z.number().int().min(0), commitment: z.string(), rootAfter: z.string() }) });
+export const LedgerEntry = z.union([LedgerMemberEntry, LedgerBallotEntry]);
 export type LedgerEntry = z.infer<typeof LedgerEntry>;
 /** GET /api/elections/:id/ledger. */
 export const LedgerResponse = z.object({
@@ -440,7 +472,8 @@ export const OpenRoomInput = z
   .refine((v) => !(v.votingStartsAt !== undefined && v.votingStartsInSec !== undefined), "Usa votingStartsAt o votingStartsInSec, no ambos");
 export type OpenRoomInput = z.infer<typeof OpenRoomInput>;
 
-export const RoomCloseReason = z.enum(["manual", "expired", "election-opened"]);
+/** `election-closed` (D-23, continuo): la sala sigue abierta mientras se vota y se cierra con la votación. */
+export const RoomCloseReason = z.enum(["manual", "expired", "election-opened", "election-closed"]);
 
 /** GET /api/elections/:id/room (público) — contador del proyector. Con Bearer añade `roomCode` y `joinUrl`. */
 export const RoomStatus = z.object({

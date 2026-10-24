@@ -9,6 +9,7 @@
  *   AT-09  un tercero infla el censo / cierra la elección sin credenciales (AT-09(d) Kapso en units.test.ts)
  *   AT-10  privacidad de datos públicos y de la DB (public_data_privacy)
  */
+import type { BallotEntry } from "@quorum/protocol-adapter";
 import { beforeEach, describe, expect, it } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { FaceBindingTypes } from "@quorum/contracts";
@@ -59,6 +60,7 @@ function election() {
       { id: "p-02", label: "Jardín comunal" },
       { id: "p-03", label: "Bomba de agua" },
     ],
+    votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
     startsAt: new Date(now - 60_000).toISOString(),
     endsAt: new Date(now + 3_600_000).toISOString(),
   };
@@ -368,7 +370,7 @@ describe("AT-10 privacidad de datos públicos y de la DB (public_data_privacy)",
     expect(votedAts.every(Boolean)).toBe(true);
     expect(new Set(votedAts).size, "votedAt no debe ordenar a los votantes").toBe(1);
     const byTime = [...dbVoters].sort((x, y) => (x.votedAt! < y.votedAt! ? -1 : x.votedAt! > y.votedAt! ? 1 : 0));
-    const hits = byTime.filter((v, idx) => Number(engine!.ledger!.entries[idx].proof.message) === choiceOf.get(v.id)).length;
+    const hits = byTime.filter((v, idx) => Number((engine!.ledger!.entries[idx] as BallotEntry).proof.message) === choiceOf.get(v.id)).length;
     expect(hits, "reconstrucción votante → opción desde la DB").toBeLessThan(dbVoters.length);
     // las boletas y los recibos no guardan nada del votante; el body extra de /vote no se guardó
     const engineJson = JSON.stringify(engine);
@@ -382,7 +384,7 @@ describe("AT-10 privacidad de datos públicos y de la DB (public_data_privacy)",
     // Cierre: nada de PII en ninguna salida pública (paquete, auditoría, ledger, tally, sorteo, elección, recibo).
     expect((await call(close, { params: { id: org.id }, headers: org.auth })).json.status).toBe("auditable");
     expect((await call(draw, { params: { id: org.id }, headers: org.auth })).status).toBe(200);
-    const nullifier = engine!.ledger!.entries[0].proof.nullifier;
+    const nullifier = (engine!.ledger!.entries[0] as BallotEntry).proof.nullifier;
     const outputs = [
       (await call(artifacts, { params: { id: org.id } })).json,
       (await call(audit, { params: { id: org.id } })).json,

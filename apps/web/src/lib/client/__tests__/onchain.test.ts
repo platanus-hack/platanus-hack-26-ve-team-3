@@ -15,7 +15,7 @@ describe("nullifier y ledger público (formas reales del backend, @quorum/contra
     const pre = LedgerResponse.parse({ electionId: "e", status: "registration", groupRoot: null, scope: null, genesisHash: null, finalHash: null, count: 0, proofsPublished: false, entries: [] });
     expect(pre.entries).toEqual([]);
     const closed = LedgerResponse.parse({ electionId: "e", status: "auditable", groupRoot: "1", scope: "2", genesisHash: "0x00", finalHash: "0xaa", count: 1, proofsPublished: true, entries: [{ idx: 0, prevHash: "0x00", hash: "0xaa", proof: proof("42") }] });
-    const entries = closed.entries.map((x) => ({ idx: x.idx, hash: x.hash, nullifier: x.proof.nullifier }));
+    const entries = closed.entries.flatMap((x) => ("proof" in x ? [{ idx: x.idx, hash: x.hash, nullifier: x.proof.nullifier }] : []));
     expect(findNullifier(entries, "042")?.idx).toBe(0);
     expect(findNullifier(entries, "43")).toBeNull();
   });

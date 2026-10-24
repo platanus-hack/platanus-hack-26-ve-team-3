@@ -6,11 +6,11 @@
  * Para rehacer hashes usamos las mismas herramientas que tendría el organizador/atacante
  * (`@quorum/protocol-adapter`); no se implementa criptografía aquí.
  */
-import { encodeAnchorCalldata, groupRoot as computeGroupRoot, hashCanonical, rechain, runDraw, tally as recount, type DrawRule, type LedgerEntry } from "@quorum/protocol-adapter";
+import { encodeAnchorCalldata, groupRoot as computeGroupRoot, hashCanonical, rechain, runDraw, tally as recount, type BallotEntry, type DrawRule } from "@quorum/protocol-adapter";
 import { alterationById, type AlterationId } from "./catalog";
 
 type Hex = `0x${string}`;
-type Proof = LedgerEntry["proof"];
+type Proof = BallotEntry["proof"];
 type Entry = { idx: number; prevHash: Hex; hash: Hex; proof: Proof };
 type Tally = { counts: number[]; invalid: number; total: number };
 type Draw = { seed: Hex; n: number; winners: string[]; method: string; finalHash: Hex };
@@ -56,6 +56,9 @@ export function isLabPackage(v: unknown): v is LabPackage {
 /** Motivo por el que una alteración no aplica a este paquete, o null si aplica. */
 export function unavailableReason(pkg: unknown, id: AlterationId): string | null {
   if (!isLabPackage(pkg)) return "El paquete no tiene el formato semaphore-ledger v1.";
+  // D-23: los paquetes en modo continuo intercalan inscripciones (member_added) y boletas; las recetas del laboratorio
+  // están escritas para el formato con fases. Se verifican igual en el centro de transparencia.
+  if ((pkg.manifest as { enrollment?: unknown }).enrollment) return "El laboratorio trabaja con paquetes con hora de inicio; este es de una votación al instante.";
   const spec = alterationById(id);
   if (spec?.needs === "draw" && !pkg.draw) return "Este paquete no trae sorteo (la elección aún no está en fase «sorteo realizado»).";
   if (spec?.needs === "draw" && id === "draw-winner") {

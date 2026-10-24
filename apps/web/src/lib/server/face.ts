@@ -14,7 +14,7 @@ import { canonicalJson, keyFromSecret, open, randomBytes32Hex, randomId, seal, s
 import { env, VOTE_NONCE_TTL_MS } from "./env";
 import { HttpError } from "./errors";
 import { withLock } from "./lock";
-import { requireVoter } from "./elections";
+import { enrollmentOpen, requireVoter } from "./elections";
 import { getStore, type VoteNonce } from "./store";
 
 /** D-21: textos para el votante (sin jerga técnica). */
@@ -93,7 +93,7 @@ export async function enrollFace(input: z.infer<typeof FaceEnrollInput>, opts: {
   const voter = await requireVoter(input.voterId);
   if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
   const election = await store.getElection(voter.electionId);
-  if (!election || election.status !== "registration") throw new HttpError("closed", "La elección no está en fase de inscripción");
+  if (!election || !enrollmentOpen(election)) throw new HttpError("closed", "La elección no está en fase de inscripción");
   // Serializado por elección: el dedupe 1:N no puede tener carreras.
   return withLock(`enroll:${voter.electionId}`, async () => {
     const review = await store.getReviewByVoter(voter.id);

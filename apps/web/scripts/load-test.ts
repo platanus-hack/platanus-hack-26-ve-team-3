@@ -176,6 +176,7 @@ async function main() {
       optionValues: [1, 2, 3],
       winnersCountFromResult: true,
       candidates: Array.from({ length: 6 }, (_, i) => ({ id: `p-0${i + 1}`, label: `Proyecto simulado ${i + 1}`, amount: 1000 + i * 100 })),
+      votingMode: "phased", // con hora de inicio (el modo continuo es el predeterminado)
       startsAt: new Date(now - 5 * 60_000).toISOString(),
       endsAt: new Date(now + 3 * 3_600_000).toISOString(),
     }),

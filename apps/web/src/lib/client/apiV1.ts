@@ -73,7 +73,8 @@ export const apiV1 = {
   getInclusion: (id: string, nullifier: string) => request(`/api/elections/${e(id)}/receipt/${e(nullifier)}`, undefined, Receipt),
   getLedger: async (id: string): Promise<PublicLedger> => {
     const l = await request(`/api/elections/${e(id)}/ledger`, undefined, LedgerResponse);
-    return { ...l, entries: l.entries.map((x) => ({ idx: x.idx, hash: x.hash, nullifier: x.proof.nullifier })) };
+    // D-23: en modo continuo el ledger también trae inscripciones (member_added); aquí solo interesan las boletas.
+    return { ...l, entries: l.entries.flatMap((x) => ("proof" in x ? [{ idx: x.idx, hash: x.hash, nullifier: x.proof.nullifier }] : [])) };
   },
 
   /* Auditoría */
