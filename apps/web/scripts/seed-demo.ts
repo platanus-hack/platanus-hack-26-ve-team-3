@@ -6,6 +6,8 @@
  *   pnpm --filter @quorum/web seed:demo -- --simulate 6      # además inscribe 6 vecinos SIMULADOS (rostro sintético, wallet eoa-demo)
  *   pnpm --filter @quorum/web seed:demo -- --simulate 6 --full   # … y abre, vota (pruebas Semaphore reales), cierra, verifica y sortea
  *   … --anchor                                              # permite anclar en Base Sepolia si hay ORGANIZER_PRIVATE_KEY + BASE_SEPOLIA_RPC
+ *   pnpm --filter @quorum/web seed:demo -- --reset --room    # además abre una SALA ABIERTA de prueba (60 asientos, 15 min)
+ *   … --room --seats 30 --minutes 10                        # tope y expiración de la sala
  *
  * Todo es simulación: nombres "Vecino N (simulado)", sin teléfonos, sin WhatsApp, descriptores faciales sintéticos.
  * Por defecto NO ancla aunque existan credenciales (enviar una tx es una acción hacia afuera: requiere `--anchor`).
@@ -83,6 +85,17 @@ async function main() {
   const organizerToken = await issueOrganizerToken(election.id);
   const published = await publishElection(election.id);
   console.log(`✔ ${published.id} · estado ${published.status} · manifestHash ${published.manifestHash}`);
+
+  if (flag("room")) {
+    if (flag("full")) throw new Error("--room no tiene sentido con --full: abrir la votación cierra la sala");
+    const { openRoom } = await import("../src/lib/server/rooms");
+    const maxSeats = Number(opt("seats", "60"));
+    const expiresInMin = Number(opt("minutes", "15"));
+    const { status } = await openRoom(election.id, { maxSeats, expiresInMin });
+    console.log(`✔ sala abierta ${status.roomCode} · ${status.maxSeats} asientos · expira ${status.expiresAt}`);
+    console.log(`  QR / enlace para el público: ${status.joinUrl}`);
+    console.log(`  contador del proyector: GET ${env.appUrl}/api/elections/${election.id}/room`);
+  }
 
   const simulate = Number(opt("simulate", "0"));
   const identities: { privateKey: string }[] = [];
