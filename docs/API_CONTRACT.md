@@ -58,3 +58,39 @@ En `close`, antes de construir el paquete final: `anchorOnBaseSepolia({ finalHas
 
 ### Variables de entorno nuevas
 `BASE_SEPOLIA_RPC` (ya listada), `ORGANIZER_PRIVATE_KEY` (solo servidor, nunca en git), `QUORUM_EAS_ENABLED=false`, `QUORUM_EAS_SCHEMA_UID`.
+
+# Contrato v1 (fase 2, H+4) — inscripción, voto Semaphore, verificación en la app, sorteo
+
+Decisiones D-09..D-12 en `docs/DECISIONS.md`. Cambios sobre v0:
+
+## Estados de la elección
+`draft → registration → open → closed → tallying → auditable → drawn` (`ElectionStatus` en contracts). `publish` pasa a `registration`; nuevo `POST /api/elections/:id/open` congela el padrón (`groupRoot` de los `commitment` inscritos) y pasa a `open`; `close` → `tallying` → `auditable` (genera paquete y corre `verifyPackage`); `POST /api/elections/:id/draw` → `drawn`.
+
+## Elección
+- `Election` gana: `phase`/`status` nuevos, `groupRoot: string|null`, `winnersCountFromResult: boolean` (true en la demo: la opción ganadora es un número 1..5), `candidates: {id, label, amount?}[]` (proyectos postulados al sorteo), `draw: {seed, winners: string[], method: "keccak256(finalHash)|fisher-yates"}|null`, `anchor: {chainId, txHash}|null`, `registryAddress: string|null`.
+- `GET /api/elections/:id/voters` → `{ voters: [{ id, displayName, state: "invited"|"registered"|"voted", walletAddress }] }` (sin teléfono).
+
+## Inscripción (registration)
+1. `GET /api/invite/:token` igual.
+2. `POST /api/face/enroll` `{voterId, inviteToken, descriptor, consent}` → **dedupe 1:N**: compara contra todos los descriptores inscritos en la misma elección; si similitud ≥ `FACE_DEDUPE_THRESHOLD` (default 0.75) responde `409 {code:"duplicate_identity"}`. Si pasa: guarda cifrado y devuelve `{ ok, faceBindingHash, voteNonce }` donde `faceBindingHash = keccak256(electionId | voterId | sha256(descriptorCifrado))`.
+3. `POST /api/voters/:id/wallet` `{ inviteToken, walletAddress, kind: "kernel"|"eoa-demo", bindingSignature }` → la wallet firma EIP-712 `FaceBinding{ electionId, voterId, faceBindingHash, wallet }` (tipos en contracts `FaceBindingTypes`); servidor verifica (ERC-1271/6492 por RPC si `kind=kernel`), guarda y marca `registered`.
+4. `POST /api/voters/:id/identity` `{ inviteToken, commitment }` → guarda el `commitment` Semaphore (identidad generada en el navegador y guardada en `localStorage` cifrada con la wallet). Responde `{ ok, registeredCount }`.
+
+## Voto (open)
+`POST /api/elections/:id/vote` `{ proof: SemaphoreProof, onchain?: { txHash } }` → servidor valida con `appendBallot` del adaptador (raíz, nullifier, prueba), opcionalmente verifica `txHash` en Base Sepolia (evento `Cast(electionId, commitment)` del contrato `QuorumRegistry`), devuelve `Receipt { inclusionId, nullifier, index, txHash? , state: "incluido" }`. Ya no existe `plainChoice`. El `message` de la prueba es el índice de opción.
+`GET /api/elections/:id/ledger` → ledger público (sin PII) para que el votante compruebe su `nullifier` desde la app.
+
+## Cierre y verificación en la app
+- `POST /close` → genera paquete (`buildAuditPackage`), ancla si hay `ORGANIZER_PRIVATE_KEY`+`BASE_SEPOLIA_RPC`, guarda `anchor`, corre `verifyPackage` (de `@quorum/verifier`) y guarda `AuditResult`; status `auditable`.
+- `GET /api/elections/:id/audit` → `AuditResult` guardado + `packageDigest`. `POST /api/audit/verify` `{package}` → `verifyPackage` real (el usuario puede re-verificar desde el navegador con su copia).
+- UI `/e/[id]`: botón **Verificar ahora** que descarga el paquete y ejecuta `verifyPackage` **en el navegador** (bundle del verificador) y muestra checks; comprobar "mi voto está": input de `nullifier` o lectura de `localStorage`.
+
+## Sorteo verificable (drawn)
+- `POST /api/elections/:id/draw` (organizador, solo en `auditable`): `N = opción ganadora` (si `winnersCountFromResult`) o `winnersCount` fijo; `seed = keccak256(finalHash)`; selección determinista Fisher-Yates sobre `candidates` ordenados por `id` con PRNG `keccak256(seed, i)`; guarda `draw`. Implementado en `packages/protocol-adapter/src/draw.ts` (`drawWinners(candidates, n, finalHash)`) y verificado por `apps/verifier` como check `draw_matches` cuando el paquete trae `draw`.
+- `GET /api/elections/:id/draw` → `{ seed, n, winners, candidates, finalHash }`; UI muestra la animación del sorteo y el botón "Recomputar sorteo" (en navegador).
+
+## Smart wallet gasless (cliente)
+`packages/wallet` (`@quorum/wallet`): `createKernelWallet({ projectId })` con `@zerodev/sdk` + `@zerodev/ecdsa-validator`, signer = clave viem local (`localStorage`, etiquetado demo), bundler/paymaster `https://rpc.zerodev.app/api/v3/<PROJECT_ID>/chain/84532`; `signTypedData`, `sendSponsored({to, data})`. Si falta `NEXT_PUBLIC_ZERODEV_PROJECT_ID` → `eoa-demo` (viem) con etiqueta visible. Contrato `contracts/QuorumRegistry.sol` mínimo (`cast(bytes32 electionId, bytes32 commitment)` + evento) compilado con solc-js, deploy script con viem (`scripts/deploy-registry.ts`, requiere clave con ETH de faucet).
+
+## Env nuevas
+`NEXT_PUBLIC_ZERODEV_PROJECT_ID`, `NEXT_PUBLIC_REGISTRY_ADDRESS`, `ORGANIZER_PRIVATE_KEY`, `FACE_DEDUPE_THRESHOLD=0.75`, `NEXT_PUBLIC_DEMO_ELECTION_ID`.
