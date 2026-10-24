@@ -13,3 +13,11 @@
 ## 2026-10-24 — integración fase 2 (≈12:45 VET)
 - `integration/phase2` = motor + wallet + UI + QA adversarial + ancla + sala abierta. Verde: typecheck, lint, 272 tests, build, Playwright con mocks (20) y **E2E real sin mocks** (1). Evidencia: `docs/TEST_RESULTS.md` § "Integración fase 2 completa".
 - Decisión aplicada: "solo ancla on-chain" → `POST /vote` con `onchain` = 400 `onchain_not_supported`.
+
+## 2026-10-24 — fase 2 completa (≈13:15 VET)
+- `integration/phase2` = h3 + motor + wallet + UI + QA adversarial + ancla vía `QuorumRegistry` + sala abierta (backend y UI) + laboratorio del jurado + verificador con esquema estricto + docs de seguridad y demo.
+- Verde: typecheck, lint, **352 tests**, build, **52 Playwright** (smoke, phase2, lab, room) y **3 E2E reales** sin mocks (flujo de voto completo, sala abierta, peso por teléfono). Evidencia en `docs/TEST_RESULTS.md`.
+- Probado contra Base Sepolia: UserOp patrocinada por ZeroDev, firma FaceBinding de Kernel (ERC-6492) verificada por el servidor, ancla real `0x97911d4e…737371` verificada por el CLI; copia alterada → fallo detectado.
+- Seguridad: los 5 críticos y AT-01..AT-10 cubiertos con tests; límites en `docs/KNOWN_LIMITATIONS.md`.
+- Peso por teléfono: 14,89 MB (antes 17,49).
+- Pendiente: deploy (necesita base de datos compartida: hoy el store es JSON en disco), ensayo con teléfonos reales y cámara real, prueba de carga en el Wi-Fi del evento.
