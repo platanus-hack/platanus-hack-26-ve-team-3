@@ -14,6 +14,7 @@ import { cn } from "@/lib/client/cn";
 import { FIXTURE_PACKAGE_ID, FIXTURE_PACKAGE_URL } from "@/lib/client/fixtures";
 import { formatDateTime, formatInt, formatPercent, kindLabel } from "@/lib/client/format";
 import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
+import { basescanTxUrl } from "@/lib/client/room";
 import type { Aggregates as AggregatesV1, AuditResponse as StoredAudit, Election as ElectionV1 } from "@quorum/contracts";
 import { MyVoteCheck } from "./MyVoteCheck";
 import { PhaseTimeline } from "./PhaseTimeline";
@@ -254,7 +255,26 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
               </div>
               <div>
                 <dt className="text-muted-foreground">Ancla on-chain</dt>
-                <dd className="q-mono break-all">{election.anchor?.txHash ? `Base Sepolia · ${election.anchor.txHash}` : "Sin ancla publicada"}</dd>
+                <dd className="q-mono break-all" data-testid="anchor-tx">
+                  {election.anchor?.txHash ? (
+                    (() => {
+                      const url = basescanTxUrl(election.anchor.chainId, election.anchor.txHash);
+                      return url ? (
+                        <>
+                          Base Sepolia ·{" "}
+                          <a href={url} target="_blank" rel="noreferrer" className="underline underline-offset-4" data-testid="anchor-explorer-link">
+                            {election.anchor.txHash}
+                          </a>
+                          <span className="ml-2 font-sans text-small text-muted-foreground">(ver en el explorador de la red)</span>
+                        </>
+                      ) : (
+                        `Base Sepolia · ${election.anchor.txHash}`
+                      );
+                    })()
+                  ) : (
+                    "Sin ancla publicada"
+                  )}
+                </dd>
               </div>
             </dl>
           </CardContent>
