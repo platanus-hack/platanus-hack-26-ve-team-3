@@ -146,7 +146,7 @@ describe("/j en modo credencial", () => {
     const req = calls.find((c) => c.url.endsWith("/join-badge"));
     expect(req?.url).toBe("/api/rooms/ABC234/join-badge");
     expect(JSON.parse(String(req?.init?.body))).toEqual({ badgeUrl: BADGE });
-    expect(cam.stop).toHaveBeenCalled();
+    await waitFor(() => expect(cam.stop).toHaveBeenCalled());
     const stored = loadRoomJoin("ABC234");
     expect(stored?.inviteToken).toBe("tok-badge");
     expect(stored?.consentAt).toBeTruthy();

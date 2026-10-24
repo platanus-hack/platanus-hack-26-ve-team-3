@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     // Build propio del E2E real (playwright.real.config.ts).
     ".next-e2e-real/**",
+    ".next-e2e-badge/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

@@ -36,6 +36,9 @@ export default defineConfig({
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     { name: "mobile-360", use: { ...devices["Pixel 5"], viewport: { width: 360, height: 740 } } },
+    // D-19: medición en WebKit (motor de Safari en iPhone) a 360 px. Solo con QUORUM_E2E_WEBKIT=1.
+    // Sin service worker: en WebKit las peticiones que pasan por el SW no las intercepta `page.route` (los mocks fallarían).
+    ...(process.env.QUORUM_E2E_WEBKIT ? [{ name: "webkit-360", use: { ...devices["iPhone 13"], viewport: { width: 360, height: 740 }, serviceWorkers: "block" as const } }] : []),
   ],
   webServer: externalBaseURL
     ? undefined

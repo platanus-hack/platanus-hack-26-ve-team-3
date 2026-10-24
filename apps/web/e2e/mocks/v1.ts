@@ -72,6 +72,14 @@ export class MockV1 {
   /** Sala abierta (docs/API_CONTRACT.md § "Sala abierta"). `null` = nunca se abrió. */
   room: { code: string; open: boolean; seatsTaken: number; maxSeats: number; expiresAt: string; closedReason: null | "manual" | "expired" | "election-opened" } | null = null;
   joins: string[] = [];
+  /** D-19: método de elegibilidad (`null` = apodo libre, como antes). */
+  eligibility: { method: "open-alias" | "event-badge"; badgeCheck?: "list" | "live" | "none"; badgeUrlPrefix?: string; allowlistCount?: number } | null = null;
+  /** Usuarios que el mock reconoce como credenciales del evento (como la consulta en vivo) y los ya usados. */
+  badgeKnown = new Set<string>(["jgalvis414", "ana-hack", "beto-hack"]);
+  badgeUsed = new Set<string>();
+  badgeJoins: string[] = [];
+  eligibilityPuts: unknown[] = [];
+  createBodies: unknown[] = [];
   /** Respuesta de GET /audit (para el proyector); `null` → 404. */
   auditBody: unknown = null;
   anchorTx: string | null = null;
@@ -105,6 +113,7 @@ export class MockV1 {
       anchor: this.anchorTx ? { chainId: 84532, txHash: this.anchorTx } : null,
       registryAddress: null,
       layout: null,
+      ...(this.eligibility ? { eligibility: this.eligibility } : {}),
     };
   }
 
@@ -209,10 +218,34 @@ export class MockV1 {
         this.joins.push(String(body.displayName));
         return this.json(route, { electionId: E2E.electionId, voterId: E2E.voterId, displayName: body.displayName, inviteToken: E2E.token, inviteUrl: `${url.origin}/v/${E2E.token}` }, 201);
       }
-      return this.json(route, { electionId: E2E.electionId, title: E2E.title, ...rest });
+      if (p.endsWith("/join-badge") && m === "POST") {
+        if (!this.room.open) return this.json(route, { error: "La sala está cerrada", code: "room_closed" }, 410);
+        const prefix = this.eligibility?.badgeUrlPrefix ?? "https://hack.platan.us/26-ve/id/";
+        const raw = String(body.badgeUrl ?? "").trim();
+        const user = raw.startsWith(prefix) && /^[A-Za-z0-9-]{1,39}$/.test(raw.slice(prefix.length)) ? raw.slice(prefix.length).toLowerCase() : null;
+        if (!user) return this.json(route, { error: "Ese QR no es una credencial de Platanus Hack.", code: "badge_invalid" }, 400);
+        if (this.badgeUsed.has(user)) return this.json(route, { error: "Esta credencial ya se usó en esta votación.", code: "badge_used" }, 409);
+        if (!this.badgeKnown.has(user)) return this.json(route, { error: "No encontramos esta credencial en el evento.", code: "badge_unknown" }, 404);
+        if (this.room.seatsTaken >= this.room.maxSeats) return this.json(route, { error: `La sala está llena (${this.room.seatsTaken} de ${this.room.maxSeats})`, code: "room_full" }, 409);
+        this.badgeUsed.add(user);
+        this.room.seatsTaken += 1;
+        this.badgeJoins.push(user);
+        return this.json(route, { electionId: E2E.electionId, voterId: E2E.voterId, displayName: "Participante", inviteToken: E2E.token, inviteUrl: `${url.origin}/v/${E2E.token}` }, 201);
+      }
+      const elig = this.eligibility ? { eligibility: { method: this.eligibility.method, ...(this.eligibility.badgeUrlPrefix ? { badgeUrlPrefix: this.eligibility.badgeUrlPrefix } : {}) } } : {};
+      return this.json(route, { electionId: E2E.electionId, title: E2E.title, ...rest, ...elig });
     }
 
-    if (p === "/api/elections" && m === "POST") return this.json(route, { ...this.election(), status: "draft", organizerToken: E2E.orgToken }, 201);
+    if (p === "/api/elections" && m === "POST") {
+      this.createBodies.push(body);
+      return this.json(route, { ...this.election(), status: "draft", organizerToken: E2E.orgToken }, 201);
+    }
+    if (p === `${E}/eligibility` && m === "PUT") {
+      this.eligibilityPuts.push(body);
+      const b = body as { method: "open-alias" | "event-badge"; badgeCheck?: "list" | "live" | "none"; badgeUrlPrefix?: string; badgeAllowlist?: string[] };
+      this.eligibility = b.method === "event-badge" ? { method: b.method, badgeCheck: b.badgeCheck ?? "live", badgeUrlPrefix: b.badgeUrlPrefix, ...(b.badgeCheck === "list" ? { allowlistCount: b.badgeAllowlist?.length ?? 0 } : {}) } : { method: "open-alias" };
+      return this.json(route, this.election());
+    }
     if (p === E) return this.json(route, this.election());
     if (p === `${E}/tally`) return this.json(route, this.tally());
     if (p === `${E}/layout`) return this.json(route, { error: "sin layout", code: "not_found" }, 404);

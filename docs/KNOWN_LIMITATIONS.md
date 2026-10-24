@@ -54,6 +54,18 @@ En la demo cualquiera que escanee el QR (`/j/<roomCode>`) puede inscribirse con 
 | **Lo hace el servidor del organizador** | La deduplicación corre en el servidor de quien organiza la sala. El verificador público **no** puede comprobar que se aplicó: solo ve compromisos. |
 | **No apto fuera de la demo** | Para un condominio, una universidad o una cooperativa, el padrón debe salir de su registro de miembros (invitaciones nominales), no de una sala abierta. |
 
+## 3 ter. Credencial del evento (QR) + rostro (D-19)
+
+Con "¿Quién puede votar?" = **Credencial del evento**, la persona escanea el QR de su credencial de Platanus Hack (`https://hack.platan.us/26-ve/id/<usuario-github>`) y luego pasa por el rostro, que es obligatorio. Declaración honesta (va en el paquete de auditoría como `rollPolicy.note` y el verificador la muestra en `unsupportedGuarantees` como `credencial-de-evento: …`): **la credencial demuestra que es participante del evento y se usa una sola vez; el rostro impide que una misma persona use varias credenciales.**
+
+| Limitación | Detalle |
+|---|---|
+| **El QR de la credencial no es secreto** | El usuario está impreso y la URL es pública. Quien conozca el usuario de un participante (o fotografíe su credencial) puede entrar **una vez** en su lugar si llega antes. La credencial impide votar a quien no es participante y usar una credencial dos veces, pero **no autentica a la persona**: el rostro solo evita que una misma cara entre dos veces, no prueba que sea el titular de la credencial. |
+| **La existencia depende del modo de comprobación** | `live`: el servidor consulta la URL de la credencial (HEAD, o GET si HEAD no está soportado; 3 s; positivos en caché 6 h, negativos 2 min). Si esa página no responde, la entrada falla con 503 "intenta de nuevo" (no se deja pasar a ciegas). `list`: vale la lista que cargó el organizador (guardada solo como HMAC). `none`: basta el formato; cualquiera que conozca un usuario puede entrar una vez. |
+| **Una credencial gastada no se recupera desde otro teléfono** | El uso se registra al entrar. Si la persona pierde el teléfono o borra los datos del navegador antes de terminar, su credencial queda "ya usada" en esa votación; desde el mismo teléfono retoma con "Continuar". |
+| **El verificador no puede comprobarlo** | Qué credenciales existían y cuáles se usaron vive solo como HMAC en el servidor del organizador; `rollPolicy` es una declaración fuera de `manifestHash`/`checksums`. |
+| **Clave del HMAC** | `BADGE_KEY`; sin ella se deriva de `FACE_KEY`. Cambiarla a mitad de una votación invalida la lista y los usos registrados (permitiría reusar credenciales). |
+
 ## 4. Biometría (prueba de vida y deduplicación facial)
 
 | Limitación | Detalle |

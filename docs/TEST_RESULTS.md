@@ -765,3 +765,45 @@ Inscripción en 2 pantallas, voto en 1 (D-18). Salida real (America/Caracas), pu
 - Toques medidos (`e2e/voter-taps.spec.ts`, 360×740, chromium y mobile-360): **inscripción 2** (enfocar el campo + Continuar) + escribir el nombre + cámara; **voto 2** (opción + "Votar: 3"). Mismo test: sin "wallet/firma/EIP-712/Semaphore/credencial/nullifier/commitment/Kernel/on-chain" en el texto visible del flujo principal, texto base 18 px, 5 opciones ≥ 56 px sin scroll y el botón "Votar" sin tapar la última opción.
 - E2E real: 2 votantes completos con el flujo simple; el votante 1 cierra y reabre su navegador (perfil persistente: localStorage + IndexedDB) y la vinculación sigue; doble voto rechazado (409); "Ya votaste" desde `votedAt`.
 - Peso por teléfono (Pixel 5 emulado, sin precarga): **14,83 MB** (models 10,46 · zk 3,41 · js 0,93). El test bloquea el service worker y la precarga ("ahorro de datos") para medir cada archivo una vez: `/v` ahora precarga igual que `/j`.
+
+## 2026-10-24 · Credencial del evento por QR (D-19, rama `feat/credencial-qr`)
+
+Ejecutado en el worktree `wt/credencial` (macOS, Node 24, pnpm 10.18). Puertos usados: 3343 (E2E con mocks, `next start` de `.next-e2e-badge`) y 3344 (E2E real). Nada contra producción.
+
+| Comando | Resultado real |
+|---|---|
+| `pnpm typecheck` | OK (8 proyectos) |
+| `pnpm lint` | OK, 0 avisos |
+| `pnpm test` | contracts **63** · wallet **31** · demo-fixtures **28** · protocol-adapter **27** · verifier **61** · web **189** (19 archivos) — todo verde |
+| `pnpm --filter @quorum/web build` | OK (`✓ Compiled successfully`, 21/21 páginas) |
+| `playwright test` (todos los specs con mocks, chromium + mobile-360, `E2E_PROD=1 PORT=3343`) | **68 passed**, 124 skipped (capturas sin `SCREENSHOTS`, `voter-flow` fixme), 0 failed |
+| `playwright test e2e/badge.spec.ts --project=webkit-360` (`QUORUM_E2E_WEBKIT=1`) | **5 passed** en 3 corridas seguidas (con `serviceWorkers:"block"`; sin eso, WebKit falla de forma intermitente porque las peticiones que pasan por el service worker no las intercepta `page.route` → "Sala no encontrada" del servidor real; no afecta al producto) |
+| `pnpm --filter @quorum/web test:e2e:real` (`QUORUM_E2E_REAL_PORT=3344`) | **4 passed** (badge.real, phase2.real, room.real, weight.real) |
+
+Pruebas nuevas:
+- `apps/web/src/lib/server/__tests__/badge.test.ts` (20): patrón exacto (credencial real `…/26-ve/id/jgalvis414`, http, barra final, query, `_`, `..`, otro evento, host parecido, 40 caracteres, WIFI), prefijo configurable y escapado; HMAC determinista, insensible a mayúsculas, por elección y por clave, sin el usuario, respaldo FACE_KEY; consulta en vivo con `fetch` simulado (200/404, caché, HEAD→GET, tiempo límite de 3 s medido, 5xx → 503 sin cachear, peticiones simultáneas deduplicadas); join-badge (201 `Participante`, 409 `badge_used`, 404 `badge_unknown`, 400 `badge_invalid`, nada en claro en el store ni voterId, apodo cerrado con credencial), concurrencia (misma credencial ×3 a la vez → 1 entra), 503 no gasta la credencial, `list` sin red, `none`, `PUT /eligibility` (401/400 list/200/409 tras entrar alguien), y flujo completo credencial + rostro con pruebas Semaphore reales: misma cara con 2 credenciales → 409 `duplicate_identity`; `rollPolicy event-badge` en el paquete y nota del verificador.
+- `apps/verifier/test/verifier.test.ts` (+2): `event-badge` válido y declarado; `face` distinto de `full` → `package_schema` falla.
+- `apps/web/src/components/__tests__/badge.test.tsx` (12): **jsqr decodifica una imagen QR generada** (con `qrcode`) con la URL real; BarcodeDetector nativo vs jsqr; usuario escrito → URL; textos de error; `/j` en modo credencial (1 botón, sin jerga); escaneo con cámara y BarcodeDetector simulados (QR ajeno → aviso y sigue; credencial → entra sola, apaga la cámara, guarda el token y va a `/v/<token>`); credencial usada; sin permiso de cámara → "o escribe tu usuario" → 404 claro; selector del organizador (Lista "Próximamente", sin opción de rostro).
+- `apps/web/e2e/badge.spec.ts` (5 × proyecto, mocks): la cámara se simula con un `<canvas>.captureStream()` que dibuja el QR real; el lector es el del producto.
+- `apps/web/e2e/badge.real.spec.ts` (servidor real, `badgeCheck:"list"`, sin internet): 2 personas escanean → rostro → ¡Listo!; una tercera reescanea una credencial usada → "Esta credencial ya se usó en esta votación."; por API reuse 409 / desconocida 404 / QR ajeno 400; abrir, votar ambos (Groth16 real), cerrar → `auditable`, `rollPolicy {kind:"event-badge", check:"list", face:"full", joined:2, enrolled:2}`, verificador `valid:true` con `credencial-de-evento: …`, sin usuarios en el paquete.
+
+Tiempos medidos (E2E con mocks de la API, `next start`; **el rostro es el simulado de E2E**: no incluye descargar ni ejecutar los modelos de Human — ese tramo es del carril de rendimiento del rostro). `pageReady` = abrir `/j` hasta ver el botón; `toque→entró` = tocar "Escanear mi credencial" hasta `/v/<token>` (abre cámara, lee el QR, `join-badge`); `entró→¡Listo!` = rostro simulado + vinculación real en el navegador (wallet demo, FaceBinding, identidad Semaphore).
+
+| Navegador (360×740) | Lector | Red | pageReady | toque→entró | entró→¡Listo! | total | toques |
+|---|---|---|---|---|---|---|---|
+| Chromium escritorio | BarcodeDetector | local | 500 ms | 575 ms | 1394 ms | 2,5 s | 1 |
+| Chromium móvil (Pixel 5) | BarcodeDetector | local | 496 / 198 ms | 589 / 732 ms | 1385 / 864 ms | 2,5 / 1,9 s | 1 |
+| Chromium móvil (Pixel 5) | jsqr (forzado) | local | 413 ms | 149 ms | 1129 ms | 1,7 s | 1 |
+| Chromium móvil (Pixel 5) | BarcodeDetector | 1,5 Mbps / 300 ms | 1932 ms | 680 ms | 3307 ms | 5,9 s | 1 |
+| Chromium móvil (Pixel 5) | jsqr (forzado) | 1,5 Mbps / 300 ms | 1931 ms | 1648 ms | 2296 ms | 5,9 s | 1 |
+| WebKit (iPhone 13) | jsqr (no hay BarcodeDetector) | local | 289–336 ms | 298–310 ms | 960–2384 ms | 1,6–3,0 s | 1 |
+| Servidor real (Chromium, `badge.real`) | BarcodeDetector | local | — | — | — | /j → ¡Listo! 1,5–2,2 s | 1 |
+
+Toques: **1** ("Escanear mi credencial") + el permiso de cámara del navegador la primera vez (la cámara frontal del rostro usa el mismo permiso). Sin pantallas extra: el consentimiento va en la misma pantalla y el paso 2 arranca solo.
+
+Bytes añadidos (build de producción, `.next/static/chunks`):
+- `jsqr@1.4.0` (versión fijada): chunk propio de **129 980 B** sin comprimir · **46 229 B gzip** · 26 124 B brotli. Se descarga **solo** al abrir la cámara y **solo** si el navegador no trae `BarcodeDetector` con `qr_code` (iPhone/Safari); en Chrome Android: 0 B.
+- Código propio del escáner (`BadgeJoin` + `BadgeScanner` + `lib/client/badge.ts`, minificado): 9 149 B · 4 012 B gzip, dentro del chunk de `/j` (40 423 B · 13 558 B gzip en total con la sala). Selector del organizador: 5 435 B · 2 321 B gzip.
+- Total en el peor caso (iPhone): ≈ 139 KB sin comprimir / ≈ 50 KB gzip (< 200 KB).
+
+Capturas 360 px (datos FIXTURE): `docs/screenshots/phase2/credencial-01-inicio-360.png` … `credencial-09-proyector-360.png` (`SCREENSHOTS=1 … e2e/badge.spec.ts --project=mobile-360`).
