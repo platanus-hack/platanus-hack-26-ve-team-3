@@ -159,7 +159,7 @@ export function Stage({ step, header = false, playing = false }: { step: number;
     <Glass strong className="relative overflow-hidden rounded-xl shadow-elevated">
       <div key={step} className="flex flex-col">
         {header ? (
-          <div className="px-5 pt-5" aria-live="polite">
+          <div className="px-5 pt-5 md:px-7 md:pt-7" aria-live="polite">
             <p className="q-eyebrow">
               Paso {step + 1} de {STEPS.length}
             </p>
@@ -168,7 +168,7 @@ export function Stage({ step, header = false, playing = false }: { step: number;
             {playing ? <Timer key={step} /> : null}
           </div>
         ) : null}
-        <div className="flex min-h-[14rem] flex-col gap-4 p-5 md:p-7 lg:min-h-[19rem]" aria-hidden="true">
+        <div className="flex min-h-[14rem] flex-col gap-4 p-5 md:p-7 lg:min-h-[16rem]" aria-hidden="true">
           {step === 0 ? <FaceStage /> : step === 1 ? <AccountStage /> : step === 2 ? <RollStage /> : step === 3 ? <VoteStage /> : step === 4 ? <ChainStage /> : <VerifyStage />}
         </div>
         <div className="border-t border-border bg-card/70 p-5 md:px-7">

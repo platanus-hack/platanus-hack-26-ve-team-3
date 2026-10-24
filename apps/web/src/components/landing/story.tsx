@@ -43,24 +43,11 @@ export function HeroStory({ copy, visual }: { copy: React.ReactNode; visual: Rea
     window.scrollTo({ top: top + span * ((i + 1.5) / SCREENS), behavior: "smooth" });
   };
 
-  const step = active >= 0 ? STEPS[active] : null;
-
   return (
     <div ref={outer} className="relative lg:h-[700vh]">
       <section className="q-page-in grid grid-cols-1 items-center gap-12 pt-4 lg:sticky lg:top-16 lg:h-[calc(100svh-4rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,27rem)] lg:gap-14 lg:pt-0">
-        <div className="grid">
-          <Layer on={active < 0}>{copy}</Layer>
-          <Layer on={active >= 0} hidden>
-            {step ? (
-              <div key={active} className="q-flow-in flex flex-col gap-5">
-                <p className="q-eyebrow">
-                  Cómo funciona · Paso {active + 1} de {STEPS.length}
-                </p>
-                <h2 className="font-display text-[3rem] font-bold leading-[1] tracking-[-0.04em] xl:text-[3.75rem]">{step.title}</h2>
-                <p className="max-w-[34ch] text-heading text-muted-foreground">{step.body}</p>
-              </div>
-            ) : null}
-          </Layer>
+        <div>
+          {copy}
           <ol className="mt-10 hidden gap-2 lg:flex" aria-label="Cómo funciona">
             {STEPS.map((s, i) => (
               <li key={s.id}>
@@ -75,7 +62,7 @@ export function HeroStory({ copy, visual }: { copy: React.ReactNode; visual: Rea
         <div className="grid">
           <Layer on={active < 0}>{visual}</Layer>
           <Layer on={active >= 0} hidden>
-            {active >= 0 ? <Stage step={active} /> : null}
+            {active >= 0 ? <Stage step={active} header /> : null}
           </Layer>
         </div>
       </section>
