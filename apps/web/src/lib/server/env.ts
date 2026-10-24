@@ -45,6 +45,10 @@ export const env = {
   get faceKey(): string | undefined {
     return str("FACE_KEY");
   },
+  /** D-19: clave HMAC de las credenciales del evento. Sin ella se deriva de FACE_KEY (ver badge.ts). */
+  get badgeKey(): string | undefined {
+    return str("BADGE_KEY");
+  },
   get aiGatewayKey(): string | undefined {
     return str("AI_GATEWAY_API_KEY");
   },

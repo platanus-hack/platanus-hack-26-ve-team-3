@@ -17,6 +17,12 @@ const STATUS_BY_CODE: Record<ApiCode, number> = {
   onchain_not_supported: 400,
   room_full: 409,
   room_closed: 410,
+  /** D-19: el QR no es una credencial del evento. */
+  badge_invalid: 400,
+  /** D-19: la credencial no existe en el evento (lista o consulta en vivo). */
+  badge_unknown: 404,
+  /** D-19: esa credencial ya se usó en esta votación. */
+  badge_used: 409,
 };
 
 /** Error tipado que las rutas convierten en una respuesta `ApiError`. */

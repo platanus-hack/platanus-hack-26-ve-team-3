@@ -137,6 +137,24 @@ describe("rollPolicy (sala abierta) — declarativa", () => {
     expect(note).toMatch(/tope 60 asientos, entraron 27, 3 llegaron al padrón/);
   });
 
+  it("event-badge (D-19) → valid:true y declara credencial + rostro y que el QR no es secreto", async () => {
+    const pkg = { ...load("valid"), rollPolicy: { kind: "event-badge", maxSeats: 120, check: "list", face: "full", joined: 40, enrolled: 38, eligibility: "badge-once+face-dedupe-demo", note: "x" } };
+    const r = await verifyPackage(pkg);
+    expect(r.valid).toBe(true);
+    const note = r.unsupportedGuarantees.find((g) => g.startsWith("credencial-de-evento"));
+    expect(note).toMatch(/la credencial demuestra que es participante del evento \(comprobada contra una lista cargada por el organizador\) y se usa una sola vez/);
+    expect(note).toMatch(/el rostro \(deduplicación facial demo\) impide que una misma persona use varias credenciales/);
+    expect(note).toMatch(/El QR de la credencial no es secreto/);
+    expect(note).toMatch(/tope 120 asientos, entraron 40, 38 llegaron al padrón/);
+    expect(r.unsupportedGuarantees.some((g) => g.startsWith("censo-abierto-en-sala"))).toBe(false);
+  });
+
+  it("event-badge sin rostro (face distinto de full) → package_schema falla", async () => {
+    const bad = await verifyPackage({ ...load("valid"), rollPolicy: { kind: "event-badge", maxSeats: 10, check: "live", face: "off", joined: 1, enrolled: 1, eligibility: "badge-once+face-dedupe-demo" } });
+    expect(bad.valid).toBe(false);
+    expect(failing(bad)).toEqual(["package_schema"]);
+  });
+
   it("sin rollPolicy no aparece la nota; rollPolicy mal formada → package_schema falla", async () => {
     const r = await verifyPackage(load("valid"));
     expect(r.unsupportedGuarantees.some((g) => g.startsWith("censo-abierto-en-sala"))).toBe(false);

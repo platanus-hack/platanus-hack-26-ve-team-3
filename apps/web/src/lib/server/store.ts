@@ -44,7 +44,9 @@ export interface EngineState {
 }
 
 /** Declaración del censo abierto en sala (va al paquete de auditoría; sin ids ni alias). */
-export interface RollPolicy {
+export type RollPolicy = OpenRoomRollPolicy | EventBadgeRollPolicy;
+
+export interface OpenRoomRollPolicy {
   kind: "open-room";
   /** Tope de asientos de la última sala abierta. */
   maxSeats: number;
@@ -53,6 +55,29 @@ export interface RollPolicy {
   /** De ellos, cuántos llegaron al padrón congelado (identidad Semaphore inscrita). */
   enrolled: number;
   eligibility: "face-dedupe-demo";
+}
+
+/** D-19: sala con credencial del evento (QR) + rostro obligatorio. Sin usuarios ni HMAC: solo conteos y el método. */
+export interface EventBadgeRollPolicy {
+  kind: "event-badge";
+  maxSeats: number;
+  /** Cómo se comprobó que la credencial existe. */
+  check: "list" | "live" | "none";
+  /** El rostro (dedupe 1:N) es obligatorio siempre. */
+  face: "full";
+  joined: number;
+  enrolled: number;
+  eligibility: "badge-once+face-dedupe-demo";
+}
+
+/**
+ * D-19: credencial ya usada en una elección. Solo el HMAC del usuario (clave del servidor), nunca el usuario en claro,
+ * y SIN voterId: no liga la credencial a nadie del padrón ni, menos, a una opción.
+ */
+export interface BadgeUse {
+  electionId: string;
+  badgeHash: string;
+  usedAt: string;
 }
 
 /** Sala abierta (asamblea abierta) de una elección en `registration`. Indexada por `code`. */
@@ -114,6 +139,11 @@ export interface Store {
   /** La sala más reciente de la elección (abierta o no). */
   getLatestRoom(electionId: string): Promise<Room | null>;
   putRoom(room: Room): Promise<void>;
+  // credencial del evento (D-19): usos y lista permitida, solo HMAC
+  getBadgeUse(electionId: string, badgeHash: string): Promise<BadgeUse | null>;
+  putBadgeUse(use: BadgeUse): Promise<void>;
+  getBadgeAllowlist(electionId: string): Promise<string[] | null>;
+  putBadgeAllowlist(electionId: string, hashes: string[]): Promise<void>;
   /** Borra todo lo de una elección (script de demo `--reset`). */
   deleteElectionData(electionId: string): Promise<void>;
   /** Borra todo (tests). */
@@ -128,6 +158,8 @@ type Collections = {
   faceTemplates: Map<string, FaceTemplate>; // key voterId
   organizerTokens: Map<string, { tokenHash: string }>; // key electionId
   rooms: Map<string, Room>; // key code
+  badgeUses: Map<string, BadgeUse>; // key `${electionId}:${badgeHash}`
+  badgeAllowlists: Map<string, { hashes: string[] }>; // key electionId
 };
 
 type CollectionName = keyof Collections;
@@ -141,6 +173,8 @@ export class MemoryStore implements Store {
     faceTemplates: new Map(),
     organizerTokens: new Map(),
     rooms: new Map(),
+    badgeUses: new Map(),
+    badgeAllowlists: new Map(),
   };
 
   /** Hook para persistir una colección tras una mutación (no-op en memoria). */
@@ -245,6 +279,23 @@ export class MemoryStore implements Store {
     await this.persist("rooms");
   }
 
+  async getBadgeUse(electionId: string, badgeHash: string) {
+    const u = this.data.badgeUses.get(`${electionId}:${badgeHash}`);
+    return u ? structuredClone(u) : null;
+  }
+  async putBadgeUse(use: BadgeUse) {
+    this.data.badgeUses.set(`${use.electionId}:${use.badgeHash}`, structuredClone(use));
+    await this.persist("badgeUses");
+  }
+  async getBadgeAllowlist(electionId: string) {
+    const a = this.data.badgeAllowlists.get(electionId);
+    return a ? [...a.hashes] : null;
+  }
+  async putBadgeAllowlist(electionId: string, hashes: string[]) {
+    this.data.badgeAllowlists.set(electionId, { hashes: [...hashes] });
+    await this.persist("badgeAllowlists");
+  }
+
   async deleteElectionData(electionId: string) {
     this.data.elections.delete(electionId);
     this.data.engine.delete(electionId);
@@ -253,6 +304,8 @@ export class MemoryStore implements Store {
     for (const [k, v] of this.data.faceTemplates) if (v.electionId === electionId) this.data.faceTemplates.delete(k);
     for (const [k, v] of this.data.nonces) if (v.electionId === electionId) this.data.nonces.delete(k);
     for (const [k, v] of this.data.rooms) if (v.electionId === electionId) this.data.rooms.delete(k);
+    for (const [k, v] of this.data.badgeUses) if (v.electionId === electionId) this.data.badgeUses.delete(k);
+    this.data.badgeAllowlists.delete(electionId);
     for (const name of Object.keys(this.data) as CollectionName[]) await this.persist(name);
   }
 

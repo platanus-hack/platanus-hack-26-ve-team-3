@@ -48,7 +48,7 @@ function closedReasonOf(room: Room, election: Election, nowMs = Date.now()): Clo
 
 async function seatsTaken(electionId: string): Promise<number> {
   const voters = await (await getStore()).listVoters(electionId);
-  return voters.filter((v) => v.source === "room").length;
+  return voters.filter((v) => v.source === "room" || v.source === "badge").length;
 }
 
 function statusOf(room: Room | null, election: Election, taken: number, withSecret: boolean): RoomStatus {
@@ -134,7 +134,8 @@ export async function roomPublicInfo(rawCode: string) {
   const { roomCode: _c, joinUrl: _j, ...status } = statusOf(effective, e, await seatsTaken(e.id), false);
   void _c;
   void _j;
-  return { electionId: e.id, title: e.title, ...status };
+  const eligibility = e.eligibility ? { method: e.eligibility.method, ...(e.eligibility.badgeUrlPrefix ? { badgeUrlPrefix: e.eligibility.badgeUrlPrefix } : {}) } : undefined;
+  return { electionId: e.id, title: e.title, ...status, ...(eligibility ? { eligibility } : {}) };
 }
 
 const CLOSED_MESSAGE: Record<NonNullable<CloseReason>, string> = {
@@ -143,8 +144,13 @@ const CLOSED_MESSAGE: Record<NonNullable<CloseReason>, string> = {
   "election-opened": "La votación ya comenzó: la inscripción está cerrada",
 };
 
-/** POST /api/rooms/:roomCode/join — crea un votante `source:"room"` con el alias y devuelve su inviteToken (una vez). */
-export async function joinRoom(rawCode: string, input: { displayName: string }) {
+/**
+ * POST /api/rooms/:roomCode/join — crea un votante `source:"room"` con el alias y devuelve su inviteToken (una vez).
+ * D-19: `join-badge` reutiliza esta misma admisión con `source:"badge"` y `admit` (credencial no usada / existente),
+ * que corre dentro del lock de la sala justo antes de crear el votante.
+ */
+export async function joinRoom(rawCode: string, input: { displayName: string }, opts: { source?: "room" | "badge"; admit?: (e: Election) => Promise<void> } = {}) {
+  const source = opts.source ?? "room";
   const room0 = await requireRoom(rawCode);
   return withLock(`room:${room0.electionId}`, async () => {
     const store = await getStore();
@@ -156,6 +162,8 @@ export async function joinRoom(rawCode: string, input: { displayName: string }) 
     if (reason) throw new HttpError("room_closed", CLOSED_MESSAGE[reason]);
     const taken = await seatsTaken(e.id);
     if (taken >= room.maxSeats) throw new HttpError("room_full", `La sala está llena (${taken} de ${room.maxSeats})`);
+    if (source === "room" && e.eligibility?.method === "event-badge") throw new HttpError("invalid_input", "Esta votación pide escanear la credencial del evento");
+    await opts.admit?.(e);
     const voter: Voter = {
       id: randomId("vt"),
       electionId: e.id,
@@ -169,7 +177,7 @@ export async function joinRoom(rawCode: string, input: { displayName: string }) 
       faceBindingHash: null,
       walletKind: null,
       registeredAt: null,
-      source: "room",
+      source,
     };
     await store.putVoter(voter);
     return { electionId: e.id, voterId: voter.id, displayName: voter.displayName, inviteToken: voter.inviteToken, inviteUrl: inviteUrlFor(voter.inviteToken) };
@@ -185,7 +193,19 @@ export async function freezeRoomPolicy(electionId: string): Promise<RollPolicy |
   const room = await store.getLatestRoom(electionId);
   if (!room) return null;
   if (!room.closedReason) await store.putRoom({ ...room, closedAt: new Date().toISOString(), closedReason: "election-opened" });
-  const roomVoters = (await store.listVoters(electionId)).filter((v) => v.source === "room");
+  const roomVoters = (await store.listVoters(electionId)).filter((v) => v.source === "room" || v.source === "badge");
+  const e = await store.getElection(electionId);
+  if (e?.eligibility?.method === "event-badge") {
+    return {
+      kind: "event-badge",
+      maxSeats: room.maxSeats,
+      check: e.eligibility.badgeCheck ?? "live",
+      face: "full",
+      joined: roomVoters.length,
+      enrolled: roomVoters.filter((v) => Boolean(v.credentialIssuedAt)).length,
+      eligibility: "badge-once+face-dedupe-demo",
+    };
+  }
   return {
     kind: "open-room",
     maxSeats: room.maxSeats,
@@ -193,4 +213,16 @@ export async function freezeRoomPolicy(electionId: string): Promise<RollPolicy |
     enrolled: roomVoters.filter((v) => Boolean(v.credentialIssuedAt)).length,
     eligibility: "face-dedupe-demo",
   };
+}
+
+export const OPEN_ROOM_NOTE = "censo abierto en sala: la elegibilidad depende de la deduplicación facial demo, no de un padrón";
+/** D-19: texto honesto de la credencial del evento (paquete de auditoría, KNOWN_LIMITATIONS y verificador). */
+export const EVENT_BADGE_NOTE =
+  "credencial del evento + rostro: la credencial demuestra que es participante del evento y se usa una sola vez; " +
+  "el rostro impide que una misma persona use varias credenciales. El QR de la credencial no es secreto (el usuario está impreso): " +
+  "no prueba que quien lo escanea sea su titular";
+
+/** Nota que acompaña a la política del censo en el paquete de auditoría. */
+export function rollPolicyNote(policy: RollPolicy): string {
+  return policy.kind === "event-badge" ? EVENT_BADGE_NOTE : OPEN_ROOM_NOTE;
 }

@@ -8,6 +8,7 @@ import { manifestHash, MERKLE_TREE_DEPTH, type AnchorPolicy, type DrawRule, type
 import { getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
+import { applyEligibility } from "./badge";
 import { randomId, randomToken } from "./crypto";
 import { env, MIN_VOTES_FOR_BREAKDOWN } from "./env";
 import { HttpError } from "./errors";
@@ -76,6 +77,8 @@ export async function createElection(input: CreateElectionInput, opts: { id?: st
     optionValues: input.optionValues ?? null,
     registryAddress: env.registryAddress ?? null,
   });
+  // D-19: método de elegibilidad de la sala (la lista de usuarios se guarda solo como HMAC, aparte).
+  if (input.eligibility) election.eligibility = await applyEligibility(election.id, input.eligibility);
   const store = await getStore();
   await store.putElection(election);
   return election;

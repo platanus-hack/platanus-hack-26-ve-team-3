@@ -71,11 +71,11 @@ const ManifestSchema = z.object({
     .optional(),
 }).strict();
 /**
- * Política del censo declarada por el organizador (opcional). Hoy solo `open-room`: sala abierta en la que el público
+ * Política del censo declarada por el organizador (opcional): `open-room` o `event-badge` (D-19): sala abierta en la que el público
  * se inscribió con un alias. No entra en `manifestHash` ni en `checksums` (la sala se abre después de publicar), así que
  * el verificador NO la comprueba: la muestra como garantía no soportada para que nadie lea el padrón como un censo cerrado.
  */
-const RollPolicySchema = z.object({
+const OpenRoomPolicySchema = z.object({
   kind: z.literal("open-room"),
   maxSeats: z.number().int().min(1),
   joined: z.number().int().min(0),
@@ -83,6 +83,21 @@ const RollPolicySchema = z.object({
   eligibility: z.literal("face-dedupe-demo"),
   note: z.string().optional(),
 }).strict();
+/**
+ * D-19: sala con credencial del evento (QR) + rostro obligatorio. Igual de declarativa: el verificador no puede comprobar
+ * qué credenciales existían ni cuáles se usaron (solo hay HMAC en el servidor, nada en el paquete).
+ */
+const EventBadgePolicySchema = z.object({
+  kind: z.literal("event-badge"),
+  maxSeats: z.number().int().min(1),
+  check: z.enum(["list", "live", "none"]),
+  face: z.literal("full"),
+  joined: z.number().int().min(0),
+  enrolled: z.number().int().min(0),
+  eligibility: z.literal("badge-once+face-dedupe-demo"),
+  note: z.string().optional(),
+}).strict();
+const RollPolicySchema = z.discriminatedUnion("kind", [OpenRoomPolicySchema, EventBadgePolicySchema]);
 const TallySchema = z.object({ counts: z.array(z.number().int().min(0)), invalid: z.number().int().min(0), total: z.number().int().min(0) }).strict();
 export const AuditPackageSchema = z.object({
   version: z.literal("quorum-audit/1"),
@@ -534,11 +549,22 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
   // 9. Política del censo (declarativa; no es un check: no hay nada criptográfico que recomputar).
   if (pkg.rollPolicy) {
     const rp = pkg.rollPolicy;
-    unsupported.push(
-      `censo-abierto-en-sala: censo abierto en sala: la elegibilidad depende de la deduplicación facial demo, no de un padrón ` +
-        `(tope ${rp.maxSeats} asientos, entraron ${rp.joined}, ${rp.enrolled} llegaron al padrón de ${pkg.commitments.length} commitments; ` +
-        `declarado por el organizador fuera de manifestHash/checksums, el verificador no puede comprobarlo)`,
-    );
+    if (rp.kind === "event-badge") {
+      const how = rp.check === "list" ? "contra una lista cargada por el organizador" : rp.check === "live" ? "consultando en vivo la URL de la credencial" : "sin comprobar que existiera";
+      unsupported.push(
+        `credencial-de-evento: la credencial demuestra que es participante del evento (comprobada ${how}) y se usa una sola vez; ` +
+          `el rostro (deduplicación facial demo) impide que una misma persona use varias credenciales. El QR de la credencial no es secreto ` +
+          `(el usuario está impreso): no autentica a quien lo escanea como su titular ` +
+          `(tope ${rp.maxSeats} asientos, entraron ${rp.joined}, ${rp.enrolled} llegaron al padrón de ${pkg.commitments.length} commitments; ` +
+          `declarado por el organizador fuera de manifestHash/checksums, el verificador no puede comprobarlo)`,
+      );
+    } else {
+      unsupported.push(
+        `censo-abierto-en-sala: censo abierto en sala: la elegibilidad depende de la deduplicación facial demo, no de un padrón ` +
+          `(tope ${rp.maxSeats} asientos, entraron ${rp.joined}, ${rp.enrolled} llegaron al padrón de ${pkg.commitments.length} commitments; ` +
+          `declarado por el organizador fuera de manifestHash/checksums, el verificador no puede comprobarlo)`,
+      );
+    }
   }
 
   return finish({ electionId: pkg.electionId, protocol: "semaphore-ledger" });

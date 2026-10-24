@@ -38,6 +38,57 @@ export const AnchorInfo = z.object({
   registryAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
 });
 
+// ---------------------------------------------------------------------------
+// Método de elegibilidad (D-19). Quién puede entrar por la sala `/j/<código>`. El rostro (dedupe 1:N) es SIEMPRE
+// obligatorio: la credencial del evento es una capa adicional, nunca lo sustituye.
+// ---------------------------------------------------------------------------
+/** `open-alias`: apodo libre (lo de siempre) · `event-badge`: QR de la credencial del evento · `list`: próximamente. */
+export const EligibilityMethod = z.enum(["open-alias", "event-badge", "list"]);
+export type EligibilityMethod = z.infer<typeof EligibilityMethod>;
+/** Cómo se comprueba que la credencial existe: lista cargada por el organizador, consulta en vivo a la URL, o nada. */
+export const BadgeCheck = z.enum(["list", "live", "none"]);
+export type BadgeCheck = z.infer<typeof BadgeCheck>;
+export const DEFAULT_BADGE_URL_PREFIX = "https://hack.platan.us/26-ve/id/";
+/** Prefijo de la URL de la credencial: https y terminado en "/". El usuario va justo después. */
+export const BadgeUrlPrefix = z
+  .string()
+  .max(200)
+  .regex(/^https:\/\/[A-Za-z0-9.-]+(?::\d+)?\/[^\s?#]*\/$/, "Debe empezar por https:// y terminar en /");
+/** Usuario de GitHub tal como va en la credencial: letras, números y guiones, 1..39. */
+export const BadgeUser = z.string().regex(/^[A-Za-z0-9-]{1,39}$/, "Usuario inválido");
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+/**
+ * Extrae el usuario de una URL de credencial con el patrón EXACTO `^<prefijo>([A-Za-z0-9-]{1,39})$`
+ * (p. ej. `https://hack.platan.us/26-ve/id/jgalvis414` → `jgalvis414`). `null` si no es una credencial del evento.
+ */
+export function parseBadgeUrl(raw: string, prefix: string = DEFAULT_BADGE_URL_PREFIX): string | null {
+  const m = new RegExp(`^${escapeRegExp(prefix)}([A-Za-z0-9-]{1,39})$`).exec(raw.trim());
+  return m ? m[1] : null;
+}
+
+/** Forma pública (va en `Election`): nunca la lista de usuarios, solo cuántos hay. Ausente = `open-alias`. */
+export const Eligibility = z.object({
+  method: EligibilityMethod,
+  badgeUrlPrefix: BadgeUrlPrefix.optional(),
+  badgeCheck: BadgeCheck.optional(),
+  /** Con `badgeCheck: "list"`: cuántos usuarios cargó el organizador (los usuarios se guardan solo como HMAC). */
+  allowlistCount: z.number().int().min(0).optional(),
+});
+export type Eligibility = z.infer<typeof Eligibility>;
+
+/** Lo que manda el organizador (crear o `PUT /eligibility`). `list` aún no se acepta (400). */
+export const EligibilityInput = z.object({
+  method: EligibilityMethod,
+  badgeUrlPrefix: BadgeUrlPrefix.optional(),
+  badgeCheck: BadgeCheck.optional(),
+  /** Usuarios permitidos (con `badgeCheck: "list"`). El servidor guarda solo su HMAC. */
+  badgeAllowlist: z.array(BadgeUser).max(5000).optional(),
+});
+export type EligibilityInput = z.infer<typeof EligibilityInput>;
+
 export const Election = z.object({
   id: z.string(),
   title: z.string().min(3).max(160),
@@ -67,6 +118,8 @@ export const Election = z.object({
   registryAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/).nullable().optional(),
   /** sha256 (hex con 0x) de los bytes exactos del paquete de auditoría publicado. */
   packageDigest: z.string().nullable().optional(),
+  /** D-19: método de elegibilidad de la sala (forma pública). Ausente = `open-alias`. */
+  eligibility: Eligibility.optional(),
 });
 export type Election = z.infer<typeof Election>;
 
@@ -75,6 +128,7 @@ export const CreateElectionInput = Election.pick({ title: true, description: tru
   winnersCountFromResult: z.boolean().optional(),
   winnersCount: z.number().int().min(1).optional(),
   optionValues: z.array(z.number().int().min(0)).optional(),
+  eligibility: EligibilityInput.optional(),
 });
 export type CreateElectionInput = z.infer<typeof CreateElectionInput>;
 
@@ -96,8 +150,8 @@ export const Voter = z.object({
   walletKind: z.enum(["kernel", "eoa-demo"]).nullable().optional(),
   /** Momento en que la firma FaceBinding se verificó (rostro ↔ wallet). */
   registeredAt: z.string().datetime().nullable().optional(),
-  /** Vía por la que entró al censo: invitación del organizador o sala abierta (alias libre, sin teléfono). Ausente = "invite". */
-  source: z.enum(["invite", "room"]).optional(),
+  /** Vía por la que entró al censo: invitación, sala abierta (alias libre) o credencial del evento (D-19). Ausente = "invite". */
+  source: z.enum(["invite", "room", "badge"]).optional(),
 });
 export type Voter = z.infer<typeof Voter>;
 
@@ -109,7 +163,7 @@ export const VoterSummary = z.object({
   state: VoterState,
   walletAddress: z.string().nullable(),
   hasIdentity: z.boolean(),
-  source: z.enum(["invite", "room"]).optional(),
+  source: z.enum(["invite", "room", "badge"]).optional(),
 });
 export type VoterSummary = z.infer<typeof VoterSummary>;
 
@@ -238,7 +292,7 @@ export const AuditResult = z.object({
 });
 export type AuditResult = z.infer<typeof AuditResult>;
 
-export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity", "onchain_not_supported", "room_full", "room_closed"]) });
+export const ApiError = z.object({ error: z.string(), code: z.enum(["invalid_input", "not_found", "not_eligible", "already_voted", "closed", "forbidden", "unavailable", "duplicate_identity", "onchain_not_supported", "room_full", "room_closed", "badge_invalid", "badge_unknown", "badge_used"]) });
 
 // ---------------------------------------------------------------------------
 // Respuestas HTTP del Contrato v1 tal como las implementa el backend (apps/web/src/lib/server/engine.ts).
@@ -345,7 +399,12 @@ export const OpenRoomResult = RoomStatus.extend({ roomCode: z.string(), joinUrl:
 export type OpenRoomResult = z.infer<typeof OpenRoomResult>;
 
 /** GET /api/rooms/:roomCode (público) — lo que necesita la página /j/<roomCode> antes de unirse. */
-export const RoomPublicInfo = RoomStatus.omit({ roomCode: true, joinUrl: true }).extend({ electionId: z.string(), title: z.string() });
+export const RoomPublicInfo = RoomStatus.omit({ roomCode: true, joinUrl: true }).extend({
+  electionId: z.string(),
+  title: z.string(),
+  /** D-19: cómo se entra (apodo o credencial). Ausente = `open-alias`. */
+  eligibility: Eligibility.pick({ method: true, badgeUrlPrefix: true }).optional(),
+});
 export type RoomPublicInfo = z.infer<typeof RoomPublicInfo>;
 
 /** Alias libre (sin PII): letras, números, espacios y . ' _ - ; 1..32 caracteres; nunca algo que parezca un teléfono. */
@@ -375,3 +434,7 @@ export const JoinRoomResult = z.object({
   inviteUrl: z.string(),
 });
 export type JoinRoomResult = z.infer<typeof JoinRoomResult>;
+
+/** POST /api/rooms/:roomCode/join-badge `{ badgeUrl }` (D-19): la URL leída del QR de la credencial. Responde como `join`. */
+export const JoinBadgeInput = z.object({ badgeUrl: z.string().min(1).max(300) });
+export type JoinBadgeInput = z.infer<typeof JoinBadgeInput>;

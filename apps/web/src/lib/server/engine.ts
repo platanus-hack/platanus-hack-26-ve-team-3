@@ -37,7 +37,7 @@ import { requireElection, requireEngine, requireVoter } from "./elections";
 import { env } from "./env";
 import { HttpError, type ApiCode } from "./errors";
 import { withLock } from "./lock";
-import { freezeRoomPolicy } from "./rooms";
+import { freezeRoomPolicy, rollPolicyNote } from "./rooms";
 import { getStore, type EngineState, type RollPolicy } from "./store";
 
 type ReceiptT = z.infer<typeof Receipt>;
@@ -245,10 +245,10 @@ export async function getLedger(id: string) {
 // ---------------------------------------------------------------------------
 /** Declaración honesta del censo en el paquete (fuera de `manifestHash`/`checksums`: el verificador la muestra como nota). */
 export type PublishedRollPolicy = RollPolicy & { note: string };
-export const OPEN_ROOM_NOTE = "censo abierto en sala: la elegibilidad depende de la deduplicación facial demo, no de un padrón";
+export { OPEN_ROOM_NOTE } from "./rooms"; // D-19: las notas viven junto a la política del censo
 
 function withRollPolicy(pkg: AuditPackage, policy: RollPolicy | null | undefined): AuditPackage & { rollPolicy?: PublishedRollPolicy } {
-  return policy ? { ...pkg, rollPolicy: { ...policy, note: OPEN_ROOM_NOTE } } : pkg;
+  return policy ? { ...pkg, rollPolicy: { ...policy, note: rollPolicyNote(policy) } } : pkg;
 }
 
 function serialize(pkg: AuditPackage) {
