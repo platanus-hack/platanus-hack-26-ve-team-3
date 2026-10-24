@@ -6,7 +6,7 @@ export const ElectionKind = z.enum(["yes-no", "multiple", "ranking", "budget"]);
 export type ElectionKind = z.infer<typeof ElectionKind>;
 
 export const ElectionStatus = z.enum(["draft", "open", "closed", "tallying", "auditable", "failed"]);
-export const Protocol = z.enum(["davinci", "maci", "helios", "integrity-demo"]);
+export const Protocol = z.enum(["semaphore-ledger", "davinci", "helios", "integrity-demo"]);
 
 export const Option = z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(120) });
 
