@@ -185,6 +185,9 @@ importers:
 
   packages/protocol-adapter:
     dependencies:
+      '@quorum/wallet':
+        specifier: workspace:*
+        version: link:../wallet
       '@semaphore-protocol/core':
         specifier: 4.14.5
         version: 4.14.5(@types/snarkjs@0.7.9)(bufferutil@4.1.0)(commander@14.0.2)(utf-8-validate@5.0.10)
