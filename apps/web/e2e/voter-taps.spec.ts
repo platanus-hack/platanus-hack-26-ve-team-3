@@ -92,3 +92,47 @@ test("votante: inscripción en ≤ 2 toques (+ nombre + cámara) y voto en ≤ 2
   test.info().annotations.push({ type: "toques", description: `inscripción ${registrationTaps} · voto ${votingTaps}` });
   console.log(`[toques] inscripción ${registrationTaps} (+ escribir nombre + cámara) · voto ${votingTaps}`);
 });
+
+test("modo continuo (al instante): QR → comprobante en ≤ 4 toques (+ nombre + cámara), aviso de K claro y reintento por grupo nuevo sin toques extra", async ({ page }) => {
+  test.setTimeout(90_000);
+  const mock = new MockV1("open");
+  mock.continuous = true;
+  mock.groupSize = 3; // con ella serán 4: aún falta 1 para K=5
+  mock.staleRootReplies = 1; // su primera prueba llega con una raíz fuera de la ventana
+  mock.room = { code: CODE, open: true, seatsTaken: 3, maxSeats: 500, expiresAt: new Date(Date.now() + 170 * 60_000).toISOString(), closedReason: null };
+  await mock.install(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __taps: number };
+    w.__taps = 0;
+    document.addEventListener("click", (e) => e.isTrusted && (w.__taps += 1), true);
+  });
+
+  await page.goto(`/j/${CODE}`);
+  await expectPlainLanguage(page);
+  await page.getByLabel("Tu nombre o apodo").click(); // toque 1
+  await page.keyboard.type("Vecina del 4B");
+  await page.getByRole("button", { name: "Continuar" }).click(); // toque 2
+  await expect(page.getByTestId("enrolled-banner")).toContainText("¡Listo! Ya estás inscrito.", { timeout: 30_000 });
+  const registrationTaps = await taps(page);
+  expect(registrationTaps).toBeLessThanOrEqual(2);
+
+  // Aviso de K: frase completa, sin jerga, con el número que falta a la vista y la razón en lenguaje simple.
+  await expect(page.getByTestId("anonymity-gate-text")).toHaveText("Tu voto se habilita cuando haya 5 personas inscritas (ahora 4)");
+  await expect(page.getByTestId("anonymity-gate")).toContainText("Así nadie puede saber qué votaste. Deja esta página abierta: la boleta aparecerá aquí sola.");
+  await expectPlainLanguage(page);
+  mock.groupSize = 5;
+  const options = page.getByRole("radio");
+  await expect(options).toHaveCount(5, { timeout: 10_000 }); // sola, sin tocar nada
+  expect(await taps(page)).toBe(registrationTaps);
+
+  const before = await taps(page);
+  await options.nth(1).click(); // toque 3
+  await page.getByRole("button", { name: "Votar: 2" }).click(); // toque 4
+  await expect(page.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible({ timeout: 60_000 });
+  const votingTaps = (await taps(page)) - before;
+  expect(votingTaps).toBeLessThanOrEqual(2);
+  expect(mock.voteBodies).toHaveLength(2); // stale_root → nueva prueba con el grupo nuevo, sola
+  await expectPlainLanguage(page);
+  test.info().annotations.push({ type: "toques", description: `continuo: inscripción ${registrationTaps} · voto ${votingTaps} · total ${registrationTaps + votingTaps}` });
+  console.log(`[toques continuo] inscripción ${registrationTaps} (+ escribir nombre + cámara) · voto ${votingTaps} · total ${registrationTaps + votingTaps}`);
+});

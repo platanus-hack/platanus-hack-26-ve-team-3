@@ -76,6 +76,8 @@ export class MockV1 {
   groupSize = 0;
   votes = 0;
   minAnonymitySet = 5;
+  /** D-22: cuántos `POST /vote` responden 409 `stale_root` antes de aceptar (entró mucha gente mientras se probaba). */
+  staleRootReplies = 0;
   joins: string[] = [];
   /** D-19: método de elegibilidad (`null` = apodo libre, como antes). */
   eligibility: { method: "open-alias" | "event-badge"; badgeCheck?: "list" | "live" | "none"; badgeUrlPrefix?: string; allowlistCount?: number } | null = null;
@@ -342,6 +344,10 @@ export class MockV1 {
     if (p === `${E}/vote` && m === "POST") {
       if (this.delays.vote) await new Promise((r) => setTimeout(r, this.delays.vote));
       this.voteBodies.push(body);
+      if (this.staleRootReplies > 0) {
+        this.staleRootReplies -= 1;
+        return this.json(route, { error: "Entró mucha gente mientras preparabas tu voto: vuelve a intentarlo", code: "stale_root" }, 409);
+      }
       this.votes += 1;
       const proof = body.proof as { nullifier: string };
       this.nullifier = proof.nullifier;
