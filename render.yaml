@@ -1,12 +1,11 @@
 # Render Blueprint: todo Quórum (front + API) en un solo servicio Node con disco persistente.
-# Push a `main` → deploy automático. Ver docs/DEPLOY_RENDER.md.
+# La rama del servicio es la del Blueprint (main en producción). Push → deploy automático. Ver docs/DEPLOY_RENDER.md.
 services:
   - type: web
     name: quorum
     runtime: node
     plan: standard
     region: virginia
-    branch: main
     autoDeployTrigger: commit
     buildCommand: npm i -g pnpm@10.18.0 && pnpm install --frozen-lockfile && pnpm --filter @quorum/web build
     startCommand: pnpm --filter @quorum/web start
