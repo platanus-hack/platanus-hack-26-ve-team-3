@@ -652,3 +652,27 @@ Verificador usado: el de esta rama (`quorum-verifier/0.1.0`, sin `draw_matches`/
 | Cambiar semilla / ganador del sorteo | `draw_matches` | no ejecutable: el fixture no trae `draw` y este verificador no emite `draw_matches` | — |
 
 Comandos ejecutados (verdes): `pnpm typecheck`, `pnpm lint`, `pnpm test` (web 85 tests, incl. `src/lib/client/lab/__tests__/lab.test.ts` 29 y `src/components/__tests__/lab.test.tsx` 4), `pnpm --filter @quorum/web build`, `PORT=3317 playwright test e2e/lab.spec.ts e2e/phase2.spec.ts e2e/smoke.spec.ts` (38 passed, 4 skipped = capturas), capturas `SCREENSHOTS=1` → `docs/screenshots/phase2/lab-*-{360,1440}.png`.
+
+## 2026-10-24 · Integración: laboratorio del jurado + verificador con esquema estricto (`integration/phase2`)
+
+`feat/p2-audit-lab` integrado sobre motor/wallet/UI/QA/ancla/sala. Cambios del verificador (hallazgos del laboratorio):
+(a) `manifest_hash` sobre el manifiesto tal como llega (canónico); (b) esquema estricto: un campo no declarado en la raíz, el manifiesto, una entrada del ledger, una prueba, un candidato, el tally o el sorteo ⇒ `package_schema` **fallo detectado** (opcionales documentados: `versions`, `generatedAt`, `draw`, `rollPolicy`); (c) un JSON sin forma de paquete (no declara `quorum-audit/1` + `semaphore-ledger`) ⇒ `package_schema` **no evaluado** → "no verificable", nunca "fallo detectado" ni "verificado".
+
+### Comandos ejecutados (America/Caracas, salida real)
+| Hora | Comando | Resultado |
+|---|---|---|
+| 12:57:06 | `pnpm typecheck` | exit 0 |
+| 12:57:13 | `pnpm lint` | exit 0 |
+| 12:57:16 | `pnpm test` | exit 0 · contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 27 · verifier **59** (+18 `strict-schema.test.ts`) · web **121** → **329 tests, 0 fallos** |
+| 12:57:32 | `pnpm --filter @quorum/web build` | exit 0 |
+| 12:57:39 | `PORT=3327 playwright test e2e/smoke.spec.ts e2e/phase2.spec.ts e2e/lab.spec.ts` | **38 passed** (chromium + mobile-360) |
+| 12:58:02 | `pnpm --filter @quorum/web test:e2e:real` | **1 passed** |
+
+### Paquetes reales de `seed:demo --full` (DATA_DIR temporal, sin ancla) → CLI del verificador
+- `seed:demo -- --reset --simulate 6 --full --out seed-plain.json` → `valid: true`; todos los checks `verificado` salvo `anchor_matches` `no evaluado` (sin ancla); `draw_matches` verificado (N=3).
+- `seed:demo -- --reset --simulate 6 --full --room --out seed-room.json` (nuevo: los simulados entran por la sala) → paquete con `rollPolicy: open-room`; `valid: true`, mismos estados, y `censo-abierto-en-sala` en `unsupportedGuarantees`.
+
+### Laboratorio
+- Fixture v1 `public/fixtures/protocol/lab-drawn.json` (`pnpm --filter @quorum/web fixtures:lab`): 4 credenciales, 3 boletas con pruebas Groth16 reales, `drawRule` (from-result, `tieBreak: lowest`, 4 candidatos) y sorteo hecho con `runDraw` (N=2). Es el origen por defecto de `/audit/lab` y `/audit?fixture=1`.
+- "Cambiar la semilla" y "Cambiar un ganador" ⇒ `draw_matches` fallo detectado (unit + E2E). "Esconder un dato en una boleta" (`voterId` en la boleta #0 con checksums rehechos) ⇒ `package_schema` fallo detectado. "Ocultar la sala abierta" (borrar `rollPolicy`) ⇒ **no detectable** (está fuera de los hashes) y la UI lo dice; deshabilitada si el paquete no declara sala.
+- "Quitar un voto y rehacer todo" ahora rehace también el sorteo: sigue siendo no detectable sin ancla y detectado con ancla simulada.
