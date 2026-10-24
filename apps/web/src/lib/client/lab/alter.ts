@@ -6,7 +6,7 @@
  * Para rehacer hashes usamos las mismas herramientas que tendría el organizador/atacante
  * (`@quorum/protocol-adapter`); no se implementa criptografía aquí.
  */
-import { encodeAnchorCalldata, groupRoot as computeGroupRoot, hashCanonical, rechain, runDraw, tally as recount, type BallotEntry, type DrawRule } from "@quorum/protocol-adapter";
+import { encodeAnchorCalldata, groupRoot as computeGroupRoot, hashCanonical, rechain, runDraw, tally as recount, type BallotEntry, type DrawRule, type LedgerEntry } from "@quorum/protocol-adapter";
 import { alterationById, CONTINUOUS_ALTERATIONS, type AlterationId } from "./catalog";
 
 type Hex = `0x${string}`;
@@ -90,8 +90,9 @@ const short = (v: unknown): string => {
 
 /** Rehace cadena, recuento, finalHash y checksums como lo haría un organizador que quiere disimular. */
 function recomputeAll(p: LabPackage, before: LabPackage, changes: Change[]) {
-  p.ledger = rechain(p.ledger, p.genesisHash) as Entry[];
-  const t = recount({ entries: p.ledger }, p.manifest.options.length);
+  // En continuo el ledger trae también `member_added`: `rechain`/`tally` del adaptador ya saben tratarlos.
+  p.ledger = rechain(p.ledger as unknown as Parameters<typeof rechain>[0], p.genesisHash) as unknown as Entry[];
+  const t = recount({ entries: p.ledger as unknown as LedgerEntry[] }, p.manifest.options.length);
   p.tally = t;
   p.tallyHash = hashCanonical(t);
   p.finalHash = p.ledger.length ? p.ledger[p.ledger.length - 1].hash : p.genesisHash;
