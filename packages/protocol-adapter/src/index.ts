@@ -14,6 +14,7 @@ export { defaultArtifacts, browserArtifacts, ARTIFACT_FILES, ARTIFACT_SHA256, ty
 export { castBallot, verifyProof, type SemaphoreProof } from "./ballot.js";
 export { buildDemoElection, demoManifest, type DemoElection } from "./demo.js";
 export { createLedger, appendBallot, finalHash, tally, genesisHash, entryHash, rechain, LedgerRejection, type Ledger, type LedgerEntry, type LedgerRejectionCode, type Tally, type Hex32 } from "./ledger.js";
+export { drawWinners, drawSeed, runDraw, sortCandidates, winningOptionIndex, winnersCountFor, DRAW_METHOD, type DrawCandidate, type DrawRule, type DrawResult } from "./draw.js";
 export { buildAuditPackage, manifestHash, tallyHash, AUDIT_PACKAGE_VERSION, ADAPTER_VERSION, type AuditPackage, type ElectionManifest, type AnchorRef } from "./audit-package.js";
 export {
   anchorOnBaseSepolia,

@@ -1,6 +1,7 @@
 import { hashCanonical } from "./hash.js";
 import { electionScope, groupRoot as computeRoot, MERKLE_TREE_DEPTH, SEMAPHORE_VERSION } from "./identity.js";
 import { finalHash, type Hex32, type Ledger, type LedgerEntry, type Tally } from "./ledger.js";
+import type { DrawResult, DrawRule } from "./draw.js";
 
 export const AUDIT_PACKAGE_VERSION = "quorum-audit/1";
 export const ADAPTER_VERSION = "0.1.0";
@@ -17,6 +18,8 @@ export type ElectionManifest = {
   merkleTreeDepth: number;
   /** Etiqueta honesta: "fixture" | "simulación" | "real". */
   label?: string;
+  /** Regla del sorteo verificable (D-12). Opcional; si está, entra en `manifestHash`. */
+  drawRule?: DrawRule;
 };
 
 export type AnchorRef = {
@@ -44,6 +47,8 @@ export type AuditPackage = {
   checksums: { manifest: Hex32; commitments: Hex32; ledger: Hex32; tally: Hex32 };
   versions: { adapter: string; semaphore: string; artifacts: string };
   generatedAt: string;
+  /** Resultado del sorteo (fase `drawn`). El verificador lo recomputa (`draw_matches`). Fuera de `checksums` porque es derivable. */
+  draw?: DrawResult;
 };
 
 export function manifestHash(manifest: ElectionManifest): Hex32 {
@@ -67,6 +72,7 @@ export function buildAuditPackage(input: {
   tally: Tally;
   anchor?: AnchorRef;
   generatedAt?: string;
+  draw?: DrawResult;
 }): AuditPackage {
   const { electionId, manifest, ledger } = input;
   if (manifest.electionId !== electionId) throw new Error("manifest.electionId != electionId");
@@ -100,5 +106,6 @@ export function buildAuditPackage(input: {
     },
     versions: { adapter: ADAPTER_VERSION, semaphore: SEMAPHORE_VERSION, artifacts: "snark-artifacts.pse.dev/semaphore/4.13.0" },
     generatedAt: input.generatedAt ?? new Date().toISOString(),
+    ...(input.draw ? { draw: { ...input.draw, winners: [...input.draw.winners] } } : {}),
   };
 }

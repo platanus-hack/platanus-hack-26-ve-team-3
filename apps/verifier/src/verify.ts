@@ -8,7 +8,7 @@
  */
 import { Group, verifyProof } from "@semaphore-protocol/core";
 import { AuditResult as AuditResultSchema, type AuditResult } from "@quorum/contracts";
-import { createPublicClient, decodeAbiParameters, http, keccak256, sha256, stringToBytes, type Hex } from "viem";
+import { concat, createPublicClient, decodeAbiParameters, http, keccak256, sha256, stringToBytes, toHex, type Hex } from "viem";
 import { z } from "zod";
 
 export const VERIFIER_VERSION = "quorum-verifier/0.1.0 (semaphore-core 4.14.5)";
@@ -26,6 +26,22 @@ const ProofSchema = z.object({
   points: z.tuple([Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, Decimal]),
 });
 const EntrySchema = z.object({ idx: z.number().int().min(0), prevHash: Hex32, hash: Hex32, proof: ProofSchema });
+const Hex32Lower = z.string().regex(/^0x[0-9a-f]{64}$/, "hex de 32 bytes");
+const DrawCandidateSchema = z.object({ id: z.string().min(1), label: z.string(), amount: z.number().optional() });
+const DrawRuleSchema = z.object({
+  candidates: z.array(DrawCandidateSchema).min(1),
+  winnersCount: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("fixed"), n: z.number().int().min(0) }),
+    z.object({ kind: z.literal("from-result"), optionValues: z.array(z.number().int().min(0)) }),
+  ]),
+});
+const DrawSchema = z.object({
+  seed: Hex32Lower,
+  n: z.number().int().min(0),
+  winners: z.array(z.string()),
+  method: z.literal("keccak256(finalHash)|fisher-yates"),
+  finalHash: Hex32Lower,
+});
 const ManifestSchema = z.object({
   electionId: z.string().min(1),
   title: z.string(),
@@ -36,6 +52,7 @@ const ManifestSchema = z.object({
   protocol: z.literal("semaphore-ledger"),
   merkleTreeDepth: z.number().int(),
   label: z.string().optional(),
+  drawRule: DrawRuleSchema.optional(),
 });
 const TallySchema = z.object({ counts: z.array(z.number().int().min(0)), invalid: z.number().int().min(0), total: z.number().int().min(0) });
 export const AuditPackageSchema = z.object({
@@ -57,6 +74,7 @@ export const AuditPackageSchema = z.object({
   checksums: z.object({ manifest: Hex32, commitments: Hex32, ledger: Hex32, tally: Hex32 }),
   versions: z.object({ adapter: z.string(), semaphore: z.string(), artifacts: z.string() }).optional(),
   generatedAt: z.string().optional(),
+  draw: DrawSchema.optional(),
 });
 export type AuditPackage = z.infer<typeof AuditPackageSchema>;
 
@@ -79,6 +97,20 @@ function sortKeys(value: unknown): unknown {
 }
 export const hashCanonical = (v: unknown): Hex => sha256(stringToBytes(canonicalJson(v)));
 export const expectedScope = (electionId: string): string => (BigInt(keccak256(stringToBytes(`quorum:${electionId}`))) >> 8n).toString();
+
+// ---------- sorteo (reimplementado a propósito; misma definición que protocol-adapter/src/draw.ts) ----------
+/** seed = keccak256(finalHash); Fisher-Yates parcial con r_i = keccak256(seed ‖ uint256(i)) sobre ids ordenados. */
+export function recomputeDraw(candidateIds: readonly string[], n: number, finalHash: Hex): { seed: Hex; winners: string[]; n: number } {
+  const ids = [...candidateIds].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const seed = keccak256(finalHash);
+  const take = Math.min(n, ids.length);
+  for (let i = 0; i < take; i++) {
+    const r = BigInt(keccak256(concat([seed, toHex(BigInt(i), { size: 32 })])));
+    const j = i + Number(r % BigInt(ids.length - i));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  return { seed, winners: ids.slice(0, take), n: take };
+}
 
 // ---------- ancla ----------
 export type AnchorRead = { chainId: number; from: string; to: string | null; input: Hex };
@@ -272,6 +304,51 @@ export async function verifyPackage(input: unknown, opts: VerifyOptions = {}): P
         problems.push(`no se pudo leer/decodificar la tx de ancla: ${(e as Error).message}`);
       }
       checks.push({ name: "anchor_matches", passed: problems.length === 0, reason: problems.length ? problems.join("; ") : `ancla en Base Sepolia (tx ${pkg.anchor.txHash.slice(0, 12)}…) coincide con finalHash, groupRoot y tallyHash` });
+    }
+  }
+
+  // 8. draw_matches (solo si el manifiesto declara regla de sorteo o el paquete trae sorteo)
+  if (pkg.manifest.drawRule || pkg.draw) {
+    const rule = pkg.manifest.drawRule;
+    const draw = pkg.draw;
+    if (!rule) {
+      checks.push({ name: "draw_matches", passed: false, reason: "el paquete trae un sorteo pero el manifiesto no declara regla de sorteo (regla añadida después de publicar)" });
+    } else if (!draw) {
+      checks.push({ name: "draw_matches", passed: true, reason: "no evaluado: el manifiesto declara sorteo pero aún no se ha realizado" });
+      unsupported.push("sorteo: aún no realizado; no hay ganadores que comprobar");
+    } else {
+      const problems: string[] = [];
+      const ids = rule.candidates.map((c) => c.id);
+      if (new Set(ids).size !== ids.length) problems.push("ids de candidatos repetidos en el manifiesto");
+      // N recomputado desde NUESTRO recuento, no desde el tally publicado.
+      const n = pkg.manifest.options.length;
+      const counts = new Array<number>(n).fill(0);
+      for (const e of pkg.ledger) {
+        const m = Number(e.proof.message);
+        if (Number.isInteger(m) && m >= 0 && m < n) counts[m] += 1;
+      }
+      let expectedN: number | null;
+      if (rule.winnersCount.kind === "fixed") expectedN = rule.winnersCount.n;
+      else {
+        let best = -1;
+        let bestCount = 0;
+        counts.forEach((c, i) => { if (c > bestCount) { best = i; bestCount = c; } });
+        expectedN = best >= 0 ? (rule.winnersCount.optionValues[best] ?? null) : null;
+        if (rule.winnersCount.optionValues.length !== n) problems.push(`optionValues tiene ${rule.winnersCount.optionValues.length} valores, el manifiesto ${n} opciones`);
+      }
+      if (expectedN === null) problems.push("no hay boletas válidas: la regla no fija N y no debería existir sorteo");
+      if (draw.finalHash !== pkg.finalHash) problems.push(`sorteo hecho sobre finalHash ${draw.finalHash.slice(0, 18)}… ≠ finalHash del paquete ${pkg.finalHash.slice(0, 18)}…`);
+      if (problems.length === 0 && expectedN !== null) {
+        const r = recomputeDraw(ids, expectedN, pkg.finalHash as Hex);
+        if (draw.seed !== r.seed) problems.push(`semilla publicada ${draw.seed.slice(0, 18)}… ≠ keccak256(finalHash) ${r.seed.slice(0, 18)}…`);
+        if (draw.n !== r.n) problems.push(`N publicado ${draw.n} ≠ N recomputado ${r.n}`);
+        if (JSON.stringify(draw.winners) !== JSON.stringify(r.winners)) problems.push(`ganadores publicados [${draw.winners.join(", ")}] ≠ recomputados [${r.winners.join(", ")}]`);
+      }
+      checks.push({
+        name: "draw_matches",
+        passed: problems.length === 0,
+        reason: problems.length ? `sorteo no reproducible: ${problems.join("; ")}` : `sorteo recomputado: N=${draw.n}, ganadores [${draw.winners.join(", ")}] con semilla keccak256(finalHash)`,
+      });
     }
   }
 
