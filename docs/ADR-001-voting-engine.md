@@ -1,6 +1,6 @@
 # ADR-001 — Motor de votación
 
-**Estado:** propuesta del orquestador (2026-10-24, H+2), **pendiente de confirmación de José** en la página de la oficina. Mientras tanto, crypto implementa el Plan A porque no bloquea el Plan B.
+**Estado:** **aprobado por José** en la página de la oficina (2026-10-24, 11:39 VET). Plan A implementado en `feat/crypto-plan-a` (PR #4).
 
 ## Contexto
 Spike completo en `research/01-motores-votacion.md`. Resumen: MACI archivado (ago-2026); DAVINCI vivo pero pre-producción, solo OP Mainnet (sin testnet), 1 nodo público, resultados en ≥6 min; Helios es Python sin SDK JS; ElectionGuard sin SDK viable; **Semaphore v4 probado hoy en Node 22 en 0,5 s**.

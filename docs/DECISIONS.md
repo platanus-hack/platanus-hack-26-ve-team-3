@@ -9,3 +9,4 @@
 | D-05 | 2026-10-24 | Identidad del votante: invitación por WhatsApp (Kapso, con respaldo Meta Cloud API / wa.me) → nombre + datos básicos → prueba de vida facial (etiquetada "demo") → smart wallet embebida sin seed ni gas → la wallet firma el voto. Nunca guardamos biometría cruda ni rostro ligado a opción. | Visión del equipo + spec §2/§5. |
 | D-06 | 2026-10-24 | Resultados en vivo solo agregados (turnout, tendencia por opción) con UI generativa; el LLM elige layout, nunca cifras. | Visión del equipo. |
 | D-07 | 2026-10-24 | Nada sale hacia afuera (deploy prod, WhatsApp real, merge a main) sin aprobación en la página de la oficina. | Guía de la oficina. |
+| D-08 | 2026-10-24 | **ADR-001 aprobado por José en la página (11:39 VET):** motor `semaphore-ledger` (Plan A) como núcleo; DAVINCI como spike opcional sujeto a ETH en OP Mainnet. | Spike research/01; riesgo bajo y manipulación demostrable en vivo. |
