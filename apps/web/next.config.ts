@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  // Sin el indicador flotante de desarrollo (tapa contenido en las capturas de Playwright).
+  devIndicators: false,
   // Paquetes del monorepo en TS fuente (ESM con imports `./x.js`) que la web usa en el navegador:
   // el votante genera su prueba Semaphore y cualquiera corre `verifyPackage` sin servidor.
   transpilePackages: ["@quorum/protocol-adapter", "@quorum/verifier"],

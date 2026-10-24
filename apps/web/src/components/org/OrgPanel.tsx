@@ -52,9 +52,11 @@ export function OrgPanel({ electionId }: { electionId: string }) {
 
   // Token del organizador: se lee de sessionStorage y, la primera vez tras crear la elección, se muestra con "guárdalo".
   useEffect(() => {
-    const t = loadOrgToken(electionId);
-    const first = consumeTokenReveal(electionId);
+    // consumeTokenReveal va DENTRO del timeout: en desarrollo (StrictMode) el efecto se monta dos veces y el primer
+    // timeout se cancela; así el token se marca como mostrado una sola vez y realmente se muestra.
     const timer = window.setTimeout(() => {
+      const t = loadOrgToken(electionId);
+      const first = consumeTokenReveal(electionId);
       setToken(t);
       if (first && t) setReveal(t);
       setLocalVoters(loadVoters(electionId));

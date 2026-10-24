@@ -183,12 +183,12 @@ export function DrawView({ electionId }: { electionId: string }) {
             </CardHeader>
             <CardContent>
               <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-live="polite">
-                {[...draw.candidates].sort((a, b) => (a.id < b.id ? -1 : 1)).map((c) => {
+                {[...draw.candidates].sort((a, b) => (a.id < b.id ? -1 : 1)).map((c, i) => {
                   const pos = draw.winners.indexOf(c.id);
                   const won = pos >= 0 && pos < revealed;
                   return (
                     <li key={c.id} className={cn("flex min-h-tap items-center gap-3 rounded-md border p-3 transition-colors", won ? "border-success bg-success-soft" : "border-border")} data-testid={won ? "draw-winner" : undefined}>
-                      {won ? <Trophy className="size-5 shrink-0 text-success-strong" aria-hidden="true" /> : <span className="q-mono w-5 text-small text-subtle">{c.id.slice(0, 3)}</span>}
+                      {won ? <Trophy className="size-5 shrink-0 text-success-strong" aria-hidden="true" /> : <span className="q-mono w-5 shrink-0 text-center text-small text-subtle">{i + 1}</span>}
                       <span className="flex-1">
                         <span className="font-semibold">{c.label}</span>
                         {typeof c.amount === "number" ? <span className="block text-small text-muted-foreground">Monto: {formatInt(c.amount)}</span> : null}
