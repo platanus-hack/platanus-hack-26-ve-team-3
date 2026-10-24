@@ -285,3 +285,85 @@ $ DATA_DIR=<tmp> pnpm --filter @quorum/web seed:demo -- --simulate 6 --full
 - Ancla real en Base Sepolia **no ejecutada** (requiere decisión humana; el script la bloquea salvo `--anchor`).
 - La firma Kernel real (ERC-6492) no se probó contra RPC: solo con verificador inyectado.
 - Correlación por tiempo: `POST /voters/:id/voted` (autodeclarado) y el tally en vivo con ≥5 votos permiten inferencias de tiempo; ver informe.
+
+## 2026-10-24 · Ancla vía QuorumRegistry + FaceBinding Kernel real (quorum-crypto, rama `feat/p2-anchor`)
+
+### Qué cambió
+- **Cierre:** si hay `NEXT_PUBLIC_REGISTRY_ADDRESS` (o el manifiesto lo fija), el ancla es `QuorumRegistry.anchor(keccak256(utf8(electionId)), finalHash)` desde la clave del organizador (`anchorOnRegistry` en `@quorum/protocol-adapter`, ABI de `@quorum/wallet`). Se espera el receipt y se exige el evento `Anchored` del registro antes de guardar `anchor = {chainId, txHash, registryAddress}`. Sin registro: modo anterior (tx a sí mismo con calldata) como fallback.
+- **Hallazgo M1:** el manifiesto fija de forma aditiva `anchorPolicy = {kind: "quorum-registry"|"calldata", chainId, registryAddress?, organizer}` (solo si hay `ORGANIZER_PRIVATE_KEY`); entra en `manifestHash`. Si la clave configurada no es el organizador fijado, el cierre no ancla y lo dice.
+- **Verificador (`anchor_matches`):** lee receipt + logs, decodifica `Anchored(electionId, finalHash, castCount, organizer)` del registro (ABI declarada en el propio verificador, sin importar `@quorum/wallet`), compara `electionId = keccak256(utf8(id))`, `finalHash` y `organizer` = el del manifiesto. Cada check lleva ahora `status` (aditivo en `AuditCheck`): `verificado` / `no evaluado` / `fallo detectado`.
+  - `fallo detectado`: hash/elección/organizador distintos, evento de otro contrato, tx revertida, tx inexistente, ancla que contradice el manifiesto (otro registro u otra cadena; detectable sin red).
+  - `no evaluado` (`passed: true`): sin ancla, sin RPC, o ancla coincidente pero el manifiesto no fija organizador (paquetes anteriores a M1 → `unsupportedGuarantees: autoria-del-ancla`).
+  - `no evaluado` con `passed: false` (`valid: false`): RPC caído. No se acusa manipulación, pero tampoco se da por válido.
+
+### Tests offline (transporte/lector simulado)
+- `packages/protocol-adapter/test/registry-anchor.test.ts` (3): calldata `anchor(...)` al registro, registro simulado con las reglas del contrato (solo organizador, una vez), rechazo de otra cadena / organizador distinto al del manifiesto / `AlreadyAnchored`, receipt sin evento o con otro hash → lanza.
+- `apps/verifier/test/registry-anchor.test.ts` (8): verificado; finalHash alterado; organizador distinto; otra elección, otro contrato, revertida, inexistente; registro distinto al del manifiesto sin RPC; no evaluado (sin RPC, RPC caído, sin organizador fijado); `anchorPolicy` dentro de `manifestHash`; modo calldata con organizador fijado (otra cuenta → fallo, organizador → verificado).
+- `apps/web/src/lib/server/__tests__/flow.test.ts` (+2): cierre con registro (manifiesto con `anchorPolicy`, `anchor.registryAddress`, `anchor_matches` verificado; paquete con finalHash alterado por `POST /api/audit/verify` → fallo detectado) y ancla fallida (sin fondos) → `anchor=null`, `anchorStatus.mode=error`, `anchor_matches` no evaluado.
+
+```
+$ pnpm typecheck && pnpm lint && pnpm test
+packages/contracts test:       Tests  63 passed (63)
+packages/wallet test:       Tests  30 passed (30)
+packages/demo-fixtures test:       Tests  28 passed (28)
+packages/protocol-adapter test:       Tests  23 passed (23)
+apps/verifier test:       Tests  27 passed (27)
+apps/web test:       Tests  27 passed (27)
+$ pnpm --filter @quorum/web build   → ✓ (Next 16.4.3, Turbopack)
+```
+
+### RED · FaceBinding con Kernel real (ERC-6492), verificado por la ruta del servidor
+`apps/web/src/lib/server/__tests__/facebinding-kernel.net.test.ts` — excluido de `pnpm test`; se salta si falta `NEXT_PUBLIC_ZERODEV_PROJECT_ID` o `BASE_SEPOLIA_RPC`. Crea una cuenta Kernel v3.1 real con `createKernelWallet` (signer efímero), firma FaceBinding sin desplegar y llama a `verifyFaceBinding("kernel", …)` de `lib/server/wallet.ts` (`publicClient.verifyTypedData` contra Base Sepolia). No envía transacciones.
+```
+$ pnpm --filter @quorum/web test:net
+[net] Kernel 0xb63c56156b927C37EeEE970dEbB28b6F33525864 · desplegada=false · chainId=84532
+[net] firma 768 bytes · envoltura ERC-6492=true
+[net] verifyFaceBinding(kernel) servidor → true
+[net] mensaje alterado (voterId) → false
+[net] otra wallet → false
+ ✓ src/lib/server/__tests__/facebinding-kernel.net.test.ts (1 test) 1263ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+```
+
+### Punta a punta REAL en Base Sepolia (una ejecución, 2026-10-24 ~12:30 -0400)
+Precomprobación (lectura): clave del organizador = `organizer()` del registro = `0x51CD729395EF14cD476f1c208cDd141aAf9dA751`, saldo 0,019998 ETH, `finalHashOf(keccak256("el_demo_los_samanes_p2anchor_20261024")) = 0x0` (no anclada).
+```
+$ DATA_DIR=<tmp> NEXT_PUBLIC_DEMO_ELECTION_ID=el_demo_los_samanes_p2anchor_20261024 \
+  tsx --env-file=.env.local scripts/seed-demo.ts --simulate 6 --full --anchor --out <tmp>/paquete-real.json
+✔ el_demo_los_samanes_p2anchor_20261024 · estado registration · manifestHash 0x942ecc9e2fb19ab7a31d451b668cf808a2d081226432537dbd1bc9b9e8e3e4a7
+  · inscrito vt_… (simulado) ×6
+✔ open · groupRoot 14516157008205877686439905402488367942597438171608487525523825333037845590558
+  · boleta #0..#5 incluida
+✔ close → auditable · verificador valid=true · ancla: anclado vía QuorumRegistry 0x64E7cbf3B1a334A6633F0025d289335AEdA8Be13 en Base Sepolia, tx 0x97911d4ef30c860177d109febe60f2beebd9750e7dff82267b9226f9c0737371
+    PASS package_schema … tally_matches: recuento reproducido: [1,1,3,1,0] (6 boletas, 0 inválidas)
+    PASS anchor_matches: evento Anchored del QuorumRegistry 0x64E7cbf3B1a334A6633F0025d289335AEdA8Be13 en Base Sepolia (tx 0x97911d4ef3…): electionId y finalHash coinciden; organizador 0x51CD729395EF14cD476f1c208cDd141aAf9dA751 = el fijado en el manifiesto; castCount 0
+  ancla: chainId 84532 · tx 0x97911d4ef30c860177d109febe60f2beebd9750e7dff82267b9226f9c0737371
+✔ draw → drawn · N=3 · ganadores p-02, p-03, p-07 · seed 0xb141166739178c4c8f3904fff9e961504ea865026bf863cb40ae720f954dc532
+✔ paquete de auditoría → <tmp>/paquete-real.json (sha256 0x25b535a0d2a3d51d28de23ab3f07034559797e3e8d795f612cd3e25d5438e6e5)
+```
+(En esa ejecución el script aún imprimía `PASS/FAIL`; ahora imprime el `status`.) Tx: https://sepolia.basescan.org/tx/0x97911d4ef30c860177d109febe60f2beebd9750e7dff82267b9226f9c0737371
+
+Verificador CLI independiente sobre el paquete publicado (lee el receipt por RPC):
+```
+$ pnpm --filter @quorum/verifier verify <tmp>/paquete-real.json --anchor-rpc $BASE_SEPOLIA_RPC   → exit 0
+valid True sha256:25b535a0d2a3d51d28de23ab3f07034559797e3e8d795f612cd3e25d5438e6e5
+verificado       package_schema · manifest_hash · group_root · commitments_unique · chain_integrity · proofs_valid (6/6) · nullifiers_unique · tally_matches
+verificado       anchor_matches · evento Anchored del QuorumRegistry 0x64E7cbf3B1a334A6633F0025d289335AEdA8Be13 en Base Sepolia (tx 0x97911d4ef3…): electionId y finalHash coinciden; organizador 0x51CD729395EF14cD476f1c208cDd141aAf9dA751 = el fijado en el manifiesto; castCount 0
+verificado       draw_matches · sorteo recomputado: N=3, ganadores [p-02, p-03, p-07] con semilla keccak256(finalHash)
+```
+Copia alterada (solo `finalHash` → `0xeeee…`):
+```
+$ pnpm --filter @quorum/verifier verify <tmp>/paquete-alterado.json --anchor-rpc $BASE_SEPOLIA_RPC   → exit 1
+valid False sha256:7b9c5a23f5564876df6eb754197689f08fce69c6a58fed208d9137aad7d2827c
+fallo detectado  chain_integrity · finalHash publicado 0xeeeeeeeeeeeeeeee… ≠ último hash 0x4efee9339db2b7d6…
+fallo detectado  anchor_matches · hash final ≠ ancla: anclado 0x4efee9339db2b7d6…, paquete 0xeeeeeeeeeeeeeeee…
+fallo detectado  draw_matches · sorteo no reproducible: sorteo hecho sobre finalHash 0x4efee9339db2b7d6… ≠ finalHash del paquete 0xeeeeeeeeeeeeeeee…
+(resto de checks: verificado)
+```
+
+### Límites (no ocultos)
+- El verificador confía en el RPC que se le pasa; con un RPC malicioso `anchor_matches` no vale.
+- `castCount` del evento es 0 porque el `cast` on-chain del votante sigue apagado (C2); no se compara con el ledger.
+- La UI no muestra todavía el campo `status` de los checks (fuera de alcance de esta rama: no se tocaron páginas ni componentes).
+- El ancla prueba que el organizador fijó ese `finalHash` una sola vez para ese `electionId` en ese registro; no prueba que el ledger sea correcto (eso lo recomputa el verificador).
