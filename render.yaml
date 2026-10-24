@@ -1,0 +1,47 @@
+# Render Blueprint: todo Quórum (front + API) en un solo servicio Node con disco persistente.
+# La rama del servicio es la del Blueprint (main en producción). Push → deploy automático. Ver docs/DEPLOY_RENDER.md.
+services:
+  - type: web
+    name: quorum
+    runtime: node
+    plan: standard
+    region: virginia
+    autoDeployTrigger: commit
+    buildCommand: npm i -g pnpm@10.18.0 && pnpm install --frozen-lockfile && pnpm --filter @quorum/web build
+    startCommand: pnpm --filter @quorum/web start
+    healthCheckPath: /
+    disk:
+      name: quorum-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: DATA_DIR
+        value: /var/data
+      - key: NEXT_PUBLIC_CHAIN_ID
+        value: "84532"
+      - key: BASE_SEPOLIA_RPC
+        value: https://sepolia.base.org
+      - key: NEXT_PUBLIC_REGISTRY_ADDRESS
+        value: "0x64e7cbf3b1a334a6633f0025d289335aeda8be13"
+      - key: NEXT_PUBLIC_ZERODEV_PROJECT_ID
+        value: 498afc93-bf5c-4233-b0f0-919bccd0001b
+      - key: NEXT_PUBLIC_QUORUM_ONCHAIN_CAST
+        value: "false"
+      - key: INVITE_CHANNEL
+        value: dry-run
+      - key: INVITE_SEND_APPROVED
+        value: "false"
+      # Sala con ~60 teléfonos detrás de la misma IP del wifi (docs/LOAD_TEST.md).
+      - key: QUORUM_RATELIMIT_SCALE
+        value: "5"
+      - key: ROOM_JOIN_RATE_PER_MIN
+        value: "200"
+      # Secretos: FACE_KEY se genera en Render; ORGANIZER_PRIVATE_KEY se pega a mano en el dashboard (nunca en git).
+      - key: FACE_KEY
+        generateValue: true
+      - key: ORGANIZER_PRIVATE_KEY
+        sync: false

@@ -1,0 +1,30 @@
+{
+  "name": "@quorum/demo-fixtures",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "FIXTURES de demostración de Quórum: elección ficticia, votantes ficticios y paquetes de auditoría (íntegro y adulterados). Nunca datos reales.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fixtures/*": "./fixtures/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "echo skip",
+    "test": "vitest run",
+    "build": "echo skip",
+    "fixtures:build": "tsx scripts/make-sample.ts && tsx scripts/make-tampered.ts"
+  },
+  "dependencies": {
+    "@quorum/contracts": "workspace:*",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.20.3",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
+  }
+}

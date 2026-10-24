@@ -15,6 +15,8 @@
 
 # next.js
 /.next/
+/.next-e2e-real/
+/.next-e2e-badge/
 /out/
 
 # production
@@ -39,3 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ejemplo de entorno sin valores (sí se versiona)
+!.env.example
