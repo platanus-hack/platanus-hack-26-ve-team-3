@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -29,6 +30,9 @@ import {
 } from "@/lib/client/room";
 import { ObserverPanel } from "./ObserverPanel";
 import { remaining, useNow } from "./useNow";
+
+/* Precarga y compila los modelos de la cámara mientras la persona escribe su nombre (solo cliente). */
+const HumanPreloader = dynamic(() => import("@/components/voter/HumanPreloader"), { ssr: false });
 
 const POLL_MS = 5000;
 
@@ -193,6 +197,7 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
   return (
     <Shell>
       {gate === "open" ? <StepIndicator current={1} /> : null}
+      {gate === "open" ? <HumanPreloader /> : null}
       <header className="flex flex-col gap-2">
         <h1 className="text-title font-bold leading-tight tracking-tight">{info.title}</h1>
         <p className="flex flex-wrap items-center gap-2 text-body" aria-live="polite" data-testid="room-seats">

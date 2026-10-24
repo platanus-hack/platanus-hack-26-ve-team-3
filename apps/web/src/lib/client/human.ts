@@ -21,8 +21,9 @@ export const HUMAN_CONFIG: Partial<Config> = {
   // quedaba en "Preparando la cámara…").
   backend: "humangl",
   cacheSensitivity: 0,
-  // El calentamiento solo hace falta para la autoprueba de E2E; en producción el primer `detect` ya compila.
-  warmup: process.env.NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE === "1" ? "face" : "none",
+  // El calentamiento compila los shaders (en iPhone ~25 s la primera vez). Se hace en segundo plano desde el paso 1
+  // (HumanPreloader), así la cámara del paso 2 ya detecta al instante.
+  warmup: "face",
   filter: { enabled: true, equalization: false },
   face: {
     enabled: true,

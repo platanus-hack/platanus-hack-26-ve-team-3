@@ -33,6 +33,9 @@ const FaceCapture = dynamic(() => import("./FaceCapture"), {
   ),
 });
 
+/* Precarga y compila los modelos de la cámara durante el paso 1 (solo cliente). */
+const HumanPreloader = dynamic(() => import("./HumanPreloader"), { ssr: false });
+
 const POLL_MS = 5000;
 
 export type View = "intro" | "face" | "linking" | "waiting" | "ballot" | "receipt" | "voted" | "closed" | "not-linked" | "other-device" | "observer" | "draft";
@@ -202,6 +205,7 @@ export function VoterFlow({ token }: { token: string }) {
       return (
         <VoterShell>
           <StepIndicator current={1} />
+          <HumanPreloader />
           <h1 className="text-title font-bold leading-tight">{title}</h1>
           {invite.voter.displayName ? <p className="text-muted-foreground">Hola, {invite.voter.displayName}.</p> : null}
           <Consent />
