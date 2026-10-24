@@ -31,6 +31,14 @@ export function enrollmentOpen(e: Pick<Election, "status" | "votingMode">): bool
   return e.status === "registration" || (isContinuous(e) && e.status === "open");
 }
 
+/** Mensaje para quien intenta inscribirse (rostro, vinculación, identidad) cuando la inscripción ya no está abierta. */
+export function enrollmentClosedMessage(e: Pick<Election, "status" | "votingMode"> | null | undefined): string {
+  if (!e) return "Elección no encontrada";
+  if (e.status === "draft") return "La inscripción todavía no abre. Deja esta página abierta: se actualiza sola.";
+  if (e.status === "open" && !isContinuous(e)) return "La votación ya empezó: la inscripción está cerrada.";
+  return "La votación terminó: ya no se puede inscribir.";
+}
+
 /** Política del modo continuo que va al manifiesto (K y ventana de raíces). */
 export function enrollmentOf(e: Pick<Election, "votingMode" | "minAnonymitySet">): EnrollmentPolicy | undefined {
   if (!isContinuous(e)) return undefined;

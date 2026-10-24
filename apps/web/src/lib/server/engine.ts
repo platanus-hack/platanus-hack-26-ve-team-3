@@ -35,7 +35,7 @@ import {
 import { verifyPackage, type AnchorReader } from "@quorum/verifier";
 import type { Address } from "viem";
 import { z } from "zod";
-import { enrollmentOpen, isContinuous, publishElection, requireElection, requireEngine, requireVoter } from "./elections";
+import { enrollmentClosedMessage, enrollmentOpen, isContinuous, publishElection, requireElection, requireEngine, requireVoter } from "./elections";
 import { env } from "./env";
 import { HttpError, type ApiCode } from "./errors";
 import { withLock } from "./lock";
@@ -66,15 +66,22 @@ export async function registerIdentity(voterId: string, input: { inviteToken: st
   const voter = await requireVoter(voterId);
   if (voter.inviteToken !== input.inviteToken) throw new HttpError("forbidden", "inviteToken inválido");
   const election = await requireElection(voter.electionId);
-  if (!enrollmentOpen(election)) throw new HttpError("closed", "El padrón ya está congelado o la elección no está en inscripción");
+  if (!enrollmentOpen(election)) throw new HttpError("closed", enrollmentClosedMessage(election));
   if (!voter.registeredAt || !voter.walletAddress) throw new HttpError("not_eligible", "Primero hay que enlazar la wallet (firma FaceBinding)");
   return withLock(`engine:${election.id}`, async () => {
     const store = await getStore();
     const e = await requireElection(election.id);
-    if (!enrollmentOpen(e)) throw new HttpError("closed", "La votación ya cerró: la inscripción está cerrada");
+    if (!enrollmentOpen(e)) throw new HttpError("closed", enrollmentClosedMessage(e));
     const engine = await requireEngine(election.id);
     const fresh = await requireVoter(voterId);
-    if (fresh.credentialIssuedAt || engine.roll.some((r) => r.voterId === voterId)) throw new HttpError("already_voted", "Este votante ya registró su identidad", 409);
+    if (fresh.credentialIssuedAt || engine.roll.some((r) => r.voterId === voterId)) {
+      // Reintento del MISMO teléfono (p. ej. el wifi perdió la respuesta del primer intento): ese commitment ya está
+      // inscrito para este votante → éxito idempotente, sin tocar el grupo. Con otro commitment sigue siendo 409.
+      const continuousMember = isContinuous(e) && Boolean(fresh.credentialIssuedAt) && engine.commitments.includes(input.commitment);
+      const sameRoll = engine.roll.some((r) => r.voterId === voterId && r.commitment === input.commitment);
+      if (continuousMember || sameRoll) return { ok: true as const, registeredCount: isContinuous(e) ? engine.commitments.length : engine.roll.length };
+      throw new HttpError("already_voted", "Este votante ya registró su identidad", 409);
+    }
     if (engine.roll.some((r) => r.commitment === input.commitment) || engine.commitments.includes(input.commitment)) throw new HttpError("invalid_input", "Ese commitment ya está en el padrón", 409);
     if (isContinuous(e) && engine.ledger?.enrollment) {
       // D-22: el commitment entra YA al grupo (member_added encadenado, nueva raíz), bajo el mismo lock que los votos.
