@@ -92,3 +92,93 @@ Latencia de los pollers por ventana (todos los endpoints de polling juntos):
 - **No hace falta subir a Pro.** El único punto lento (la ráfaga de voto) está serializado por diseño (un lock por elección), así que más CPUs no lo acelerarían; con 60 personas no molesta.
 - **Antes de la presentación sí hay que tocar la configuración:** con todos en el mismo wifi el rate limit por IP rechazaría la mitad de los joins (medido) y 40 de 60 votos (deducido del código). Poner `QUORUM_RATELIMIT_SCALE=5` + `ROOM_JOIN_RATE_PER_MIN=200` (requiere desplegar esta rama) o `QUORUM_RATELIMIT=off` durante la demo.
 - Lo que no cubre esta prueba: teléfonos reales (Human + generación de la prueba en el móvil), el wifi del lugar y varias IPs reales a la vez.
+
+---
+
+# Modo continuo (D-22) — 60 personas entran y votan a la vez, contra Render
+
+- **Fecha:** 2026-10-24, hora de Caracas (UTC−4). Corrida 1: 18:51:08 → 18:51:49. Corrida 2: 18:52:12 → 18:53:08. **Dos corridas** (el máximo pedido), una tx de ancla testnet cada una.
+- **Destino:** `https://quorum-sefw.onrender.com` (Render, 1 instancia, store JSON en disco), desplegado desde `origin/main` `a512bc7` (ya trae D-22). Esta rama no estaba desplegada: los arreglos de `qa/continuo` **no** se midieron aquí.
+- **Generador:** `apps/web/scripts/load-test.ts --mode continuous` (nuevo), desde un solo equipo en Caracas. **Sin `x-forwarded-for` propia: las 60 personas salen por la misma IP**, como el wifi del evento (el servidor limita por `cf-connecting-ip`).
+- **Comandos** (desde `apps/web`):
+  - Corrida 1: `npx tsx --tsconfig tsconfig.json scripts/load-test.ts --mode continuous --voters 60 --rate 3 --pollers 20 --proof-delay-ms 3000 --anchor-rpc https://sepolia.base.org --out run1.json --package-out run1-pkg.json`
+  - Corrida 2: igual con `--proof-delay-ms 15000` (teléfonos lentos) para forzar `stale_root` de verdad.
+- **Contenido:** elecciones ficticias «Prueba de carga modo continuo (simulación)» `el_76a71e367f6e04be` (sala `72QTAT`) y `el_2dee0bd12fa300d3` (sala `WVYH9X`); votantes «Simulado N», descriptores faciales sintéticos aleatorios, wallets EOA efímeras, identidades Semaphore generadas en el proceso. Sin personas ni datos reales.
+
+## Escenario (igual que el cliente real)
+1. Organizador: crear (sin `votingMode` → continuo, K=5) → `publish` (= abrir: `draft → open`) → `POST /room` (80 asientos).
+2. **20 proyectores** como `Projector.tsx`: `GET /room` + `GET /tally` cada 2 s y `GET /elections/:id` cada 4 s, durante toda la corrida.
+3. **60 votantes escalonados, 3 por segundo** (20 s para entrar todos). Cada uno: `POST /rooms/:code/join` → `GET /v/:token` → `GET /invite` → `POST /face/enroll` → `POST /wallet` → `POST /identity` y **vota apenas termina**: `GET /group` cada 3 s hasta K (aviso de K, `AnonymityGate`) → `GET /roll` → prueba Groth16 real (en un proceso aparte, fuera del proceso que mide) → espera hasta completar `--proof-delay-ms` (lo que tarda un teléfono) → `POST /vote`. Si responde `stale_root`: nueva prueba con el grupo nuevo (máx. 2 reintentos, como `BallotScreen`); `anonymity_pending`: espera 3 s; 429: espera 5 s. Luego `POST /voted`.
+4. 5 reenvíos simultáneos de pruebas ya incluidas (doble voto).
+5. `POST /close` (ancla real en Base Sepolia vía QuorumRegistry) → sala cerrada → join tardío → `GET /audit` → `GET /artifacts` → **verificador CLI con `--anchor-rpc https://sepolia.base.org`** → `POST /draw` → `GET /artifacts` → verificador CLI otra vez (con sorteo).
+
+## Resultado
+
+| | Corrida 1 (prueba 3 s) | Corrida 2 (prueba 15 s) |
+|---|---|---|
+| Votaron | **60/60**, 0 errores | **60/60**, 0 errores |
+| Todos votaron en | 23,9 s desde la primera entrada | 40,1 s |
+| Entrada → inscrito (p50 / p95 / máx) | 0,83 / 2,51 / 2,81 s | 0,82 / 0,97 / 0,99 s |
+| **Inscrito → voto incluido** (p50 / p95 / máx) | **3,40 / 6,71 / 6,84 s** | **15,47 / 33,64 / 33,82 s** |
+| Entrada → voto incluido (p50 / p95 / máx) | 4,31 / 7,68 / 8,16 s | 16,36 / 34,46 / 34,62 s |
+| `stale_root` recibidos | **0** | **27** (27 personas, 1 cada una) |
+| Reintentos automáticos que terminaron en voto | – | 27/27 al primer reintento |
+| Esperaron el aviso de K | 4 (las 4 primeras, una vuelta de 3 s) | 4 |
+| `anonymity_pending` recibidos | 0 | 0 |
+| 429 (rate limit, todos por una IP) | **0** | **0** |
+| Respuestas 5xx / timeouts | **0 / 0** en 1562 peticiones | **0 / 0** en 2001 peticiones |
+| Doble voto (5 reenvíos) | 5× 409 `stale_root` (ver hallazgo 2) | 5× 409 `already_voted` |
+| Tamaño del grupo por boleta (mín / mediana / máx) | 6 / 30 / 60 | 29 / 54 / 60 |
+| Recuento | [10, 30, 20] | [10, 30, 20] |
+| Cierre (`POST /close`, con ancla) | 3,44 s → `auditable` | 2,89 s → `auditable` |
+| Sala tras cerrar | `open:false`, `election-closed`; join tardío → 410 | ídem |
+| Ancla (Base Sepolia) | tx `0x3b8bc2da66c73aedd1303bc313ed060aaac2567b1aa1db8d96c4ba08ffb81570` | tx `0xfe0bf5e820d5813980a3d8917aaeb3dd788d2d77be92eb064b5c061cca41b6ec` |
+| Verificador del servidor | `valid=true`, 12/12 checks | `valid=true` |
+| **Verificador CLI `--anchor-rpc https://sepolia.base.org`** | exit 0, `valid=true` (1,3 s); `root_history` 60/60, `anonymity_set_min` mín 6 ≥ K=5, `anchor_matches` evento Anchored del QuorumRegistry coincide | exit 0, `valid=true` |
+| Sorteo | 2,56 s, N=2, ganadores `p-04`, `p-05` | 2,27 s, N=2, `p-04`, `p-01` |
+| CLI tras el sorteo | exit 0, `draw_matches` recomputado | exit 0, `draw_matches` recomputado |
+
+Contadores del proyector (lectura de `GET /tally` del proyector 0, `inscritos · votaron`), corrida 1: 3 s `0 · 0` → 9 s `15 · 1` → 15 s `37 · 27` → 21 s `55 · 45` → 27 s `60 · 60`. Corrida 2: 8 s `18 · 0` → 14 s `35 · 0` → 20 s `53 · 0` → 32 s `60 · 16` → 38 s `60 · 49` → 44 s `60 · 60`.
+
+### Latencia por endpoint, corrida 1 (ms, medidos desde Caracas: incluyen red hasta Virginia)
+
+| Endpoint | n | Estados | p50 | p95 | p99 | máx |
+|---|---:|---|---:|---:|---:|---:|
+| POST /rooms/:code/join | 60 | 60×201 | 121 | 634 | 1238 | 1238 |
+| GET /v/:token (HTML) | 60 | 60×200 | 149 | 296 | 979 | 979 |
+| GET /api/invite/:token | 60 | 60×200 | 99 | 142 | 173 | 173 |
+| POST /api/face/enroll | 60 | 60×201 | 141 | 434 | 1541 | 1541 |
+| POST /api/voters/:id/wallet | 60 | 60×200 | 135 | 216 | 317 | 317 |
+| POST /api/voters/:id/identity | 60 | 60×201 | 146 | 457 | 550 | 550 |
+| GET /group (aviso de K) | 64 | 64×200 | 99 | 151 | 336 | 336 |
+| GET /roll | 60 | 60×200 | 94 | 158 | 358 | 358 |
+| **POST /vote** | 60 | 60×201 | **171** | **1032** | 1734 | 1734 |
+| POST /voters/:id/voted | 60 | 60×200 | 118 | 196 | 656 | 656 |
+| POST /vote (doble voto) | 5 | 5×409 | 98 | 102 | 102 | 102 |
+| POST /close (tally + ancla + paquete + verifyPackage) | 1 | 200 | 3438 | – | – | 3438 |
+| POST /draw | 1 | 200 | 2560 | – | – | 2560 |
+| proyector GET /tally | 373 | 373×200 | 108 | 215 | 402 | 483 |
+| proyector GET /room | 373 | 373×200 | 105 | 194 | 408 | 783 |
+| proyector GET /elections/:id | 193 | 193×200 | 107 | 207 | 412 | 420 |
+
+### Latencia por endpoint, corrida 2 (ms)
+
+| Endpoint | n | Estados | p50 | p95 | p99 | máx |
+|---|---:|---|---:|---:|---:|---:|
+| POST /rooms/:code/join | 60 | 60×201 | 118 | 177 | 207 | 207 |
+| POST /api/face/enroll | 60 | 60×201 | 131 | 195 | 219 | 219 |
+| POST /api/voters/:id/wallet | 60 | 60×200 | 127 | 181 | 183 | 183 |
+| POST /api/voters/:id/identity | 60 | 60×201 | 146 | 201 | 253 | 253 |
+| GET /roll | 87 | 87×200 | 100 | 164 | 179 | 179 |
+| **POST /vote** | 87 | 60×201, 27×409 `stale_root` | 133 | 211 | 260 | 260 |
+| POST /close | 1 | 200 | 2891 | – | – | 2891 |
+| POST /draw | 1 | 200 | 2269 | – | – | 2269 |
+| proyector GET /tally | 528 | 528×200 | 109 | 171 | 224 | 276 |
+| proyector GET /room | 528 | 528×200 | 109 | 170 | 210 | 233 |
+
+## Hallazgos (modo continuo)
+1. **Servidor: fluido para 60 en modo continuo, todos detrás de una IP.** 0 errores 5xx, 0 timeouts, 0 respuestas 429 (confirma que producción tiene subido el tope por IP: con los topes base de 20/min habría habido 429 en enroll/wallet/identity/vote). Inscripción y voto intercalados bajo el mismo lock: `POST /vote` p95 1,0 s en la corrida 1 (cuando inscripciones y votos se pisan) y 0,2 s en la 2. Los proyectores no se degradan (p95 ≤ 215 ms).
+2. **`stale_root` sí ocurre con teléfonos lentos (medido) y el reintento automático lo resuelve.** Con 15 s por prueba y 3 entradas por segundo entran ~45 personas mientras se genera la prueba (> ventana de 32 raíces): 27 de 60 recibieron `stale_root` y las 27 votaron al primer reintento (inscrito → voto p95 33,6 s). Con 3 s por prueba: 0. El cliente reintenta 2 veces; si un teléfono tardara > ~10 s **y** la entrada siguiera a 3/s durante varios reintentos, vería «Entró mucha gente mientras preparabas tu voto: vuelve a intentarlo» y tendría que tocar otra vez. Observación: reenviar una prueba YA incluida cuya raíz salió de la ventana responde `stale_root` en vez de `already_voted` (el ledger comprueba la raíz antes que el nullifier). No es un problema: el cliente real nunca reenvía la misma prueba (genera una nueva con el grupo actual y entonces recibe `already_voted`, corrida 2: 5/5) y no entra ningún voto doble.
+3. **K exacto en producción:** las 4 primeras personas esperaron una vuelta del aviso de K (3 s) y ninguna boleta tiene grupo < 5 (mín 6 en la corrida 1; el verificador lo comprueba en `anonymity_set_min`). En la corrida 1 hubo boletas con grupo de 6: quien vota temprano se esconde entre pocas personas (declarado en el paquete como garantía no soportada).
+4. **Cierre:** sala cerrada (`election-closed`), join tardío 410, paquete con ancla real verificado por el servidor y por el CLI contra el RPC público; sorteo recomputado por el CLI.
+- Lo que no cubre: teléfonos reales (Human + prueba en el móvil), el wifi del lugar, la descarga de estáticos (medida en la sección anterior: ~15 MB por teléfono).
