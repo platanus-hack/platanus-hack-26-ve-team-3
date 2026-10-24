@@ -358,3 +358,39 @@ $ POST join tras cerrar
 - `seatsTaken` cuenta votantes creados por sala, aunque no terminen la inscripción (un asiento abandonado no se libera). El rate limit por IP es generoso (30/min) porque el wifi del evento comparte IP; el control real es `maxSeats` + expiración + dedupe facial demo.
 - `rollPolicy` es una declaración del organizador fuera de `manifestHash`/`checksums`: quien manipule el paquete puede quitarla y el verificador no lo detecta. Por eso se declara como garantía no soportada, nunca como check.
 - El dedupe facial es modo demo (descriptor de modelo local, umbral coseno 0,75), no una garantía biométrica.
+
+## Sala abierta — UI (`feat/p2-sala-ui`, 2026-10-24)
+Rutas nuevas: `/j/[roomCode]` (entrada móvil + modo observador), tarjeta "Sala abierta" en `/org/[id]`, `/e/[id]/proyector`.
+Ejecutado en este worktree (salidas reales, resumidas):
+
+```
+$ pnpm typecheck && pnpm lint && pnpm test && pnpm --filter @quorum/web build   → EXIT=0
+packages/contracts 63 passed · packages/wallet 30 · packages/protocol-adapter 20 · packages/demo-fixtures 28
+apps/verifier 21 · apps/web 90 passed (11 archivos; nuevo: src/components/__tests__/room.test.tsx, 21 tests)
+
+$ pnpm --filter @quorum/web exec playwright test -c playwright.real.config.ts      (next start, DATA_DIR temporal, claves on-chain vacías)
+✓ sala real: 2 entran por /j y llegan a /v/<token>; la sala llena ofrece modo observador   1 passed
+
+$ E2E_PROD=1 PORT=3337 playwright test e2e/room.spec.ts                            (mocks del contrato, chromium + mobile-360)
+14 passed
+$ E2E_PROD=1 PORT=3337 playwright test e2e/room.spec.ts e2e/phase2.spec.ts e2e/smoke.spec.ts e2e/voter-flow.spec.ts
+34 passed · 26 skipped (voter-flow v0 y capturas: se saltan por diseño)
+$ E2E_PROD=1 PORT=3337 SCREENSHOTS=1 playwright test e2e/screenshots.room.spec.ts --project=chromium
+20 passed → docs/screenshots/phase2/sala-*.png y proyector-*.png (360 y 1440)
+```
+
+### Descarga por teléfono (medido con CDP, Pixel 5 a 360 px, `next start`)
+| Qué | Bytes transferidos |
+|---|---|
+| `/j/<code>` (HTML + JS + CSS + fuente) | 286 864 (25 peticiones) |
+| Modelos de Human + `/zk` (14 archivos; `.wasm` con gzip, `.bin`/`.zkey` sin comprimir) | 16 474 464 |
+| Chunk JS de Human (se carga en la prueba de vida) | ≈ 405 769 gzip (1 574 595 sin comprimir) |
+| Chunk JS de Semaphore/snarkjs (se carga en la boleta) | ≈ 170 925 gzip (561 118) |
+| **Total aproximado por teléfono** | **≈ 17,3 MB** → 60 teléfonos ≈ 1 GB por el wifi del evento |
+
+- `/zk/*` y `/models/*` salen con `Cache-Control: public, max-age=31536000, immutable` (verificado con `curl -I`).
+- `/j` registra `public/sw.js` (sólo cachea `/zk` y `/models`, cache-first) y llena Cache Storage mientras la persona escribe el alias. Medido: en la segunda visita los 4 archivos más pesados salen `fromServiceWorker: true`. Sin contexto seguro (http://IP-de-la-red) cae a `<link rel="prefetch">`; en esa medición `faceres.bin` (7 MB) NO quedó en la caché HTTP del contexto efímero de Chromium → servir la demo por HTTPS (o localhost) para que el service worker funcione.
+- El mayor peso es `faceres.bin` (6,98 MB) e `iris.bin` (2,60 MB): bajarlo exige tocar la config de Human (pendiente, no se cambió).
+
+### Arreglo de build incluido
+`next build` fallaba en la base (`packages/protocol-adapter/src/artifacts.ts`: Turbopack analiza `new URL(dir, import.meta.url)` → "Can't resolve <dynamic>"; el loader `build-tools/strip-js-ext-loader.cjs` no se aplica a ese archivo). Se cambió a `Reflect.construct(URL, [dir, import.meta.url])` (mismo valor en Node; tests del adaptador 20/20). Efecto colateral: en el navegador ahora sí carga `drawWinners` del adaptador, y el mock E2E del sorteo usaba la referencia local → se alineó el mock al adaptador.
