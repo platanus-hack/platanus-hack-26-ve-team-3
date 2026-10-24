@@ -7,11 +7,11 @@
  * (`@quorum/protocol-adapter`); no se implementa criptografía aquí.
  */
 import { encodeAnchorCalldata, groupRoot as computeGroupRoot, hashCanonical, rechain, runDraw, tally as recount, type BallotEntry, type DrawRule } from "@quorum/protocol-adapter";
-import { alterationById, type AlterationId } from "./catalog";
+import { alterationById, CONTINUOUS_ALTERATIONS, type AlterationId } from "./catalog";
 
 type Hex = `0x${string}`;
 type Proof = BallotEntry["proof"];
-type Entry = { idx: number; prevHash: Hex; hash: Hex; proof: Proof };
+type Entry = { idx: number; prevHash: Hex; hash: Hex; proof: Proof; kind?: "ballot" | "member_added"; groupSize?: number };
 type Tally = { counts: number[]; invalid: number; total: number };
 type Draw = { seed: Hex; n: number; winners: string[]; method: string; finalHash: Hex };
 
@@ -56,10 +56,16 @@ export function isLabPackage(v: unknown): v is LabPackage {
 /** Motivo por el que una alteración no aplica a este paquete, o null si aplica. */
 export function unavailableReason(pkg: unknown, id: AlterationId): string | null {
   if (!isLabPackage(pkg)) return "El paquete no tiene el formato semaphore-ledger v1.";
-  // D-22: los paquetes en modo continuo intercalan inscripciones (member_added) y boletas; las recetas del laboratorio
-  // están escritas para el formato con fases. Se verifican igual en el centro de transparencia.
-  if ((pkg.manifest as { enrollment?: unknown }).enrollment) return "El laboratorio trabaja con paquetes con hora de inicio; este es de una votación al instante.";
   const spec = alterationById(id);
+  // D-22: los paquetes en modo continuo intercalan inscripciones (member_added) y boletas. Para ellos el laboratorio
+  // ofrece solo las recetas escritas para ese formato (CONTINUOUS_ALTERATIONS); las demás asumen el formato con fases.
+  const continuous = Boolean((pkg.manifest as { enrollment?: unknown }).enrollment);
+  if (continuous) {
+    if (!CONTINUOUS_ALTERATIONS.includes(id)) return "En una votación al instante el laboratorio ofrece: boleta con raíz inventada, mentir el tamaño del grupo e inflar el resultado.";
+    if (id !== "tally-inflate" && firstBallot(pkg) < 0) return "El registro no tiene boletas.";
+    return null;
+  }
+  if (spec?.needs === "continuous") return "Solo aplica a votaciones al instante (se inscriben y votan a la vez).";
   if (spec?.needs === "draw" && !pkg.draw) return "Este paquete no trae sorteo (la elección aún no está en fase «sorteo realizado»).";
   if (spec?.needs === "draw" && id === "draw-winner") {
     const cands = pkg.manifest.drawRule?.candidates ?? [];
@@ -69,6 +75,11 @@ export function unavailableReason(pkg: unknown, id: AlterationId): string | null
   if (spec?.needs === "room" && !pkg.rollPolicy) return "Este paquete no declara censo abierto en sala (rollPolicy): no hay nada que ocultar.";
   if ((id === "ballot-message" || id === "nullifier-dup" || id === "drop-raw" || id === "drop-rechain" || id === "ledger-extra-field") && pkg.ledger.length < 1) return "El registro no tiene boletas.";
   return null;
+}
+
+/** Posición en `ledger` de la primera boleta (en continuo el ledger también trae inscripciones). */
+function firstBallot(p: LabPackage): number {
+  return p.ledger.findIndex((e) => e.kind !== "member_added");
 }
 
 const short = (v: unknown): string => {
@@ -209,6 +220,22 @@ export function applyAlteration(original: unknown, id: AlterationId): Alteration
     case "room-hide": {
       tamper("rollPolicy", p.rollPolicy, "(eliminado)");
       delete p.rollPolicy;
+      break;
+    }
+    case "ballot-root": {
+      const at = firstBallot(p);
+      const fake = computeGroupRoot([...p.commitments, fakeCommitment()]);
+      tamper(`ledger[${at}].proof.merkleTreeRoot`, p.ledger[at].proof.merkleTreeRoot, fake);
+      p.ledger[at].proof = { ...p.ledger[at].proof, merkleTreeRoot: fake };
+      recomputeAll(p, before, changes);
+      break;
+    }
+    case "group-size": {
+      const at = firstBallot(p);
+      const next = (p.ledger[at].groupSize ?? 0) + 10;
+      tamper(`ledger[${at}].groupSize`, p.ledger[at].groupSize, next);
+      p.ledger[at] = { ...p.ledger[at], groupSize: next };
+      recomputeAll(p, before, changes);
       break;
     }
     case "drop-rechain": {

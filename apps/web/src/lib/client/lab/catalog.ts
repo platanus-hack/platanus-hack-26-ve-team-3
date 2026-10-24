@@ -18,7 +18,9 @@ export type AlterationId =
   | "drop-raw"
   | "drop-rechain"
   | "ledger-extra-field"
-  | "room-hide";
+  | "room-hide"
+  | "ballot-root"
+  | "group-size";
 
 export type AnchorMode = "none" | "sim" | "real";
 
@@ -34,7 +36,7 @@ export type AlterationSpec = {
    */
   expect: { none: string[]; anchored: string[] };
   /** Requisitos del paquete. `draw` = el paquete trae sorteo (fase `drawn`). */
-  needs?: "draw" | "two-ballots" | "room";
+  needs?: "draw" | "two-ballots" | "room" | "continuous";
   /** Nota honesta que se muestra junto al resultado. */
   note?: string;
 };
@@ -126,7 +128,26 @@ export const ALTERATIONS: readonly AlterationSpec[] = [
     needs: "room",
     note: "No se detecta: rollPolicy está fuera de manifestHash y de los checksums (la sala se abre después de publicar). Por eso el verificador la lista como garantía NO soportada en vez de comprobarla.",
   },
+  {
+    id: "ballot-root",
+    title: "Boleta con raíz inventada",
+    body: "Cambia la raíz del grupo de la primera boleta por una que nunca existió (un grupo con alguien colado). El atacante rehace la cadena y los checksums.",
+    expect: { none: ["root_history", "proofs_valid"], anchored: ["root_history", "proofs_valid", "anchor_matches"] },
+    needs: "continuous",
+    note: "Solo votaciones al instante: cada boleta debe usar una raíz que el grupo tuvo de verdad, y la prueba Semaphore firma esa raíz.",
+  },
+  {
+    id: "group-size",
+    title: "Mentir el tamaño del grupo",
+    body: "Sube en 10 el tamaño del grupo (groupSize) declarado en la primera boleta, como si se hubiera escondido entre más gente. El atacante rehace la cadena y los checksums.",
+    expect: { none: ["root_history"], anchored: ["root_history", "anchor_matches"] },
+    needs: "continuous",
+    note: "Solo votaciones al instante: el verificador recalcula el tamaño del grupo en la raíz de cada boleta desde las inscripciones.",
+  },
 ];
+
+/** D-22: alteraciones que el laboratorio ofrece sobre un paquete de una votación al instante (modo continuo). */
+export const CONTINUOUS_ALTERATIONS: readonly AlterationId[] = ["tally-inflate", "ballot-root", "group-size"];
 
 export const alterationById = (id: string): AlterationSpec | undefined => ALTERATIONS.find((a) => a.id === id);
 
@@ -146,6 +167,8 @@ export const CHECK_LABELS: Record<string, string> = {
   tally_matches: "Recuento reproducido",
   anchor_matches: "Ancla on-chain",
   draw_matches: "Sorteo recomputado",
+  root_history: "Raíz de cada boleta",
+  anonymity_set_min: "Mínimo de inscritos (K)",
 };
 
 export const checkLabel = (name: string): string => CHECK_LABELS[name] ?? name;
