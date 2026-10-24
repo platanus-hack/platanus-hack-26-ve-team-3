@@ -9,12 +9,11 @@ import { ResultsCard } from "@/components/results/ResultsCard";
 import { Backdrop } from "@/components/ui/backdrop";
 import { api, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { PhaseTimeline } from "@/components/election/PhaseTimeline";
 import type { Aggregates, ElectionStatus as ElectionPhase } from "@quorum/contracts";
 import { defaultLayout } from "@/lib/client/fixtures";
-import { formatDateTime } from "@/lib/client/format";
 import { phaseLabel } from "@/lib/client/phases";
 import { PageHeader } from "@/components/ui/page-header";
+import { Alert } from "@/components/ui/alert";
 
 const POLL_MS = 3000;
 
@@ -89,22 +88,20 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
     <div className="relative isolate overflow-x-clip">
       <Backdrop />
       <div className="q-fade-in q-container flex max-w-3xl flex-col gap-6 py-6 md:py-10">
-        <PageHeader title={title || "Elección"} meta={<span aria-live="polite">Se actualiza cada 3 s{updatedAt ? ` · ${formatDateTime(new Date(updatedAt).toISOString())}` : ""}</span>}>
-          {phase ? <PhaseTimeline phase={phase} /> : null}
-        </PageHeader>
+        <PageHeader title={title || "Votación"} meta={updatedAt ? `Actualizado ${new Date(updatedAt).toLocaleTimeString("es-VE", { hour: "numeric", minute: "2-digit" })}` : "Se actualiza solo"} />
         {phase === "registration" ? (
-          <p role="status" className="rounded-md border border-border bg-neutral-soft p-3 text-small">
-            La votación aún no abre. Los resultados aparecen al empezar.
-          </p>
+          <Alert tone="info" title="La votación aún no abre">
+            Los resultados aparecen al empezar.
+          </Alert>
         ) : null}
 
         {error && !data ? <ErrorState message={error} onRetry={fetchTally} /> : null}
         {error && data ? (
-          <p role="status" className="rounded-md border border-warning/50 bg-warning-soft p-2 text-small">
-            Sin conexión: mostrando el último dato.
-          </p>
+          <Alert tone="warning" title="Sin conexión">
+            Mostrando el último dato.
+          </Alert>
         ) : null}
-        {!data && !error ? <LoadingState label="Cargando agregados…" lines={4} /> : null}
+        {!data && !error ? <LoadingState label="Cargando resultados…" lines={4} /> : null}
 
         {data && phase !== "registration" ? (
           <ResultsCard options={data.options} totalVotes={data.totalVotes} eligible={data.eligible} turnout={data.turnout} live={data.status === "open"} statusLabel={phaseLabel[data.status]} closesAt={data.closesAt} />
@@ -114,18 +111,17 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
           <div className={`grid grid-cols-1 gap-3 md:gap-4 ${cols}`}>
             {extraTiles.map((tile, i) => (
               <div key={i} className="min-w-0">
-                {tile.type === "donut" ? <DonutTile data={data} /> : tile.type === "text" ? <TextTile template={tile.template} /> : null}
+                {tile.type === "donut" ? <DonutTile data={data} /> : tile.type === "text" ? <div className="hidden md:block"><TextTile template={tile.template} /></div> : null}
               </div>
             ))}
           </div>
         ) : null}
 
         <p className="text-small text-muted-foreground">
-          El resultado final vale cuando lo confirma el{" "}
-          <Link href={`/e/${encodeURIComponent(electionId)}`} className="underline underline-offset-4">
-            verificador
+          Solo totales: nunca quién votó.{" "}
+          <Link href={`/e/${encodeURIComponent(electionId)}`} className="font-semibold text-primary-ink underline underline-offset-4">
+            Comprobar el resultado
           </Link>
-          .
         </p>
       </div>
     </div>

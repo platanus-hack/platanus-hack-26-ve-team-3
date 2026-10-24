@@ -4,23 +4,19 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Calculator, Trophy } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { ApiClientError, describeError } from "@/lib/client/api";
 import { apiV1, fetchAuditPackageBytes } from "@/lib/client/apiV1";
-import { cn } from "@/lib/client/cn";
 import { compareDraw, recomputeDraw, type DrawComparison, type Recomputed } from "@/lib/client/draw";
 import { formatInt, shortHash } from "@/lib/client/format";
 import type { DrawResponse as DrawInfo, Election as ElectionV1 } from "@quorum/contracts";
-import { PhaseTimeline } from "./PhaseTimeline";
 import { Disclosure } from "@/components/ui/disclosure";
 import { PageHeader } from "@/components/ui/page-header";
-import { Stat, StatGrid } from "@/components/ui/stat";
 
-const comparisonStyle: Record<DrawComparison, { tone: "success" | "danger" | "warning"; text: string }> = {
-  coincide: { tone: "success", text: "Coincide: recomputado en tu navegador" },
+const comparisonStyle: Record<DrawComparison, { tone: "success" | "danger"; text: string }> = {
+  coincide: { tone: "success", text: "Coincide con el publicado" },
   "no coincide": { tone: "danger", text: "No coincide: fallo detectado" },
 };
 
@@ -132,89 +128,99 @@ export function DrawView({ electionId }: { electionId: string }) {
 
   return (
     <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
-      <PageHeader title={election.title} meta="Sorteo verificable">
-        <PhaseTimeline phase={election.status} />
-      </PageHeader>
+      <PageHeader title={election.title} meta="Sorteo" />
 
       {!draw ? (
-        <EmptyState title="El sorteo aún no se ha realizado" action={<Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "secondary" }))}>Centro de transparencia</Link>}>
-          Se hace al cerrar. La semilla sale del registro final: nadie la conoce antes.
+        <EmptyState
+          title="El sorteo aún no se ha realizado"
+          action={
+            <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={buttonVariants()}>
+              Ver resultados
+            </Link>
+          }
+        >
+          Se hace al cerrar la votación. Nadie puede saber el resultado antes.
         </EmptyState>
       ) : (
         <>
-          <Card>
-            <CardContent className="flex flex-col gap-4 pt-5 md:pt-6">
-              <StatGrid>
-                <Stat label="Proyectos a financiar" value={formatInt(draw.n)} hint={election.winnersCountFromResult ? "Por la opción ganadora" : "Fijado por el organizador"} />
-                <Stat label="Semilla" value={<span className="q-mono text-body" title={draw.seed}>{shortHash(draw.seed, 8, 6)}</span>} hint="Del registro final" />
-              </StatGrid>
-              <Disclosure title="Detalles técnicos" bodyClassName="flex flex-col gap-1">
-                <p>
-                  <span className="text-muted-foreground">Hash final del registro:</span> <span className="q-mono break-all">{draw.finalHash}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">seed = keccak256(finalHash):</span> <span className="q-mono break-all">{draw.seed}</span>
-                </p>
-                <p className="text-muted-foreground">Método: {draw.method ?? "keccak256(finalHash) · Fisher–Yates"}</p>
+          <Card className="border-transparent shadow-elevated">
+            <CardHeader>
+              <p className="q-eyebrow">{formatInt(draw.n)} proyectos a financiar · {election.winnersCountFromResult ? "lo decidió la votación" : "fijado por el organizador"}</p>
+              <CardTitle as="h2" className="text-title">
+                Ganadores
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="flex flex-col gap-2">
+                {draw.winners.slice(0, revealed).map((id, i) => {
+                  const c = draw.candidates.find((x) => x.id === id);
+                  return (
+                    <li key={id} className="q-fade-in flex min-h-tap items-center gap-3 rounded-md bg-success-soft p-3" data-testid="draw-winner">
+                      <Trophy className="size-5 shrink-0 text-success-strong" aria-hidden="true" />
+                      <span className="q-num w-6 shrink-0 font-semibold text-success-strong">{i + 1}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="font-semibold">{label(id)}</span>
+                        {typeof c?.amount === "number" ? <span className="block text-small text-muted-foreground">Monto {formatInt(c.amount)}</span> : null}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="sr-only" role="status" aria-live="polite">
+                {revealed > 0 ? `Ganador ${revealed}: ${label(draw.winners[revealed - 1])}` : ""}
+              </p>
+              <Disclosure title={`Todos los proyectos (${draw.candidates.length})`} className="mt-4">
+                <ol className="flex flex-col gap-2">
+                  {[...draw.candidates]
+                    .sort((a, b) => (a.id < b.id ? -1 : 1))
+                    .map((c, i) => (
+                      <li key={c.id} className="flex items-center gap-3">
+                        <span className="q-num w-5 shrink-0 text-center text-subtle">{i + 1}</span>
+                        <span className="flex-1">{c.label}</span>
+                        {typeof c.amount === "number" ? <span className="q-num text-muted-foreground">{formatInt(c.amount)}</span> : null}
+                      </li>
+                    ))}
+                </ol>
               </Disclosure>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Proyectos postulados ({draw.candidates.length})</CardTitle>
-              <CardDescription>En el orden en que los recibe el algoritmo.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-live="polite">
-                {[...draw.candidates].sort((a, b) => (a.id < b.id ? -1 : 1)).map((c, i) => {
-                  const pos = draw.winners.indexOf(c.id);
-                  const won = pos >= 0 && pos < revealed;
-                  return (
-                    <li key={c.id} className={cn("flex min-h-tap items-center gap-3 rounded-md border p-3 transition-colors", won ? "border-success bg-success-soft" : "border-border")} data-testid={won ? "draw-winner" : undefined}>
-                      {won ? <Trophy className="size-5 shrink-0 text-success-strong" aria-hidden="true" /> : <span className="q-mono w-5 shrink-0 text-center text-small text-subtle">{i + 1}</span>}
-                      <span className="flex-1">
-                        <span className="font-semibold">{c.label}</span>
-                        {typeof c.amount === "number" ? <span className="block text-small text-muted-foreground">Monto: {formatInt(c.amount)}</span> : null}
-                      </span>
-                      {won ? <span className="text-small font-semibold text-success-strong">Ganador #{pos + 1}</span> : null}
-                    </li>
-                  );
-                })}
-              </ol>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Recomputar aquí</CardTitle>
-              <CardDescription>Tu navegador repite el sorteo y lo compara con el publicado.</CardDescription>
+              <CardTitle>Comprueba el sorteo</CardTitle>
+              <CardDescription>Tu teléfono repite el sorteo y lo compara con el publicado.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <Button onClick={recompute} loading={recomputing} className="w-full sm:w-fit">
-                <Calculator aria-hidden="true" /> Recomputar aquí
+              <Button onClick={recompute} loading={recomputing} full className="sm:w-fit">
+                <Calculator aria-hidden="true" /> Repetir el sorteo aquí
               </Button>
               {recomputeError ? (
-                <Alert tone="danger" title="No se pudo recomputar">
+                <Alert tone="danger" title="No se pudo repetir el sorteo">
                   {recomputeError}
                 </Alert>
               ) : null}
               {recomputed && comparison ? (
-                <div role="status" aria-live="polite" className="flex flex-col gap-2 rounded-md border border-border p-3 text-small" data-testid="draw-recompute">
-                  <Badge tone={comparisonStyle[comparison].tone} className="w-fit">
-                    {comparisonStyle[comparison].text}
-                  </Badge>
-                  <p>
-                    Recomputado: <span className="font-semibold">{recomputed.winners.map(label).join(" · ") || "—"}</span>
-                  </p>
-                  <p>
-                    Seed recomputada: <span className="q-mono break-all">{shortHash(recomputed.seed, 18, 10)}</span>
-                    {recomputed.seed.toLowerCase() === draw.seed.toLowerCase() ? " (igual a la publicada)" : " (distinta de la publicada)"}
-                  </p>
-                  <p>
-                    finalHash del paquete de auditoría:{" "}
-                    {packageFinalHash === "error" ? "no se pudo leer el paquete" : finalHashOk ? "coincide con el usado en el sorteo" : packageFinalHash ? "NO coincide con el usado en el sorteo" : "—"}
-                  </p>
+                <div role="status" aria-live="polite" className="flex flex-col gap-3" data-testid="draw-recompute">
+                  <Alert tone={comparisonStyle[comparison].tone} title={comparisonStyle[comparison].text}>
+                    Ganadores: <span className="font-semibold">{recomputed.winners.map(label).join(" · ") || "—"}</span>
+                  </Alert>
+                  <Disclosure title="Detalles técnicos" bodyClassName="flex flex-col gap-2">
+                    <p>
+                      Seed recomputada: <span className="q-mono break-all">{shortHash(recomputed.seed, 18, 10)}</span>
+                      {recomputed.seed.toLowerCase() === draw.seed.toLowerCase() ? " (igual a la publicada)" : " (distinta de la publicada)"}
+                    </p>
+                    <p>
+                      finalHash del paquete de auditoría:{" "}
+                      {packageFinalHash === "error" ? "no se pudo leer el paquete" : finalHashOk ? "coincide con el usado en el sorteo" : packageFinalHash ? "NO coincide con el usado en el sorteo" : "—"}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Hash final del registro:</span> <span className="q-mono break-all">{draw.finalHash}</span>
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">seed = keccak256(finalHash):</span> <span className="q-mono break-all">{draw.seed}</span>
+                    </p>
+                    <p className="text-muted-foreground">Método: {draw.method ?? "keccak256(finalHash) · Fisher–Yates"}</p>
+                  </Disclosure>
                 </div>
               ) : null}
             </CardContent>

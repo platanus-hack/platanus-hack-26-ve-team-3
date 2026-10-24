@@ -59,7 +59,7 @@ test.describe("fase 2 · votante", () => {
 
     // "Comprobar mi voto": consulta por nullifier sin pedir otro toque.
     await page.getByRole("link", { name: "Comprobar mi voto" }).click();
-    await expect(page.getByLabel("Nullifier")).toHaveValue(nullifier!);
+    await expect(page.getByLabel("Código del comprobante")).toHaveValue(nullifier!);
     await expect(page.getByTestId("my-vote-result")).toContainText("incluido");
   });
 
@@ -116,7 +116,7 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     await expect(page.getByTestId("input-artifact-digest")).toHaveAttribute("title", /^sha256:[0-9a-f]{64}$/);
     await expect(page.getByTestId("verifier-version")).toContainText("quorum-verifier");
 
-    await page.getByLabel("Nullifier").fill(E2E.fixtureNullifier);
+    await page.getByLabel("Código del comprobante").fill(E2E.fixtureNullifier);
     await page.getByRole("button", { name: "Comprobar" }).click();
     await expect(page.getByTestId("my-vote-result")).toContainText("paquete que verificaste");
   });
@@ -135,7 +135,7 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     await new MockV1("drawn").install(page);
     await page.goto(`/e/${E2E.electionId}/draw`);
     await expect(page.getByTestId("draw-winner")).toHaveCount(2, { timeout: 10_000 });
-    await page.getByRole("button", { name: "Recomputar aquí" }).click();
+    await page.getByRole("button", { name: "Repetir el sorteo aquí" }).click();
     await expect(page.getByTestId("draw-recompute")).toContainText("Coincide");
     await expect(page.getByTestId("draw-recompute")).toContainText("finalHash del paquete de auditoría: coincide");
   });

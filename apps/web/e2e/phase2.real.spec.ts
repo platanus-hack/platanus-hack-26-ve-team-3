@@ -172,7 +172,7 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   await expect(vp.getByText(/Verificación parcial/)).toBeVisible();
   await expect(vp.getByTestId("verifier-version")).toContainText("quorum-verifier");
   await expect(vp.getByText("Mismo paquete que verificó el servidor")).toBeVisible();
-  await expect(vp.getByLabel("Nullifier")).toHaveValue(voters[1].nullifier!);
+  await expect(vp.getByLabel("Código del comprobante")).toHaveValue(voters[1].nullifier!);
   await vp.getByRole("button", { name: "Comprobar" }).click();
   await expect(vp.getByTestId("my-vote-result")).toContainText("incluido");
   await expect(vp.getByTestId("my-vote-result")).toContainText("paquete que verificaste");
@@ -183,7 +183,7 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   expect(draw.n).toBe(2); // ganó la opción "2" → 2 proyectos
   await vp.goto(`/e/${encodeURIComponent(electionId)}/draw`);
   await expect(vp.getByTestId("draw-winner")).toHaveCount(2, { timeout: 15_000 });
-  await vp.getByRole("button", { name: "Recomputar aquí" }).click();
+  await vp.getByRole("button", { name: "Repetir el sorteo aquí" }).click();
   const recompute = vp.getByTestId("draw-recompute");
   await expect(recompute).toContainText("Coincide", { timeout: 30_000 });
   await expect(recompute).toContainText("(igual a la publicada)");

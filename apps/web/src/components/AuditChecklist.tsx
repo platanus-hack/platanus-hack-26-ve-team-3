@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime, shortHash } from "@/lib/client/format";
 import { Disclosure } from "@/components/ui/disclosure";
+import { cn } from "@/lib/client/cn";
 
 /**
  * Resultado del verificador independiente. El estado global sale SOLO de `result.valid` del verificador real.
@@ -61,6 +62,10 @@ export function notEvaluated(result: AuditResult): string[] {
 export function AuditChecklist({ result, onDownload, runtime, title = "Resultado del verificador" }: { result: AuditResult; onDownload?: () => void; runtime?: "navegador" | "servidor"; title?: string }) {
   const status = overallStatus(result);
   const pending = notEvaluated(result);
+  const statuses = result.checks.map(checkStatus);
+  const count = (k: string) => statuses.filter((x) => x === k).length;
+  const summary = [`${result.checks.length} comprobaciones`, `${count("verificado")} verificadas`, count("fallo detectado") ? `${count("fallo detectado")} con fallo` : null, count("no verificable") ? `${count("no verificable")} sin evaluar` : null].filter(Boolean).join(" · ");
+  const ordered = [...result.checks].sort((a, b) => Number(checkStatus(b) === "fallo detectado") - Number(checkStatus(a) === "fallo detectado"));
   return (
     <Card>
       <CardHeader>
@@ -80,29 +85,34 @@ export function AuditChecklist({ result, onDownload, runtime, title = "Resultado
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <section aria-labelledby="checks-h">
-          <h3 id="checks-h" className="mb-2 text-body font-bold">
-            Comprobaciones ({result.checks.length})
-          </h3>
-          {result.checks.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border p-3 text-small text-muted-foreground">
-              El verificador no evaluó ninguna comprobación. No se puede afirmar nada sobre este escrutinio.
+        {result.checks.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border p-3 text-small text-muted-foreground">
+            El verificador no evaluó ninguna comprobación. No se puede afirmar nada sobre este escrutinio.
+          </p>
+        ) : (
+          <>
+            <p className="text-small text-muted-foreground" data-testid="checks-summary">
+              {summary}
             </p>
-          ) : (
-            <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
-              {result.checks.map((c, i) => (
-                <li key={`${c.name}-${i}`} data-check={c.name} data-status={checkStatus(c)} className="flex items-start justify-between gap-3 px-3 py-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold">{checkName[c.name] ?? c.name}</p>
-                    {c.reason ? <p className="mt-0.5 line-clamp-2 text-small text-muted-foreground">{c.reason}</p> : null}
-                    <p className="q-mono mt-0.5 text-[0.6875rem] text-subtle">{c.name}</p>
-                  </div>
-                  <StatusPill status={checkStatus(c)} size="sm" className="shrink-0" />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <Disclosure title={<h3 id="checks-h" className="text-body font-bold">Ver las {result.checks.length} comprobaciones</h3>} defaultOpen={status === "fallo detectado"} bodyClassName="p-0">
+              <ul className="divide-y divide-border">
+                {ordered.map((c, i) => {
+                  const st = checkStatus(c);
+                  return (
+                    <li key={`${c.name}-${i}`} data-check={c.name} data-status={st} className="flex items-start justify-between gap-3 px-3 py-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold">{checkName[c.name] ?? c.name}</p>
+                        {c.reason ? <p className={cn("mt-0.5 text-small text-muted-foreground", st !== "fallo detectado" && "line-clamp-2")}>{c.reason}</p> : null}
+                        <p className="q-mono mt-0.5 text-[0.6875rem] text-subtle">{c.name}</p>
+                      </div>
+                      <StatusPill status={st} size="sm" className="shrink-0" />
+                    </li>
+                  );
+                })}
+              </ul>
+            </Disclosure>
+          </>
+        )}
 
         <Disclosure
           title={

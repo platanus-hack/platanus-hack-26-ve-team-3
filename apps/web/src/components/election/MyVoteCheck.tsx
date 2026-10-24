@@ -18,18 +18,21 @@ type Outcome = { status: HonestStatus; title: string; body: string };
 /** Decide el estado honesto de "mi voto está". Exportado para tests. */
 export type InclusionSource = "paquete verificado" | "ledger publicado" | "registro del servidor";
 
+const SOURCE_LABEL: Record<InclusionSource, string> = { "paquete verificado": "el paquete que verificaste", "ledger publicado": "el registro publicado", "registro del servidor": "el registro del servidor" };
+
 export function judgeInclusion(args: { found: { idx?: number } | null; source: InclusionSource; fromReceipt: boolean }): Outcome {
   const { found, source, fromReceipt } = args;
+  const where = SOURCE_LABEL[source];
   if (found) {
     const pos = typeof found.idx === "number" && found.idx >= 0 ? ` (posición #${found.idx})` : "";
     return source === "paquete verificado"
-      ? { status: "incluido", title: `Tu boleta está en el paquete que verificaste${pos}`, body: "El nullifier aparece en el registro que tu navegador acaba de verificar." }
-      : { status: "incluido", title: `Tu boleta está en el ${source}${pos}`, body: "Al cierre, usa «Verificar ahora» y vuelve a comprobar contra el paquete verificado: es la comprobación que no depende de la palabra del servidor." };
+      ? { status: "incluido", title: `Tu boleta está en el paquete que verificaste${pos}`, body: "Tu código aparece en el registro que tu teléfono acaba de comprobar." }
+      : { status: "incluido", title: `Tu boleta está en ${where}${pos}`, body: "Al cierre, toca «Verificar ahora» y compruébalo de nuevo sin depender del servidor." };
   }
   if (fromReceipt) {
-    return { status: "fallo detectado", title: "Tu boleta NO aparece", body: `Este navegador guardó un comprobante con este nullifier, pero no está en el ${source}. Guarda tu comprobante y repórtalo: es evidencia de una boleta eliminada.` };
+    return { status: "fallo detectado", title: "Tu boleta NO aparece", body: `Este teléfono guardó un comprobante con este código, pero no está en ${where}. Guárdalo y repórtalo: es evidencia de una boleta eliminada.` };
   }
-  return { status: "no verificable", title: "No encontrado", body: `Ese nullifier no está en el ${source}. Revisa que lo hayas copiado completo (sólo dígitos).` };
+  return { status: "no verificable", title: "No encontrado", body: `Ese código no está en ${where}. Revisa que lo hayas copiado completo.` };
 }
 
 /**
@@ -63,7 +66,7 @@ export function MyVoteCheck({ electionId, verified }: { electionId: string; veri
     setError(null);
     setOutcome(null);
     const n = normalizeNullifier(value);
-    if (!n) return setError("El nullifier es un número decimal largo (sólo dígitos).");
+    if (!n) return setError("El código son solo números. Cópialo completo desde tu comprobante.");
     setLoading(true);
     try {
       if (verified) {
@@ -100,7 +103,7 @@ export function MyVoteCheck({ electionId, verified }: { electionId: string; veri
       </CardHeader>
       <CardContent>
         <form ref={formRef} onSubmit={check} className="flex flex-col gap-3" noValidate>
-          <Field label="Nullifier" htmlFor={inputId} hint={fromReceipt ? "Tomado del comprobante guardado en este navegador." : "Pégalo desde tu comprobante."}>
+          <Field label="Código del comprobante" htmlFor={inputId} hint={fromReceipt ? "Tomado del comprobante de este teléfono." : "Pégalo desde tu comprobante."}>
             <Input
               id={inputId}
               inputMode="numeric"

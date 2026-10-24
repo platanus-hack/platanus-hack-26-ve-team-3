@@ -42,7 +42,7 @@ function TileShell({ title, children, note }: { title: string; children: React.R
 export function StatTile({ metric, data }: { metric: "turnout" | "totalVotes" | "leadingShare"; data: Aggregates }) {
   const def = {
     turnout: { title: "Participación", value: formatPercent(data.turnout), note: `${formatInt(data.totalVotes)} de ${formatInt(data.eligible)} elegibles` },
-    totalVotes: { title: "Votos incluidos", value: formatInt(data.totalVotes), note: "Nunca votos individuales" },
+    totalVotes: { title: "Votos", value: formatInt(data.totalVotes), note: "Solo totales" },
     leadingShare: { title: "Opción líder", value: data.leadingShare === null ? "—" : formatPercent(data.leadingShare), note: data.leadingShare === null ? HIDDEN_NOTE : "Opción con más votos" },
   }[metric];
   return (

@@ -12,16 +12,16 @@ import { describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
 import { FIXTURE_PACKAGE_ID, FIXTURE_PACKAGE_URL } from "@/lib/client/fixtures";
-import { formatDateTime, formatInt, formatPercent, kindLabel } from "@/lib/client/format";
+import { formatDateTime, kindLabel } from "@/lib/client/format";
 import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
 import type { Aggregates as AggregatesV1, AuditResponse as StoredAudit, Election as ElectionV1 } from "@quorum/contracts";
 import { MyVoteCheck } from "./MyVoteCheck";
 import { PhaseTimeline } from "./PhaseTimeline";
 import { VerifyNowPanel, type PackageSource, type VerifiedPackage } from "./VerifyNowPanel";
 import { ActionBar, PageHeader } from "@/components/ui/page-header";
-import { ProgressRow } from "@/components/ui/progress-row";
-import { Stat, StatGrid } from "@/components/ui/stat";
 import { CheckList } from "@/components/ui/check-list";
+import { ResultsCard } from "@/components/results/ResultsCard";
+import { Disclosure } from "@/components/ui/disclosure";
 
 
 type Fixture = { election: ElectionV1; tally: AggregatesV1 };
@@ -102,7 +102,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
   if (loading) {
     return (
       <div className="q-container py-10">
-        <LoadingState label="Cargando centro de transparencia…" lines={5} />
+        <LoadingState label="Cargando…" lines={5} />
       </div>
     );
   }
@@ -118,7 +118,6 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
     );
   }
 
-  const hidden = tally?.options.some((o) => o.count === null) ?? false;
   const auditable = hasAuditPackage(election.status);
   const source: PackageSource = isFixture ? { kind: "fixture", url: FIXTURE_PACKAGE_URL, label: "fixture · simulación" } : { kind: "api", electionId };
 
@@ -131,7 +130,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
           <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "soft" }))}>
             En vivo
           </Link>
-          {election.status === "drawn" || (election.candidates?.length ?? 0) > 0 ? (
+          {election.status === "drawn" ? (
             <Link href={`/e/${encodeURIComponent(electionId)}/draw`} className={cn(buttonVariants({ variant: "soft" }))}>
               Sorteo
             </Link>
@@ -144,7 +143,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
           <AuditChecklist result={serverAudit.auditResult} runtime="servidor" title="El verificador rechazó el paquete publicado" />
         ) : (
           <Alert tone="danger" title="Fallo detectado">
-            El verificador rechazó el paquete de esta votación, pero no se pudo leer su resultado (GET /audit). Verifícalo tú abajo.
+            El verificador rechazó el paquete de esta votación, pero no se pudo leer su resultado. Verifícalo tú abajo.
           </Alert>
         )
       ) : null}
@@ -162,63 +161,16 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
 
       {!isFixture ? <MyVoteCheck electionId={electionId} verified={verified} /> : null}
 
+      {tally ? <ResultsCard options={tally.options} totalVotes={tally.totalVotes} eligible={tally.eligible} turnout={tally.turnout} live={tally.status === "open"} statusLabel={phaseLabel[tally.status]} /> : null}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Cifras agregadas</CardTitle>
-            <CardDescription>Nunca votos individuales ni listas de votantes.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {tally ? (
-              <div className="flex flex-col gap-6">
-                <StatGrid>
-                  <Stat label="Participación" value={formatPercent(tally.turnout)} />
-                  <Stat label="Boletas" value={formatInt(tally.totalVotes)} hint={`de ${formatInt(tally.eligible)}`} />
-                </StatGrid>
-                {hidden ? (
-                  <p className="text-body">Desglose oculto hasta 5 votos.</p>
-                ) : (
-                  <ul className="flex flex-col gap-4">
-                    {tally.options.map((o, i) => (
-                      <li key={o.id}>
-                        <ProgressRow label={o.label} value={<span className="font-semibold text-foreground">{formatInt(o.count)}</span>} share={tally.totalVotes ? (o.count ?? 0) / tally.totalVotes : 0} delay={i * 80} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : (
-              <p className="text-small text-muted-foreground">Aún no hay agregados publicados.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Manifiesto y padrón</CardTitle>
-            <CardDescription>Huellas que fijan la pregunta, las opciones y quién puede votar.</CardDescription>
+            <CardTitle>La votación</CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="flex flex-col gap-3 text-small">
-              <div>
-                <dt className="text-muted-foreground">Hash del manifiesto</dt>
-                <dd className="q-mono break-all font-semibold" data-testid="manifest-hash">
-                  {election.manifestHash ?? "Aún no publicado (borrador)"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Raíz del padrón (groupRoot)</dt>
-                <dd className="q-mono break-all font-semibold">{election.groupRoot ?? "Se fija al abrir la votación"}</dd>
-              </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <dt className="text-muted-foreground">Tipo</dt>
-                  <dd className="font-semibold">{kindLabel[election.kind] ?? election.kind}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Protocolo</dt>
-                  <dd className="q-mono font-semibold">{election.protocol ?? "—"}</dd>
-                </div>
                 <div>
                   <dt className="text-muted-foreground">Abre</dt>
                   <dd className="font-semibold">{formatDateTime(election.startsAt)}</dd>
@@ -238,20 +190,37 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
                   </ol>
                 </dd>
               </div>
-              <div>
-                <dt className="text-muted-foreground">Ancla on-chain</dt>
-                <dd className="q-mono break-all">{election.anchor?.txHash ? `Base Sepolia · ${election.anchor.txHash}` : "Sin ancla publicada"}</dd>
-              </div>
             </dl>
+            <Disclosure title="Huellas para auditar" className="mt-4" bodyClassName="flex flex-col gap-3">
+              <div>
+                <p className="text-muted-foreground">Hash del manifiesto</p>
+                <p className="q-mono break-all font-semibold" data-testid="manifest-hash">
+                  {election.manifestHash ?? "Aún no publicado (borrador)"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Huella del padrón</p>
+                <p className="q-mono break-all font-semibold">{election.groupRoot ?? "Se fija al abrir la votación"}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-muted-foreground">Tipo</p>
+                  <p className="font-semibold">{kindLabel[election.kind] ?? election.kind}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Protocolo</p>
+                  <p className="q-mono font-semibold">{election.protocol ?? "—"}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Registro público externo</p>
+                <p className="q-mono break-all">{election.anchor?.txHash ? `Base Sepolia · ${election.anchor.txHash}` : "Sin registro externo"}</p>
+              </div>
+            </Disclosure>
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Qué garantiza y qué no</CardTitle>
-            <CardDescription>Protocolo semaphore-ledger.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-4 text-small md:grid-cols-2">
+        <Disclosure title="Qué garantiza y qué no" className="bg-card md:col-span-1" bodyClassName="grid grid-cols-1 gap-4">
             <div>
               <p className="mb-3 font-semibold">Se puede comprobar</p>
               <CheckList
@@ -270,14 +239,13 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
                 items={[
                   "Que el servidor no vea la opción de cada boleta.",
                   "Que el padrón sea correcto: lo define el organizador. La cámara no impide todos los duplicados.",
-                  "Que no falten boletas, si no hay ancla on-chain.",
-                  "La clave del votante vive solo en su navegador (wallet en Base Sepolia testnet); si se borra, no puede votar.",
+                  "Que no falten boletas, si no hay registro público externo.",
+                  "La clave del votante vive solo en su navegador; si la borra, no puede votar.",
                   "«Verificado» sólo lo muestra el verificador, nunca el servidor.",
                 ]}
               />
             </div>
-          </CardContent>
-        </Card>
+        </Disclosure>
       </div>
     </div>
   );
