@@ -1,4 +1,4 @@
-import { Backdrop, FinalCta, Hero, Promise, TrustFlow } from "@/components/landing/organisms";
+import { Backdrop, Hero, Promise, TrustFlow } from "@/components/landing/organisms";
 
 export default function Home() {
   return (
@@ -8,7 +8,6 @@ export default function Home() {
         <Hero />
         <TrustFlow />
         <Promise />
-        <FinalCta />
       </div>
     </div>
   );

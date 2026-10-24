@@ -8,7 +8,7 @@ import { cn } from "@/lib/client/cn";
 const STEP_MS = 3600;
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
-const STEPS = [
+export const STEPS = [
   {
     id: "rostro",
     icon: ScanFace,
@@ -93,7 +93,7 @@ export function TrustFlow() {
   };
 
   return (
-    <section ref={ref} aria-labelledby="como-funciona" className="q-reveal flex flex-col gap-6">
+    <section ref={ref} aria-labelledby="como-funciona" className="q-reveal flex flex-col gap-6 lg:hidden">
       <div className="flex flex-col gap-2">
         <p className="q-eyebrow">Cómo funciona</p>
         <h2 id="como-funciona" className="font-display text-title font-bold tracking-tight md:text-[2.25rem]">
@@ -101,52 +101,16 @@ export function TrustFlow() {
         </h2>
       </div>
 
-      <div className="flex flex-col gap-4 lg:hidden">
+      <div className="flex flex-col gap-4">
         <StepRail active={active} onPick={pick} />
         <Stage step={active} header playing={playing} />
       </div>
 
-      <div className="hidden gap-10 lg:grid lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-        <ol className="relative flex flex-col self-start">
-          <span aria-hidden="true" className="absolute bottom-6 left-[1.4375rem] top-6 w-0.5 rounded-full bg-border" />
-          <span
-            aria-hidden="true"
-            className="absolute left-[1.4375rem] top-6 w-0.5 rounded-full bg-primary transition-[height] duration-700 ease-out"
-            style={{ height: `calc((100% - 3rem) * ${active / (STEPS.length - 1)})` }}
-          />
-          {STEPS.map((s, i) => {
-            const on = i === active;
-            return (
-              <li key={s.id} className="relative">
-                <button
-                  type="button"
-                  aria-current={on ? "step" : undefined}
-                  onClick={() => pick(i)}
-                  className={cn("flex w-full items-start gap-4 rounded-lg p-1.5 pr-3 text-left transition-colors duration-300", on ? "bg-card shadow-card" : "hover:bg-card/60")}
-                >
-                  <StepIcon step={i} active={active} />
-                  <span className="flex min-w-0 flex-1 flex-col py-2">
-                    <span className={cn("font-semibold", on ? "text-foreground" : "text-muted-foreground")}>{s.title}</span>
-                    <span className={cn("grid transition-[grid-template-rows,opacity] duration-500", on ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
-                      <span className="overflow-hidden text-small text-muted-foreground">{s.body}</span>
-                    </span>
-                    {on && playing ? <Timer key={active} /> : null}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-
-        <div className="sticky top-24 self-start">
-          <Stage step={active} />
-        </div>
-      </div>
     </section>
   );
 }
 
-function StepIcon({ step, active }: { step: number; active: number }) {
+export function StepIcon({ step, active }: { step: number; active: number }) {
   const Icon = STEPS[step].icon;
   const on = step === active;
   return (
@@ -189,7 +153,7 @@ function Timer() {
   );
 }
 
-function Stage({ step, header = false, playing = false }: { step: number; header?: boolean; playing?: boolean }) {
+export function Stage({ step, header = false, playing = false }: { step: number; header?: boolean; playing?: boolean }) {
   const s = STEPS[step];
   return (
     <Glass strong className="relative overflow-hidden rounded-xl shadow-elevated">
