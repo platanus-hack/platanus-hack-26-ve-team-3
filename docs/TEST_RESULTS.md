@@ -594,3 +594,43 @@ $ POST join tras cerrar
 - `seatsTaken` cuenta votantes creados por sala, aunque no terminen la inscripción (un asiento abandonado no se libera). El rate limit por IP es generoso (30/min) porque el wifi del evento comparte IP; el control real es `maxSeats` + expiración + dedupe facial demo.
 - `rollPolicy` es una declaración del organizador fuera de `manifestHash`/`checksums`: quien manipule el paquete puede quitarla y el verificador no lo detecta. Por eso se declara como garantía no soportada, nunca como check.
 - El dedupe facial es modo demo (descriptor de modelo local, umbral coseno 0,75), no una garantía biométrica.
+
+## 2026-10-24 · Integración fase 2 completa (rama `integration/phase2`, integrador)
+
+**Contenido:** integration/h3 + `feat/phase2-engine` + `feat/phase2-wallet` + `feat/phase2-ui` + `feat/p2-qa-adversarial` + `feat/p2-anchor` + `feat/p2-sala-abierta`, más los ajustes de integración (tipos v1 de la web desde `@quorum/contracts`, `WalletStep` real, sorteo con `drawWinners` del adaptador, `eoa-demo` en `localStorage`, `POST /vote` con `onchain` → 400 `onchain_not_supported`, `check.status` en la UI, E2E real).
+
+### Comandos ejecutados (salida real, America/Caracas)
+| Hora | Comando | Resultado |
+|---|---|---|
+| 12:41:35 -0400 | `pnpm typecheck` | exit 0 |
+| 12:42:31 -0400 | `pnpm lint` | exit 0 (0 errores, 0 warnings) |
+| 12:42:00 -0400 | `pnpm test` | exit 0 · contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 27 · verifier 41 · web 82 → **272 tests, 0 fallos** |
+| 12:42:15 -0400 | `pnpm --filter @quorum/web build` | exit 0 (`✓ Compiled successfully in 3.9s`, 17 páginas) |
+| 12:42:43 -0400 | `PORT=3327 pnpm --filter @quorum/web exec playwright test e2e/smoke.spec.ts e2e/phase2.spec.ts` | **20 passed** (chromium + mobile-360) |
+| 12:42:59 -0400 | `pnpm --filter @quorum/web test:e2e:real` | **1 passed** (12.5 s de test; 21.6 s con `next build` + `next start`) |
+
+Detalle Playwright con mocks (por proyecto `chromium` y `mobile-360`): smoke ×4 (portada 200 + h1, idioma, `/zk` sirve los artefactos, centro de transparencia del fixture) y phase2 ×6 (inscripción rostro→wallet→credencial y voto con prueba real en el navegador; invitación inexistente; Verificar ahora ⇒ verificado parcial con ancla no evaluada; total alterado ⇒ fallo detectado; sorteo Recomputar aquí coincide; panel del organizador con Bearer y token mostrado una vez).
+
+### E2E real (`e2e/phase2.real.spec.ts`, sin mocks)
+`playwright.real.config.ts`: `next build` (en `.next-e2e-real`) + `next start -p 3318`, store JSON en un `DATA_DIR` temporal, `NEXT_PUBLIC_QUORUM_E2E_FAKE_FACE=1`. Variables vaciadas explícitamente (Next no pisa variables ya definidas con `.env.local`): `ORGANIZER_PRIVATE_KEY`, `NEXT_PUBLIC_REGISTRY_ADDRESS`, `BASE_SEPOLIA_RPC`, `NEXT_PUBLIC_BASE_SEPOLIA_RPC`, `NEXT_PUBLIC_ZERODEV_PROJECT_ID`, AI Gateway, Kapso/Meta; `INVITE_CHANNEL=dry-run`; `FACE_KEY` aleatoria de prueba. Recorrido comprobado:
+1. Asistente `/org/new`: votación ficticia con opciones "1"/"2", 3 proyectos al sorteo, 2 vecinos ficticios → publicar; `organizerToken` leído del panel (mostrado una vez). `POST /open` sin token → 401.
+2. Cada votante en su propio contexto de navegador: rostro simulado → wallet `eoa-demo` (etiqueta "demo"; clave en `localStorage`) → credencial Semaphore. El contexto de Ana se cierra y se reabre con su almacenamiento: la wallet y la credencial siguen sirviendo.
+3. Organizador congela el padrón y abre. Ambos votan "2" con prueba Groth16 generada en el navegador → recibo `incluido`, nullifiers distintos, cuerpo del voto solo `{proof}`.
+4. Doble voto: reenviar la misma prueba → **409 `already_voted`**; desde la UI con una prueba nueva (otra opción, misma credencial) → "No se pudo enviar la boleta… ya fue usada para votar"; voto con `onchain` → **400 `onchain_not_supported`**. Ledger durante `open`: `count: 2`, sin entradas.
+5. Cerrar: `GET /audit` → `auditResult.valid: true`, `anchorStatus.mode: "disabled"` (ninguna tx).
+6. "Verificar ahora" en el navegador: **verificado** + **no verificable** (ancla no evaluada, "Verificación parcial"), versión `quorum-verifier`, mismo digest que el servidor. "Mi voto está" con el comprobante guardado ⇒ `incluido` en el paquete verificado.
+7. Sorteo: `GET /draw` → `n: 2` (ganó la opción "2"); `/e/:id/draw` muestra 2 ganadores; **Recomputar aquí ⇒ Coincide**, seed igual a la publicada y `finalHash` del paquete coincide.
+
+### Hallazgos de la integración (corregidos)
+- La UI validaba formas que el backend real no produce: `anchorStatus` (objeto, no string), `groupRoot/scope/genesisHash/finalHash` null antes de abrir, `tieBreak` null, invitación sin `voter.state`. Con los esquemas de `@quorum/contracts` el E2E real los ejercita.
+- La "referencia local" del sorteo en la web hacía Fisher–Yates hacia atrás con otra codificación: contra el backend real habría mostrado "no verificable". Ahora la web usa `drawWinners` del adaptador y exige seed y ganadores en el mismo orden.
+- `eoa-demo` en `sessionStorage` perdía la credencial al cerrar la pestaña entre inscripción y voto (la credencial se cifra con la firma FaceBinding). Ahora `localStorage` (test en `packages/wallet` y en el E2E real).
+- Rostro simulado idéntico para votantes con ids de igual longitud ⇒ el dedupe 1:N real devolvía `duplicate_identity`. Ahora el descriptor sintético se siembra con el voterId.
+- Turbopack no empaquetaba el adaptador en el navegador por `new URL(dir, import.meta.url)` (lo tapaba el loader de la UI, retirado): `new globalThis.URL(...)`.
+- El E2E con mocks arrancaba `pnpm dev` con `NEXT_PUBLIC_ZERODEV_PROJECT_ID` de `.env.local` (modo Kernel con red). Ahora vacío, igual que la clave del organizador y el registro.
+
+### Límites (no ocultos)
+- No se probó Kernel/ZeroDev real ni el ancla real en este run (vaciados a propósito; el ancla tiene su evidencia en la sección de `feat/p2-anchor`).
+- El rostro del E2E es simulado (Playwright no tiene cámara); la prueba de vida real no se ejercitó aquí.
+- `e2e/voter-flow.spec.ts` (esqueleto v0 con `test.fixme`) y las capturas (`SCREENSHOTS=1`) no se corrieron en esta pasada.
+- Ninguna UI muestra `votedAt` hoy (la invitación solo lo usa internamente); no hubo nada que cambiar a "solo fecha".

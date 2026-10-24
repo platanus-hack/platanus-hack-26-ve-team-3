@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Build propio del E2E real (playwright.real.config.ts).
+    ".next-e2e-real/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
