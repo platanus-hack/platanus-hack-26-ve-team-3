@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { orgMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { formatDateTime } from "@/lib/client/format";
+import { ConfirmInline } from "@/components/ui/confirm-inline";
 
 const statusLabel = { pending: "Por revisar", approved: "Aprobado", rejected: "Rechazado" } as const;
 
@@ -47,8 +48,7 @@ export function ReviewsCard({ electionId, reviews, hasToken, onDecided }: { elec
           {pending.length > 0 ? <Badge tone="warning">Requiere tu decisión</Badge> : null}
         </div>
         <CardDescription>
-          El rostro de estas personas se parece al de alguien ya inscrito, pero entraron con su propia credencial (por ejemplo, gemelos). Pídeles que te
-          muestren la credencial y decide en persona. Cada aprobación queda contada en el paquete de auditoría público.
+          Su rostro se parece al de alguien ya inscrito, pero traen su propia credencial. Revísala en persona y decide.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -62,31 +62,25 @@ export function ReviewsCard({ electionId, reviews, hasToken, onDecided }: { elec
                   <Badge tone="warning">{statusLabel[r.status]}</Badge>
                 </div>
                 <p className="text-small text-muted-foreground">
-                  Llegó {formatDateTime(r.createdAt)} · con credencial del evento · su rostro coincide con alguien ya inscrito
+                  Llegó {formatDateTime(r.createdAt)} · credencial del evento
                 </p>
-                {!hasToken ? (
-                  <p className="text-small text-muted-foreground">Decidir requiere el token del organizador.</p>
-                ) : confirm?.id === r.reviewId ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-md border border-danger/50 p-2">
-                    <span className="text-small">
-                      {confirm.decision === "approve"
-                        ? "¿Viste a esta persona y su credencial? Podrá votar y quedará contada como aprobación manual."
-                        : "Esta persona no podrá votar. ¿Rechazar?"}
-                    </span>
-                    <Button size="sm" variant={confirm.decision === "approve" ? "primary" : "danger"} onClick={decide} loading={busy} data-testid="review-confirm">
-                      {confirm.decision === "approve" ? "Sí, aprobar" : "Sí, rechazar"}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setConfirm(null)} disabled={busy}>
-                      Cancelar
-                    </Button>
-                  </div>
+                {!hasToken ? null : confirm?.id === r.reviewId ? (
+                  <ConfirmInline
+                    message={confirm.decision === "approve" ? "¿Viste a esta persona y su credencial? Podrá votar y quedará contada como aprobación manual." : "Esta persona no podrá votar. ¿Rechazar?"}
+                    confirmLabel={confirm.decision === "approve" ? "Sí, aprobar" : "Sí, rechazar"}
+                    tone={confirm.decision === "approve" ? "primary" : "danger"}
+                    onConfirm={decide}
+                    onCancel={() => setConfirm(null)}
+                    loading={busy}
+                    confirmTestId="review-confirm"
+                  />
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" onClick={() => setConfirm({ id: r.reviewId, decision: "approve" })} data-testid="review-approve">
-                      Aprobar
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={() => setConfirm({ id: r.reviewId, decision: "reject" })} data-testid="review-reject">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="secondary" onClick={() => setConfirm({ id: r.reviewId, decision: "reject" })} data-testid="review-reject">
                       Rechazar
+                    </Button>
+                    <Button onClick={() => setConfirm({ id: r.reviewId, decision: "approve" })} data-testid="review-approve">
+                      Aprobar
                     </Button>
                   </div>
                 )}

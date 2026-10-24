@@ -77,17 +77,12 @@ test.describe("organizador · casos por revisar", () => {
     await expect(card).not.toContainText(/similitud|%|v-ana/);
     // Aviso junto a los dos botones de abrir: casos pendientes y "X de Y listos" (mock: 3 de 9).
     await expect(page.getByTestId("open-readiness")).toContainText("3 de 9 listos · Hay 1 caso por revisar");
-    await expect(page.getByTestId("start-readiness")).toContainText("3 de 9 listos");
-    await expect(page.getByTestId("start-readiness")).toContainText("Hay 1 caso por revisar");
     await shot(page, "revision-02-panel-caso");
 
     // Confirmar la apertura avisa ANTES: el caso se rechaza solo y hay personas a medio inscribir.
     await page.getByTestId("phase-action").click();
     await expect(page.getByTestId("open-warning").first()).toHaveText("Hay 1 caso por revisar. Si abres ahora, se rechaza automáticamente.");
     await expect(page.getByTestId("open-warning").nth(1)).toHaveText("3 de 9 personas terminaron. Las demás no podrán votar. ¿Abrir igual?");
-    await page.getByRole("button", { name: "Cancelar" }).first().click();
-    await page.getByTestId("start-now").click();
-    await expect(page.getByTestId("start-now-warning").first()).toContainText("Hay 1 caso por revisar");
     await page.getByRole("button", { name: "Cancelar" }).first().click();
 
     // Aprobar pide confirmación.

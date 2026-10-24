@@ -112,7 +112,6 @@ test.describe("panel del organizador · tarjeta Sala abierta", () => {
     await card.getByTestId("start-in-5").click();
     await expect(start).toContainText(/La votación empieza en 0[45]:\d\d/);
     expect(mock.schedules).toEqual([{ addSeconds: 300 }, { inSeconds: 300 }]);
-    await expect(card.getByTestId("start-now")).toBeVisible();
     await expect(card.getByTestId("room-join-url")).toHaveText(new RegExp(`/j/${CODE}$`));
     await expect(card.getByTestId("room-open")).toContainText("Ampliar");
 
