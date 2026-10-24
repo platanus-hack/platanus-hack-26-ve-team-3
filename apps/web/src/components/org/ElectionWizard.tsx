@@ -14,6 +14,7 @@ import { appendVoters, rememberElection, saveOrgToken } from "@/lib/client/orgSt
 import { kindLabel } from "@/lib/client/format";
 import type { Candidate } from "@quorum/contracts";
 import { CandidatesEditor, CandidatesList } from "./CandidatesEditor";
+import { checkLabel, DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, methodLabel, type EligibilityDraft } from "./EligibilityPicker";
 
 const STEPS = [
   { id: "question", label: "Pregunta y opciones" },
@@ -53,7 +54,8 @@ export function ElectionWizard() {
   const [winnersRule, setWinnersRule] = useState<"fixed" | "fromResult">("fromResult");
   const [winnersCount, setWinnersCount] = useState("1");
 
-  // Paso 2
+  // Paso 2 — D-19: ¿quién puede votar? (credencial del evento por defecto) + invitados opcionales
+  const [eligibility, setEligibility] = useState<EligibilityDraft>(DEFAULT_ELIGIBILITY);
   const [participants, setParticipants] = useState<Participant[]>([{ displayName: "", phoneE164: "" }]);
   const [pasted, setPasted] = useState("");
 
@@ -87,7 +89,10 @@ export function ElectionWizard() {
     return null;
   }
   function validateStep2(): string | null {
-    if (cleanParticipants.length === 0) return "Agrega al menos un participante.";
+    const el = eligibilityInputOf(eligibility);
+    if (!el.ok) return el.error;
+    // Con credencial del evento la gente entra por la sala: los invitados por enlace son opcionales.
+    if (cleanParticipants.length === 0 && eligibility.method !== "event-badge") return "Agrega al menos un participante.";
     if (cleanParticipants.length > 500) return "Máximo 500 participantes por lote.";
     const bad = cleanParticipants.find((p) => p.phoneE164 && !/^\+[1-9]\d{6,14}$/.test(p.phoneE164));
     if (bad) return `Teléfono inválido para «${bad.displayName}»: usa formato internacional, p. ej. +584121234567.`;
@@ -121,7 +126,10 @@ export function ElectionWizard() {
     setPublishing(true);
     try {
       setProgress("Creando la elección…");
+      const el = eligibilityInputOf(eligibility);
+      if (!el.ok) throw new Error(el.error);
       const input: CreateElectionV1 = {
+        eligibility: el.value,
         title: title.trim(),
         description: description.trim(),
         kind,
@@ -139,12 +147,14 @@ export function ElectionWizard() {
       // Token del organizador (se devuelve una sola vez): sessionStorage; el panel lo muestra una vez con "guárdalo".
       if (election.organizerToken) saveOrgToken(election.id, election.organizerToken);
 
-      setProgress(`Registrando ${cleanParticipants.length} participantes…`);
-      const res = await apiV1.addVoters(
-        election.id,
-        cleanParticipants.map((p) => (p.phoneE164 ? { displayName: p.displayName, phoneE164: p.phoneE164 } : { displayName: p.displayName })),
-      );
-      appendVoters(election.id, res.voters);
+      if (cleanParticipants.length > 0) {
+        setProgress(`Registrando ${cleanParticipants.length} participantes…`);
+        const res = await apiV1.addVoters(
+          election.id,
+          cleanParticipants.map((p) => (p.phoneE164 ? { displayName: p.displayName, phoneE164: p.phoneE164 } : { displayName: p.displayName })),
+        );
+        appendVoters(election.id, res.voters);
+      }
 
       setProgress("Abriendo la inscripción (manifiesto + layout)…");
       await apiV1.publish(election.id);
@@ -253,6 +263,13 @@ export function ElectionWizard() {
         <Card>
           <CardHeader>
             <CardTitle>Participantes elegibles</CardTitle>
+            <CardDescription>Cómo entra la gente por la sala (el QR del proyector) y, si quieres, invitados por enlace.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5 border-b border-border pb-5">
+            <EligibilityPicker value={eligibility} onChange={setEligibility} />
+          </CardContent>
+          <CardHeader>
+            <CardTitle as="h3" className="text-heading">Invitados por enlace {eligibility.method === "event-badge" ? "(opcional)" : ""}</CardTitle>
             <CardDescription>Nombre y teléfono opcional (formato internacional). El teléfono sólo se usa para invitar; nunca se publica.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
@@ -323,6 +340,13 @@ export function ElectionWizard() {
               <div>
                 <dt className="text-muted-foreground">Participantes</dt>
                 <dd className="font-semibold">{cleanParticipants.length}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-muted-foreground">¿Quién puede votar?</dt>
+                <dd className="font-semibold" data-testid="review-eligibility">
+                  {methodLabel[eligibility.method]}
+                  {eligibility.method === "event-badge" ? ` (comprobación ${checkLabel[eligibility.badgeCheck]})` : ""} + rostro
+                </dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-muted-foreground">Opciones</dt>

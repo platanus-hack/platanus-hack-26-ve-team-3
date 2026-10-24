@@ -20,6 +20,7 @@ import {
   RollResponse,
   VotersListResponse,
   CreateElectionInput,
+  type EligibilityInput,
   type SemaphoreProofInput,
 } from "@quorum/contracts";
 import { z } from "zod";
@@ -74,6 +75,8 @@ export const apiV1 = {
 
   /* Organizador: transiciones de fase (todas devuelven la Election actualizada) */
   publish: (id: string) => request(`/api/elections/${e(id)}/publish`, org(id, post()), Election),
+  /** D-19: método de elegibilidad de la sala (antes de que entre nadie). */
+  setEligibility: (id: string, body: EligibilityInput) => request(`/api/elections/${e(id)}/eligibility`, org(id, { method: "PUT", body: JSON.stringify(body) }), Election),
   open: (id: string) => request(`/api/elections/${e(id)}/open`, org(id, post()), Election),
   close: (id: string) => request(`/api/elections/${e(id)}/close`, org(id, post()), Election),
   draw: (id: string) => request(`/api/elections/${e(id)}/draw`, org(id, post()), Election),

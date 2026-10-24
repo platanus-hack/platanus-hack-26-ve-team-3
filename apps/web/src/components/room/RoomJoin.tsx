@@ -28,6 +28,9 @@ import {
   validateAlias,
   type StoredRoomJoin,
 } from "@/lib/client/room";
+import type { JoinRoomResult } from "@quorum/contracts";
+import type { BadgeFailure } from "@/lib/client/badge";
+import { BadgeJoin } from "./BadgeJoin";
 import { ObserverPanel } from "./ObserverPanel";
 import { remaining, useNow } from "./useNow";
 
@@ -112,6 +115,21 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
     [router],
   );
 
+  /** Entró (apodo o credencial): guarda el token en este teléfono y sigue a /v/<token> (paso 2: rostro). */
+  const joined = useCallback(
+    (r: JoinRoomResult) => {
+      const invitePath = invitePathFrom(r.inviteUrl, r.inviteToken);
+      const at = new Date().toISOString();
+      saveRoomJoin({ roomCode, electionId: r.electionId, voterId: r.voterId, displayName: r.displayName, inviteToken: r.inviteToken, invitePath, joinedAt: at, consentAt: at });
+      go(invitePath);
+    },
+    [roomCode, go],
+  );
+  const badgeRoomFailure = useCallback((f: BadgeFailure) => {
+    setJoinError({ kind: f.kind === "full" ? "full" : "closed", message: f.message });
+    setAttempt((a) => a + 1);
+  }, []);
+
   async function submit(ev: React.FormEvent) {
     ev.preventDefault();
     setJoinError(null);
@@ -120,11 +138,7 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
     if (!v.ok) return;
     setJoining(true);
     try {
-      const r = await roomApi.join(roomCode, v.value);
-      const invitePath = invitePathFrom(r.inviteUrl, r.inviteToken);
-      const now = new Date().toISOString();
-      saveRoomJoin({ roomCode, electionId: r.electionId, voterId: r.voterId, displayName: r.displayName, inviteToken: r.inviteToken, invitePath, joinedAt: now, consentAt: now });
-      go(invitePath);
+      joined(await roomApi.join(roomCode, v.value));
     } catch (e) {
       const f = classifyJoinError(e);
       if (f.kind === "alias") setAliasError(f.message);
@@ -214,6 +228,8 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
           </Alert>
           <ObserverPanel electionId={info.electionId} />
         </>
+      ) : info.eligibility?.method === "event-badge" ? (
+        <BadgeJoin roomCode={roomCode} badgeUrlPrefix={info.eligibility.badgeUrlPrefix} onJoined={joined} onRoomFailure={badgeRoomFailure} redirecting={redirecting} />
       ) : (
         <form onSubmit={submit} noValidate className="flex flex-col gap-5 text-heading">
           <div className="flex flex-col gap-1.5">

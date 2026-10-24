@@ -177,7 +177,9 @@ function RegistrationView({ election, room, counts, hasToken, now }: { election:
         )}
       </div>
       <div className="flex min-w-0 flex-col gap-[3vh]">
-        <p className="text-[clamp(1.5rem,3vw,3.5rem)] font-bold leading-tight">Escanea con tu teléfono para votar</p>
+        <p className="text-[clamp(1.5rem,3vw,3.5rem)] font-bold leading-tight" data-testid="projector-instruction">
+          {election.eligibility?.method === "event-badge" ? "Escanea este código y luego tu credencial" : "Escanea con tu teléfono para votar"}
+        </p>
         {room?.roomCode ? (
           <p className="text-[clamp(1.2rem,2.2vw,2.6rem)] font-semibold">
             o entra y escribe el código{" "}

@@ -13,11 +13,11 @@ export const CONSENT_DETAILS = [
 ] as const;
 
 /** Consentimiento del votante: una línea + "Más detalles" desplegable. */
-export function Consent({ extra, className }: { extra?: readonly string[]; className?: string }) {
+export function Consent({ extra, className, actionLabel = "Continuar" }: { extra?: readonly string[]; className?: string; actionLabel?: string }) {
   return (
     <div className={cn("flex flex-col gap-2", className)} data-testid="voter-consent">
       <p className="text-heading leading-snug">
-        {CONSENT_SHORT} <span className="text-muted-foreground">Al tocar Continuar, aceptas.</span>
+        {CONSENT_SHORT} <span className="text-muted-foreground">Al tocar {actionLabel}, aceptas.</span>
       </p>
       <details className="group">
         <summary className="inline-flex min-h-tap cursor-pointer list-none items-center gap-1 text-heading font-semibold text-primary underline underline-offset-4 [&::-webkit-details-marker]:hidden">
