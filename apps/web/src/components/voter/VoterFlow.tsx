@@ -14,7 +14,7 @@ import { voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { countdownText, formatStartTime, spokenCountdown, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { formatDate } from "@/lib/client/format";
-import { clearPendingFace, isRegistered, loadPendingFace, loadReceipt, peekIdentity, savePendingFace, type StoredReceipt, type VaultInfo } from "@/lib/client/identityVault";
+import { clearPendingFace, savePendingFace } from "@/lib/client/identityVault";
 import { linkThisPhone, type LinkProgress, type LinkResult } from "@/lib/client/linkPhone";
 import { prefetchHeavyAssets, roomJoinForToken } from "@/lib/client/room";
 import { BallotScreen } from "./BallotScreen";
@@ -23,6 +23,7 @@ import { VoteReceiptCard, type ReceiptView } from "./VoteReceiptCard";
 import { StepIndicator, VoterShell } from "./VoterUi";
 import { SuccessMark } from "@/components/ui/success-mark";
 import { rememberVoterLink } from "@/lib/client/myElections";
+import { readLocal, type Local } from "@/lib/client/voterAccess";
 
 type ReceiptV1 = z.infer<typeof Receipt>;
 
@@ -47,13 +48,6 @@ const FAST_WINDOW_MS = 10_000;
 const LATE_MS = 60_000;
 
 export type View = "intro" | "face" | "review" | "review-rejected" | "linking" | "waiting" | "ballot" | "receipt" | "voted" | "closed" | "not-linked" | "other-device" | "observer" | "draft";
-type Local = { identity: VaultInfo | null; registered: boolean; receipt: StoredReceipt | null; pendingFace: `0x${string}` | null };
-
-function readLocal(electionId: string, voterId: string): Local {
-  const identity = peekIdentity(electionId);
-  const mine = identity && identity.voterId === voterId ? identity : null;
-  return { identity: mine, registered: mine ? isRegistered(electionId) : false, receipt: loadReceipt(electionId), pendingFace: loadPendingFace(voterId) };
-}
 
 /** Qué pantalla corresponde según la fase y lo guardado en este teléfono. Exportado para tests. */
 export function autoView(invite: InviteV1, local: Local, roomConsent: boolean): View {

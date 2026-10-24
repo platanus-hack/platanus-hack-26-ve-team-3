@@ -14,15 +14,30 @@ import { PageHeader } from "@/components/ui/page-header";
 import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
 import { myElections, type MyElection } from "@/lib/client/myElections";
+import { loadOrgToken } from "@/lib/client/orgStore";
+import { ownsInvite, readLocal } from "@/lib/client/voterAccess";
 import { phaseLabel } from "@/lib/client/phases";
 
-type Row = MyElection & { status: ElectionStatus | null };
+type Row = MyElection & { status: ElectionStatus; voted: boolean };
 
 const ACTIVE = new Set<ElectionStatus>(["draft", "registration", "open"]);
 
+async function validate(m: MyElection): Promise<Row | null> {
+  if (m.role === "organizer") {
+    if (!loadOrgToken(m.electionId)) return null;
+    const [list, election] = await Promise.all([apiV1.listVoters(m.electionId), apiV1.getElection(m.electionId)]);
+    return "voters" in list && Array.isArray(list.voters) ? { ...m, title: election.title, status: election.status, voted: false } : null;
+  }
+  const invite = await apiV1.getInvite(m.href.slice("/v/".length));
+  const local = readLocal(invite.election.id, invite.voter.id);
+  if (invite.election.id !== m.electionId || !ownsInvite(invite, local)) return null;
+  return { ...m, title: invite.election.title, status: invite.election.status, voted: Boolean(local.receipt) };
+}
+
 function cta(r: Row): { label: string; href: string; primary: boolean } {
   const id = encodeURIComponent(r.electionId);
-  if (r.role === "organizer") return { label: "Administrar", href: r.href, primary: r.status !== null && ACTIVE.has(r.status) };
+  if (r.role === "organizer") return { label: "Administrar", href: r.href, primary: ACTIVE.has(r.status) };
+  if (r.voted) return { label: "Ver resultados", href: `/e/${id}/live`, primary: false };
   if (r.status === "open") return { label: "Votar", href: r.href, primary: true };
   if (r.status === "registration") return { label: "Continuar", href: r.href, primary: true };
   return { label: "Ver resultado", href: `/e/${id}`, primary: false };
@@ -30,7 +45,7 @@ function cta(r: Row): { label: string; href: string; primary: boolean } {
 
 function ElectionRow({ row }: { row: Row }) {
   const action = cta(row);
-  const active = row.status !== null && ACTIVE.has(row.status);
+  const active = ACTIVE.has(row.status);
   return (
     <li>
       <Card className="flex flex-col gap-3 p-4 transition-shadow hover:shadow-elevated sm:flex-row sm:items-center sm:gap-4">
@@ -38,19 +53,17 @@ function ElectionRow({ row }: { row: Row }) {
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-muted-foreground">
             <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
               <span aria-hidden="true" className={cn("size-2 rounded-full", active ? "bg-success" : "bg-subtle")} />
-              {row.status ? phaseLabel[row.status] : "No disponible"}
+              {row.voted ? "Ya votaste" : phaseLabel[row.status]}
             </span>
             <span aria-hidden="true">·</span>
             <span>{row.role === "organizer" ? "Organizas" : "Participas"}</span>
           </p>
           <p className="mt-1 line-clamp-2 font-semibold">{row.title || "Votación"}</p>
         </div>
-        {row.status ? (
-          <Link href={action.href} className={cn(buttonVariants({ variant: action.primary ? "primary" : "secondary", size: "sm" }), "shrink-0 self-start sm:self-auto")}>
-            {action.label}
-            {action.primary ? <ArrowRight aria-hidden="true" /> : null}
-          </Link>
-        ) : null}
+        <Link href={action.href} className={cn(buttonVariants({ variant: action.primary ? "primary" : "secondary", size: "sm" }), "shrink-0 self-start sm:self-auto")}>
+          {action.label}
+          {action.primary ? <ArrowRight aria-hidden="true" /> : null}
+        </Link>
       </Card>
     </li>
   );
@@ -85,27 +98,21 @@ export function MyElections({ demoHref }: { demoHref: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    const mine = myElections();
-    Promise.allSettled(mine.map((m) => apiV1.getElection(m.electionId))).then((res) => {
+    Promise.allSettled(myElections().map(validate)).then((res) => {
       if (cancelled) return;
-      setRows(
-        mine.map((m, i) => {
-          const r = res[i];
-          return r.status === "fulfilled" ? { ...m, title: r.value.title, status: r.value.status } : { ...m, status: null };
-        }),
-      );
+      setRows(res.flatMap((r) => (r.status === "fulfilled" && r.value ? [r.value] : [])));
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const active = rows?.filter((r) => r.status && ACTIVE.has(r.status)) ?? [];
-  const past = rows?.filter((r) => !r.status || !ACTIVE.has(r.status)) ?? [];
+  const active = rows?.filter((r) => ACTIVE.has(r.status) && !r.voted) ?? [];
+  const past = rows?.filter((r) => !ACTIVE.has(r.status) || r.voted) ?? [];
 
   return (
     <div className="q-fade-in q-container flex max-w-2xl flex-col gap-8 py-6 md:py-10">
-      <PageHeader title="Mis votaciones" description="Las que abriste o en las que participas desde este dispositivo." />
+      <PageHeader title="Mis votaciones" description="Solo las que este dispositivo puede abrir: donde te inscribiste aquí o que administras." />
 
       <Card className="p-5">
         <JoinByCode />
