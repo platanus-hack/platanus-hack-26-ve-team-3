@@ -24,7 +24,9 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     await expect(page.locator("html")).toHaveAttribute("data-heavy-prefetch", "service-worker", { timeout: 20_000 });
     const cached = await page.evaluate(async () => (await (await caches.open("quorum-heavy-v1")).keys()).map((r) => new URL(r.url).pathname));
     expect(cached).toEqual(expect.arrayContaining(["/zk/semaphore-10.zkey", "/zk/semaphore-10.wasm", "/models/faceres.bin", "/models/blazeface.json"]));
-    expect(cached).toHaveLength(14);
+    // 10 modelos de Human (sin iris) + 2 artefactos ZK: lo mismo que HEAVY_ASSETS (lib/client/room.ts).
+    expect(cached).toHaveLength(12);
+    expect(cached.some((p) => p.includes("iris"))).toBe(false);
 
     await page.getByLabel("Alias").fill("0412 555 1234");
     await page.getByRole("button", { name: "Entrar a la sala" }).click();

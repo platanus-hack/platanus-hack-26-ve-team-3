@@ -712,3 +712,39 @@ $ E2E_PROD=1 PORT=3337 SCREENSHOTS=1 playwright test e2e/screenshots.room.spec.t
 
 ### Arreglo de build incluido
 `next build` fallaba en la base (`packages/protocol-adapter/src/artifacts.ts`: Turbopack analiza `new URL(dir, import.meta.url)` → "Can't resolve <dynamic>"; el loader `build-tools/strip-js-ext-loader.cjs` no se aplica a ese archivo). Se cambió a `Reflect.construct(URL, [dir, import.meta.url])` (mismo valor en Node; tests del adaptador 20/20). Efecto colateral: en el navegador ahora sí carga `drawWinners` del adaptador, y el mock E2E del sorteo usaba la referencia local → se alineó el mock al adaptador.
+
+## 2026-10-24 · Integración: sala abierta UI + peso por teléfono (`integration/phase2`)
+
+`feat/p2-sala-ui` integrado (/j/[roomCode], proyector, RoomCard, modo observador, `sw.js`, headers `immutable`). `artifacts.ts` queda con una sola solución (`new globalThis.URL(dir, import.meta.url)`); no queda loader. `playwright.real.config.ts` corre juntos `phase2.real`, `room.real` (movido a `e2e/`) y `weight.real`.
+
+### Peso por teléfono (medido, no estimado)
+`e2e/weight.real.spec.ts`: servidor real, Chromium emulando un Pixel 5, cámara falsa de Chromium; inscripción con la prueba de vida REAL (Human descarga sus modelos) + voto con prueba Groth16. Bytes transferidos por la red (CDP `encodedDataLength`):
+
+| | Antes (iris activado) | Después |
+|---|---|---|
+| Modelos de Human | 13,07 MB (12 archivos, con `iris.bin` 2,60 MB) | **10,46 MB** (10 archivos) |
+| Artefactos ZK (`/zk`, wasm comprimido) | 3,41 MB | 3,41 MB |
+| JS | 0,93 MB | 0,93 MB |
+| Otros | 0,09 MB | 0,09 MB |
+| **Total por teléfono** | **17,49 MB** | **14,89 MB** (≈ 893 MB para 60 teléfonos sin caché compartida; antes ≈ 1,05 GB) |
+
+Config de Human (`HUMAN_CONFIG`): detector + malla (el parpadeo y el giro salen de la malla, no del iris) + descriptor (dedupe 1:N; edad/género vienen dentro del mismo modelo `faceres` y no se pueden separar) + antispoof + liveness. Apagados: iris y atención (nuevo), emoción, cuerpo, manos, objetos y segmentación (ya lo estaban). Se quitaron de `/models` `iris.json`, `iris.bin` y `models.json` (no se cargaban); un test exige que `/models` sea exactamente lo que precarga la sala.
+
+Funcionalidad comprobada tras el recorte (mismo spec): la autoprueba de Human (su imagen de calentamiento, no una persona nuestra) devuelve `face.real` y `face.live` numéricos, descriptor de ≥ 64 dimensiones y malla de ≥ 468 puntos; el dedupe 1:N del servidor con ese descriptor real: primera inscripción 201, el mismo rostro con ruido ⇒ **409 `duplicate_identity`**, otro vector ⇒ 201.
+
+### Batería final (America/Caracas, salida real)
+| Hora | Comando | Resultado |
+|---|---|---|
+| 13:11:52 | `pnpm typecheck` | exit 0 (repetido 13:14:16 tras el ajuste de `room.spec.ts`: exit 0) |
+| 13:11:59 | `pnpm lint` | exit 0 (repetido 13:14:16: exit 0) |
+| 13:12:03 | `pnpm test` | exit 0 · contracts 63 · wallet 31 · demo-fixtures 28 · protocol-adapter 27 · verifier 59 · web 144 → **352 tests, 0 fallos** |
+| 13:12:19 | `pnpm --filter @quorum/web build` | exit 0 |
+| 13:13:46 | `PORT=3347 playwright test e2e/smoke.spec.ts e2e/phase2.spec.ts e2e/lab.spec.ts e2e/room.spec.ts` | **52 passed**, 4 skipped (capturas, solo con `SCREENSHOTS=1`) |
+| 13:12:53 | `QUORUM_E2E_REAL_PORT=3357 pnpm --filter @quorum/web test:e2e:real` | **3 passed** (phase2.real, room.real, weight.real) |
+
+La primera pasada de Playwright con mocks (13:12:28) falló en `room.spec.ts` (2 proyectos): esperaba 14 archivos en Cache Storage y ahora son 12 (sin iris). Se actualizó la aserción y se repitió la suite completa (13:13:46, verde).
+
+### Pendientes
+- `faceres.bin` (6,98 MB) es el 47 % del peso total. Cambiarlo por un descriptor más pequeño cambia las dimensiones y obliga a recalibrar `FACE_DEDUPE_THRESHOLD`: no se hizo.
+- Los `.bin` de los modelos viajan sin comprimir (`application/octet-stream`); con gzip se ahorrarían ≈ 1,4 MB por teléfono. Requiere decidir cómo servirlos comprimidos (Next/Vercel no comprimen ese tipo).
+- La prueba de vida activa (parpadeo/giro) con una cara real no se automatiza (cámara falsa sin rostro); se verifica la carga y salida de los modelos y el dedupe, no la interacción humana.
