@@ -328,7 +328,7 @@ Total: **212 tests en verde** (antes de esta rama: 185). Nuevos o reescritos: 4 
 | AT-06 | detectado (`tally_matches`, incluida la variante `total+1`) | verificador "AT-06" + `verifier.test.ts` | — |
 | AT-07 | (a)(b)(c) 403 sin registrar; (d) 503; 07c plantillas borradas en `/open` | web "AT-07" | — |
 | AT-07b | **limitación (A4)**: σ=0,05 → 409; ruido σ=1 → 201 (esquiva el dedupe) | web "AT-07b" | — (documentado, no es un control) |
-| AT-08 | (a)(b) 409, variante no canónica 400; (c) `commitments_unique` | web "AT-08" + verificador "AT-08c" | — |
+| AT-08 | (a) 409; (b) reenvío del propio votante idempotente sin duplicar, otro commitment 409 (QA continuo 2026-10-24); variante no canónica 400; (c) `commitments_unique` | web "AT-08" + verificador "AT-08c" | — |
 | AT-09 | (a)(c) 401 y nada cambia; (b) no arranca (403/404); (d) **era vulnerable** | web "AT-09"; `units.test.ts` "AT-09(d) / A6" | **sí**: `kapso.ts` ya no crea votantes |
 | AT-10 | **era vulnerable** (2 vectores, ver abajo); ahora sin reconstrucción ni PII en salidas públicas | web "AT-10" (3 tests) | **sí**: `elections.ts` (tally por lotes) y `engine.ts` (`votedAt` por día) |
 
@@ -959,3 +959,24 @@ $ pnpm --filter @quorum/verifier verify packages/demo-fixtures/protocol/valid.js
 **Manipulaciones detectadas (verifier `test/continuous.test.ts`, pruebas reales):** ventana declarada 2 con una boleta cuya raíz tiene 3 encima → `root_history` «fuera de la ventana de 2» · prueba Groth16 válida contra un grupo que nunca existió → `root_history` «no es ninguna raíz histórica del grupo» · K declarado 6 con boletas de 5 → `anonymity_set_min` «K no alcanzado» · `groupSize` falso → `root_history` · `rootAfter` alterado → `group_root` · `commitments` ≠ secuencia → `group_root` · doble voto → `nullifiers_unique` · `voterId` en un `member_added` → `package_schema` · formato mezclado → `package_schema` · `valid.json`/`tampered_*`/`wrong_root`/`double_vote` con fases → mismo resultado que antes.
 
 Capturas 360 (servidor real, del E2E): `docs/screenshots/phase2/continuo-aviso-k-360.png`, `continuo-boleta-360.png`, `continuo-panel-360.png`, `continuo-proyector-360.png`.
+
+## QA del modo continuo (D-22) para el evento en vivo — 2026-10-24, rama `qa/continuo` (desde `origin/main` `a512bc7`)
+
+Ejecutado en este worktree (macOS, Node 24, pnpm 10). Puertos: mocks 3341, real 3342.
+
+| Comando | Resultado |
+|---|---|
+| `pnpm typecheck` | exit 0 |
+| `pnpm lint` | exit 0 |
+| `pnpm test` | exit 0 — contracts 63, wallet 31, demo-fixtures 28, protocol-adapter 36, verifier 76, web 266 (29 archivos) |
+| `pnpm --filter @quorum/web build` | exit 0 |
+| `PORT=3341 pnpm --filter @quorum/web test:e2e` (mocks) | 88 passed, 128 skipped (capturas sin `SCREENSHOTS=1`, `test.fixme` legados de voter-flow, solo-móvil) |
+| `QUORUM_E2E_REAL_PORT=3342 pnpm --filter @quorum/web test:e2e:real` | 8/8 passed (incluye el nuevo `continuo-casos.real.spec.ts`) |
+
+Tests nuevos:
+- `apps/web/src/lib/server/__tests__/continuous-edge.test.ts` (7): K exacto (4 → 409, la 5.ª habilita, groupSize 5; `/group` = `/roll`); `/identity` reintentado idempotente; cierre con gente a medio inscribir (rostro/vinculación/identidad → 409 «La votación terminó: ya no se puede inscribir.»); carrera rostro↔cierre sin plantilla; voto en vuelo al cerrar → 409 y fuera del recuento; dos votos simultáneos del mismo votante → 201 + 409; C3 por lotes de 5 en continuo; credencial reusada → `badge_used`; gemelo aprobado vota y pendiente al cerrar → rechazado (`manualApprovals.count=1`). Sin los arreglos de `ee35501` fallan 3 (identity idempotente, cierre a medio inscribir, carrera rostro↔cierre).
+- `apps/web/src/lib/client/lab/__tests__/lab.test.ts`: alteraciones continuas (`tally-inflate`, `ballot-root`, `group-size`) sin ancla y con ancla simulada ⇒ `detectado` con el verificador real sobre `continuous_valid.json`; el resto deshabilitado con motivo.
+- `apps/web/e2e/continuo-casos.real.spec.ts` (servidor real): recargar en el aviso de K y tras «¡Listo!» → boleta; dos pestañas del mismo votante → una «Tu voto fue contado», la otra «Ya votaste» (201 + 409); recargar tras votar → comprobante; rostro en vuelo al cerrar → mensaje de cierre; /j sin «Continuar» al cerrar → sala cerrada; «Verificar ahora» → verificado y «¿Está mi voto?» → «Tu boleta está en el paquete que verificaste»; laboratorio con el paquete continuo publicado → 3 alteraciones detectadas.
+- `apps/web/e2e/voter-taps.spec.ts` (mocks): continuo QR → comprobante en **4 toques** (inscripción 2 + voto 2, más escribir el apodo y la cámara), aviso de K sin jerga, un `stale_root` reintentado solo (2 POST /vote, 0 toques extra).
+
+Carga contra producción en modo continuo: `docs/LOAD_TEST.md` § «Modo continuo».

@@ -205,6 +205,23 @@ describe("modo continuo · casos límite (QA evento en vivo)", () => {
     expect((await call(audit, { params: { id: org.id } })).json.auditResult.valid).toBe(true);
   }, 120_000);
 
+  it("C3 en continuo: mientras se vota el desglose sale por lotes de 5 boletas (el 6.º voto no lo mueve); al cerrar, exacto", async () => {
+    const org = await setup({ minAnonymitySet: 2 });
+    const people = [];
+    for (let i = 0; i < 6; i++) people.push(await enter(org, 950 + i));
+    const choices = [0, 0, 1, 2, 1, 2];
+    for (let i = 0; i < 5; i++) expect((await ballot(org, await proofFor(org, people[i].identity.privateKey, choices[i]))).status).toBe(201);
+    const five = (await call(tally, { params: { id: org.id } })).json;
+    expect(five.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 1]);
+    expect((await ballot(org, await proofFor(org, people[5].identity.privateKey, choices[5]))).status).toBe(201);
+    const six = (await call(tally, { params: { id: org.id } })).json;
+    expect(six).toMatchObject({ totalVotes: 6, eligible: 6, status: "open" });
+    expect(six.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 1]);
+    await call(close, { params: { id: org.id }, headers: org.auth });
+    const final = (await call(tally, { params: { id: org.id } })).json;
+    expect(final.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 2]);
+  }, 120_000);
+
   it("credencial reusada → 409 badge_used; gemelo en revisión: aprobado vota, pendiente al cerrar queda rechazado", async () => {
     const org = await setup({ minAnonymitySet: 2, eligibility: { method: "event-badge", badgeCheck: "none" } });
     const scan = (u: string) => call(joinBadge, { params: { roomCode: org.code }, body: { badgeUrl: `${P}${u}` }, headers: xff() });
