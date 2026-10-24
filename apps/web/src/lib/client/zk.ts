@@ -36,10 +36,14 @@ export type BrowserVerification =
  * Ejecuta el verificador independiente EN ESTE NAVEGADOR sobre los bytes exactos del paquete.
  * El hash de entrada es SHA-256 de esos bytes (mismo formato `sha256:<hex>` que usa `/api/audit/verify`).
  * Con `anchorRpcUrl` (RPC público de Base Sepolia, `NEXT_PUBLIC_BASE_SEPOLIA_RPC`) también lee el ancla; sin él,
- * `anchor_matches` queda "no evaluado" y así se muestra.
+ * `anchor_matches` queda "no evaluado" y así se muestra. `anchorReader` (laboratorio) inyecta un lector de ancla
+ * SIMULADO, siempre etiquetado como `simulación` en la UI.
  * Nunca devuelve "verificado" por sí mismo: devuelve el `AuditResult` íntegro o el error.
  */
-export async function verifyPackageInBrowser(bytes: Uint8Array, opts: { anchorRpcUrl?: string } = {}): Promise<BrowserVerification> {
+export async function verifyPackageInBrowser(
+  bytes: Uint8Array,
+  opts: { anchorRpcUrl?: string; anchorReader?: (txHash: `0x${string}`) => Promise<{ chainId: number; from: string; to: string | null; input: `0x${string}` }> } = {},
+): Promise<BrowserVerification> {
   const t0 = performance.now();
   let inputDigest: string | null = null;
   try {
@@ -51,7 +55,7 @@ export async function verifyPackageInBrowser(bytes: Uint8Array, opts: { anchorRp
       return { ok: false, error: "El paquete descargado no es JSON válido.", inputDigest, ms: Math.round(performance.now() - t0), runtime: "navegador" };
     }
     const { verifyPackage } = await import("@quorum/verifier");
-    const result = await verifyPackage(pkg, { inputArtifactDigest: inputDigest, anchorRpcUrl: opts.anchorRpcUrl });
+    const result = await verifyPackage(pkg, { inputArtifactDigest: inputDigest, anchorRpcUrl: opts.anchorRpcUrl, anchorReader: opts.anchorReader });
     return { ok: true, result, inputDigest, ms: Math.round(performance.now() - t0), runtime: "navegador" };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e), inputDigest, ms: Math.round(performance.now() - t0), runtime: "navegador" };
