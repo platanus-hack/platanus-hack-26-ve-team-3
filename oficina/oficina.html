@@ -1,0 +1,1591 @@
+<title>Oficina Quórum</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: barra lateral (vistas + áreas) | contenido; pie fijo con los motores. Identidad Quórum: hueso, azul noche, verde verificación. */
+:root{
+  --bg:#F8F7F3; --surface:#FFFFFF; --surface2:#EFEDE6; --line:#DDD9CF; --line2:#C4BFB2;
+  --fg:#182B45; --fg2:#3A4A62; --muted:#6B7686;
+  --accent:#147D68; --accent-ink:#0F6A58; --accent-soft:rgba(20,125,104,.12); --on-accent:#FFFFFF;
+  --warn:#B7791F; --warn-soft:rgba(183,121,31,.14); --err:#C44242; --err-soft:rgba(196,66,66,.12);
+  --info:#2F5FA8; --info-soft:rgba(47,95,168,.10);
+  --a-direccion:#182B45; --a-protocolo:#147D68; --a-producto:#B7791F; --a-calidad:#2F5FA8;
+  --shadow:0 12px 40px rgba(24,43,69,.14);
+  --f-ui:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101A2B; --surface:#182B45; --surface2:#213655; --line:#2C4262; --line2:#3E5578;
+  --fg:#F1EFE8; --fg2:#C9CFD9; --muted:#8E9AAE;
+  --accent:#2FA58C; --accent-ink:#4FC2A8; --accent-soft:rgba(47,165,140,.16); --on-accent:#07140F;
+  --warn:#D9A14A; --warn-soft:rgba(217,161,74,.16); --err:#E06A6A; --err-soft:rgba(224,106,106,.16);
+  --info:#8FB3F0; --info-soft:rgba(143,179,240,.14);
+  --a-direccion:#A9BBD9; --a-protocolo:#4FC2A8; --a-producto:#D9A14A; --a-calidad:#8FB3F0;
+  --shadow:0 12px 40px rgba(0,0,0,.45);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#101A2B; --surface:#182B45; --surface2:#213655; --line:#2C4262; --line2:#3E5578;
+  --fg:#F1EFE8; --fg2:#C9CFD9; --muted:#8E9AAE;
+  --accent:#2FA58C; --accent-ink:#4FC2A8; --accent-soft:rgba(47,165,140,.16); --on-accent:#07140F;
+  --warn:#D9A14A; --warn-soft:rgba(217,161,74,.16); --err:#E06A6A; --err-soft:rgba(224,106,106,.16);
+  --info:#8FB3F0; --info-soft:rgba(143,179,240,.14);
+  --a-direccion:#A9BBD9; --a-protocolo:#4FC2A8; --a-producto:#D9A14A; --a-calidad:#8FB3F0;
+  --shadow:0 12px 40px rgba(0,0,0,.45);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--f-ui);margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent-ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+h1,h2,h3{text-wrap:balance;margin:0}
+
+.app{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100%;padding-bottom:64px}
+.side{border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:22px;position:sticky;top:env(safe-area-inset-top,0px);height:calc(100vh - 64px);overflow:auto}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px}
+.brand-mark{width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center;color:var(--on-accent);font-weight:700;font-size:15px}
+.brand b{display:block;font-size:14px;font-weight:600;line-height:1.2}
+.brand small{color:var(--muted);font-size:12px}
+.navgroup{display:flex;flex-direction:column;gap:2px}
+.navlabel{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0 10px 6px}
+.navbtn{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:8px 10px;border-radius:10px;cursor:pointer;text-align:left;color:var(--fg2)}
+.navbtn:hover{background:var(--surface2);color:var(--fg)}
+.navbtn[aria-current="true"]{background:var(--accent-soft);color:var(--fg)}
+.navbtn .count{margin-left:auto;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.navbtn .count.hot{background:var(--err);color:#fff;border-radius:99px;padding:0 7px;font-weight:500}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--muted)}
+.ico{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line2);background:var(--surface2);padding:8px 14px;border-radius:10px;cursor:pointer;font-weight:500;min-height:38px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:none}
+.btn.danger{color:var(--err);border-color:color-mix(in srgb,var(--err) 45%,transparent);background:none}
+.btn.sm{padding:5px 10px;min-height:32px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+main{min-width:0;padding-block:24px 40px;padding-inline:28px;display:flex;flex-direction:column;gap:22px}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.top h1{font-size:26px;font-weight:600}
+.top p{margin:4px 0 0;color:var(--fg2)}
+.banner{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-radius:12px;background:var(--info-soft);color:var(--fg)}
+.banner.warn{background:var(--warn-soft)}
+.banner .grow{flex:1;min-width:200px}
+
+.stats{display:flex;gap:10px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);padding:6px 12px;border-radius:99px;cursor:pointer;color:var(--fg2);font-size:13px}
+.chip b{font-family:var(--f-mono);font-weight:500;color:var(--fg)}
+.chip[aria-pressed="true"]{border-color:var(--accent);color:var(--fg)}
+
+.section-h{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.section-h h2{font-size:16px;font-weight:600}
+.section-h span{color:var(--muted);font-size:13px}
+
+.list{display:flex;flex-direction:column;gap:10px}
+.inbox{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px}
+.inbox .meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:12px}
+.inbox h3{font-size:15px;font-weight:600;cursor:pointer}
+.inbox h3:hover{color:var(--accent-ink)}
+.inbox .note{color:var(--fg2);grid-column:1/-1}
+.inbox .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;justify-content:flex-end}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1}
+.thumb{width:84px;height:84px;border-radius:10px;object-fit:cover;background:var(--surface2);border:1px solid var(--line);cursor:zoom-in;padding:0}
+.thumb img{width:100%;height:100%;object-fit:cover;border-radius:9px;display:block}
+
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;padding:2px 9px;border-radius:99px;background:var(--surface2);color:var(--fg2);white-space:nowrap}
+.pill.toca{background:var(--err-soft);color:var(--err)}
+.pill.work{background:var(--accent-soft);color:var(--accent-ink)}
+.pill.block{background:var(--warn-soft);color:var(--warn)}
+.pill.queue{background:var(--info-soft);color:var(--info)}
+.pill.done{color:var(--muted)}
+.pill.prio{font-family:var(--f-mono)}
+
+.empty{border:1px dashed var(--line2);border-radius:14px;padding:28px;text-align:center;color:var(--muted)}
+.empty b{display:block;color:var(--fg);font-weight:600;margin-bottom:4px}
+
+.board{display:grid;grid-template-columns:repeat(5,minmax(220px,1fr));gap:12px;overflow-x:auto;padding-bottom:6px}
+.col{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:120px}
+.col-h{display:flex;justify-content:space-between;align-items:center;padding:2px 4px 4px;font-size:13px;font-weight:600}
+.col-h span{font-family:var(--f-mono);color:var(--muted);font-weight:400}
+.card{background:var(--surface2);border:1px solid transparent;border-radius:10px;padding:10px 11px;cursor:pointer;display:flex;flex-direction:column;gap:6px;text-align:left;width:100%}
+.card:hover{border-color:var(--line2)}
+.card b{font-weight:500;font-size:13.5px;line-height:1.35}
+.card .meta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:12px}
+
+.areas{display:flex;flex-direction:column;gap:18px}
+.area-h{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.area-h h2{font-size:16px;font-weight:600}
+.area-h .mission{color:var(--muted);font-size:13px}
+.agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.agent{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.agent.dim{opacity:.72}
+.agent-top{display:flex;gap:10px;align-items:center}
+.av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:14px;flex:none;color:var(--bg)}
+.agent-top b{display:block;font-weight:600;line-height:1.25}
+.agent-top small{color:var(--muted);font-size:12px}
+.agent p{margin:0;color:var(--fg2);font-size:13px}
+.agent .now{font-size:12.5px;color:var(--accent-ink)}
+.agent .acts{display:flex;gap:6px;margin-top:auto;flex-wrap:wrap}
+
+.lib-tools{display:flex;gap:10px;flex-wrap:wrap}
+.lib-tools input{flex:1;min-width:200px}
+.docs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.doc{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:6px;width:100%}
+.doc:hover{border-color:var(--line2)}
+.doc b{font-weight:600}
+.doc p{margin:0;color:var(--fg2);font-size:13px}
+
+.motors{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:10px 20px calc(10px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:14px;overflow-x:auto;z-index:5;min-height:64px}
+.motors .lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.runner{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:13px;border:1px solid var(--line);border-radius:99px;padding:5px 12px;background:var(--surface2)}
+.runner .dot.live{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.runner .dot.sleep{background:var(--err)}
+.runner small{color:var(--muted)}
+.wakenote{margin-left:auto;color:var(--muted);font-size:12.5px;white-space:nowrap}
+
+dialog{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:18px;padding:0;width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 48px);box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.dlg{display:flex;flex-direction:column;max-height:calc(100vh - 50px)}
+.dlg-h{display:flex;gap:12px;align-items:flex-start;padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+.dlg-h h2{font-size:18px;font-weight:600;flex:1}
+.dlg-b{padding:16px 20px;overflow:auto;display:flex;flex-direction:column;gap:16px;min-height:0}
+.dlg-f{padding:12px 20px 16px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.x{border:0;background:none;cursor:pointer;color:var(--muted);padding:4px;border-radius:8px}
+.x:hover{color:var(--fg);background:var(--surface2)}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12.5px;font-weight:500;color:var(--fg2)}
+.field small{color:var(--muted);font-size:12px}
+.row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+input[type=text],input[type=search],select,textarea{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:9px 11px;min-height:40px}
+textarea{min-height:96px;resize:vertical}
+.checks{display:flex;flex-wrap:wrap;gap:8px 14px}
+.checks label{display:flex;gap:6px;align-items:center;font-size:13px}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:13px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+.callout{padding:10px 12px;border-radius:10px;background:var(--surface2);color:var(--fg2);font-size:13.5px}
+.callout.toca{background:var(--err-soft);color:var(--fg)}
+.md{line-height:1.6;overflow-wrap:anywhere}
+.md h1,.md h2,.md h3{margin:1em 0 .4em;font-size:1.08em}
+.md table{border-collapse:collapse;display:block;overflow-x:auto;max-width:100%;font-size:13px}
+.md th,.md td{border:1px solid var(--line2);padding:5px 8px;text-align:left;vertical-align:top}
+.md pre,.raw{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;overflow-x:auto;font-family:var(--f-mono);font-size:12.5px;white-space:pre-wrap}
+.md code{font-family:var(--f-mono);font-size:.9em}
+.md li input[type=checkbox]{accent-color:var(--accent)}
+.timeline{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.timeline div{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px}
+.timeline time{color:var(--muted);font-family:var(--f-mono);font-size:12px}
+.lightbox img{max-width:100%;max-height:calc(100vh - 160px);display:block;margin:auto;border-radius:10px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* Chat */
+.chat{display:grid;grid-template-columns:230px minmax(0,1fr);gap:12px;height:max(520px,calc(100vh - 190px))}
+.ch-list{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.ch-list .navbtn{align-items:center}
+.av.sm{width:28px;height:28px;font-size:11px}
+.chn{min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.chn small{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-main{background:var(--surface);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;min-height:0;min-width:0}
+.ch-head{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ch-head span{color:var(--muted);font-size:12.5px}
+.msgs{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.msg{display:grid;grid-template-columns:32px minmax(0,1fr);gap:10px;align-items:start}
+.msg .av{width:32px;height:32px;font-size:12px}
+.msg .who{font-size:13px;font-weight:600}
+.msg time{color:var(--muted);font-size:11.5px;margin-left:8px;font-weight:400;font-family:var(--f-mono)}
+.msg .txt{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px}
+.daysep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11.5px}
+.daysep::before,.daysep::after{content:"";flex:1;height:1px;background:var(--line)}
+.tcard{margin-top:6px;border:1px solid var(--line2);background:var(--surface2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;max-width:460px;text-align:left;cursor:pointer;width:100%;color:inherit}
+.tcard:hover{border-color:var(--accent)}
+.tcard b{font-weight:600}
+.tmeta{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.tdet{color:var(--fg2);font-size:13px}
+.tthumbs{display:flex;gap:6px}
+.tthumbs img{width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--surface)}
+.composer{border-top:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.composer textarea{min-height:46px;max-height:160px}
+.crow{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center}
+.cacts{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width: 860px){
+  .chat{grid-template-columns:1fr;height:auto}
+  .ch-list{flex-direction:row;overflow-x:auto}
+  .ch-list .navbtn{width:auto;white-space:nowrap}
+  .chn small{display:none}
+  .ch-main{height:max(460px,calc(100vh - 320px))}
+}
+/* El mundo */
+[hidden]{display:none!important}
+.world{position:relative;height:max(520px,calc(100vh - 150px));border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--surface);touch-action:none;user-select:none}
+.world canvas{display:block;width:100%;height:100%;cursor:grab}
+.world canvas.drag{cursor:grabbing}
+.w-ov{position:absolute;left:0;top:0;pointer-events:none;width:100%;height:100%;overflow:hidden}
+.w-sign{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;display:flex;align-items:center;gap:6px;border:0;border-radius:99px;padding:5px 11px;font:600 12px var(--f-ui);color:#fff;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.w-sign .b{background:var(--err);color:#fff;border-radius:99px;padding:0 6px;font:500 11px var(--f-mono)}
+.w-sign.off{opacity:.55}
+.w-label{position:absolute;transform:translate(-50%,-100%);display:flex;align-items:center;gap:5px;padding:2px 8px;border-radius:99px;background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid var(--line);font:500 11px var(--f-ui);color:var(--fg);white-space:nowrap}
+.w-label .dot{width:7px;height:7px}
+.w-panel{position:absolute;left:14px;top:14px;pointer-events:none;background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid var(--line);border-radius:14px;padding:10px 14px;max-width:calc(100% - 28px)}
+.w-panel b{display:block;font-size:15px;font-weight:600}
+.w-panel span{color:var(--fg2);font-size:12.5px}
+.w-chips{position:absolute;left:14px;bottom:14px;display:flex;gap:6px;flex-wrap:wrap;max-width:calc(100% - 140px)}
+.w-chips .chip{background:color-mix(in srgb,var(--surface) 92%,transparent)}
+.w-zoom{position:absolute;right:14px;bottom:14px;display:flex;gap:6px}
+.w-zoom button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line2);background:var(--surface);cursor:pointer;font-size:17px;display:grid;place-items:center}
+.w-legend{position:absolute;right:14px;top:14px;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;font-size:11.5px;color:var(--fg2);background:color-mix(in srgb,var(--surface) 90%,transparent);border:1px solid var(--line);border-radius:99px;padding:5px 12px}
+.w-legend span{display:flex;align-items:center;gap:5px}
+.w-tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line2);border-radius:8px;padding:4px 9px;font-size:12px;white-space:nowrap;transform:translate(12px,12px)}
+.w-pop{position:absolute;width:min(320px,calc(100% - 28px));background:var(--surface);border:1px solid var(--line2);border-radius:14px;padding:14px;box-shadow:var(--shadow);pointer-events:auto;display:flex;flex-direction:column;gap:10px}
+.w-pop .now{background:var(--surface2);border-radius:10px;padding:9px 11px;font-size:12.5px;display:flex;flex-direction:column;gap:4px}
+.w-pop .now b{font-weight:600}
+.w-pop .now small{color:var(--fg2)}
+.w-fallback{display:grid;place-items:center;height:100%;color:var(--muted);text-align:center;padding:24px}
+@media (max-width: 860px){
+  .app{grid-template-columns:1fr}
+  .side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:14px 16px;gap:12px}
+  .navgroup{flex-direction:row;overflow-x:auto;gap:4px}
+  .navlabel{display:none}
+  .navbtn{width:auto;white-space:nowrap}
+  .side .encargar{width:100%}
+  main{padding-inline:16px}
+  .board{grid-template-columns:repeat(5,minmax(240px,82vw))}
+  .inbox{grid-template-columns:1fr}
+  .inbox .acts{justify-content:flex-start}
+  .world{height:max(420px,calc(100vh - 300px))}
+  .w-legend,.w-chips{display:none}
+  .w-panel{padding:8px 12px}
+  .w-panel b{font-size:14px}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="app">
+  <aside class="side" aria-label="Navegación">
+    <div class="brand"><div class="brand-mark" aria-hidden="true">Q</div><div><b>Oficina Quórum</b><small>Platanus Hack · Trust</small></div></div>
+    <button class="btn primary encargar" id="btn-encargar" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Encargar</button>
+    <nav class="navgroup" id="nav-views" aria-label="Vistas"></nav>
+    <div class="navgroup" id="nav-areas" aria-label="Áreas"></div>
+  </aside>
+  <main id="main" aria-live="polite"></main>
+</div>
+<footer class="motors" id="motor-anchor" aria-label="Estado de los motores">
+  <span class="lbl">Motores</span>
+  <div id="runners" style="display:flex;gap:8px"></div>
+  <span class="wakenote" id="wakenote"></span>
+</footer>
+
+<dialog id="dlg"><div class="dlg" id="dlg-body"></div></dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+const TZ = "America/Caracas";
+const S = {db:null, user:null, assets:null, meId:null, me:null, canEdit:false,
+  depts:[], agents:[], people:[], tasks:[], docs:[], runners:[], ctx:{}, motor:{},
+  view:"mundo", chat:[], chatCh:"general", chatDraft:"", area:null, agentFilter:"activos", libQ:"", loaded:false};
+const VIEWS = [
+  {id:"mundo", label:"El mundo", icon:'<path d="M3 9l9-5 9 5-9 5z"/><path d="M3 9v6l9 5 9-5V9"/><path d="M12 14v6"/>'},
+  {id:"toca", label:"Te toca", icon:'<path d="M4 13h4l2 3h4l2-3h4"/><path d="M5 5h14l1 8v6H4v-6z"/>'},
+  {id:"chat", label:"Chat", icon:'<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>'},
+  {id:"tablero", label:"Tablero", icon:'<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/>'},
+  {id:"agentes", label:"Agentes", icon:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.8 3 2.6 3.5 5.2"/>'},
+  {id:"biblioteca", label:"Biblioteca", icon:'<path d="M5 4h4v16H5zM10 4h4v16h-4z"/><path d="m15.5 5 3.8-1 2.2 15.4-3.8 1z"/>'}
+];
+const STATUS = {
+  pendiente:{t:"En cola", c:"queue"}, cambios:{t:"Cambios pedidos", c:"queue"}, aprobada:{t:"Aprobada", c:"queue"},
+  en_curso:{t:"Trabajando", c:"work"}, por_aprobar:{t:"Por aprobar", c:"toca"}, bloqueada:{t:"Bloqueada", c:"block"},
+  hecha:{t:"Hecha", c:"done"}, descartada:{t:"Descartada", c:"done"}
+};
+const KINDS = {tarea:"Tarea", pregunta:"Pregunta", agente:"Agente", contenido:"Contenido", plan:"Plan", mensajes:"Mensajes", reporte:"Reporte"};
+const DOC_KINDS = {guia:"Guía", checklist:"Checklist", plantilla:"Plantilla", faq:"FAQ", plan:"Plan", decisiones:"Decisiones", referencia:"Referencia", reporte:"Reporte"};
+
+/* ---------- utilidades ---------- */
+const $ = (s, r) => (r || document).querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const nowIso = () => new Date().toISOString();
+const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const slug = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+function fmt(iso){ if(!iso) return ""; try{ return new Intl.DateTimeFormat("es-VE",{timeZone:TZ,day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(iso)); }catch(e){ return iso; } }
+function ago(iso){
+  if(!iso) return ""; const d = (Date.now() - new Date(iso).getTime())/60000;
+  if(isNaN(d)) return ""; if(d < 1) return "ahora"; if(d < 60) return "hace " + Math.round(d) + " min";
+  if(d < 1440) return "hace " + Math.round(d/60) + " h"; return fmt(iso);
+}
+function md(s){
+  s = String(s || "");
+  try{ if(window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(s, {gfm:true, breaks:true})); }catch(e){}
+  return '<pre class="raw">' + esc(s) + "</pre>";
+}
+function ico(path){ return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + path + "</svg>"; }
+const areaColor = id => "var(--a-" + (id || "x") + ", var(--muted))";
+const dept = id => S.depts.find(d => d.id === id);
+const agent = id => S.agents.find(a => a.id === id);
+const person = id => S.people.find(p => p.id === id);
+const personName = id => id === "cualquiera" ? "Cualquiera" : ((person(id) || {}).name || id || "—");
+const initials = n => String(n || "?").split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+const isLive = r => r && r.last_seen && (Date.now() - new Date(r.last_seen).getTime()) < 20*60000;
+function areaHasLiveMotor(areaId){ return S.runners.some(r => isLive(r) && (r.areas || []).some(a => a === "*" || a === areaId)); }
+function myToca(){
+  const pid = S.me && S.me.id;
+  return S.tasks.filter(t => t.status === "por_aprobar" && (t.approval_for === "cualquiera" || (pid && t.approval_for === pid)));
+}
+function hist(t, text){ return (t.history || []).concat([{at: nowIso(), by: S.me ? S.me.id : "?", text}]).slice(-40); }
+function pill(st, mine){ const s = STATUS[st] || {t: st, c: ""}; return '<span class="pill ' + s.c + '">' + esc(mine && st === "por_aprobar" ? "Te toca" : s.t) + "</span>"; }
+
+/* ---------- aviso a los motores ---------- */
+let lastWake = 0;
+function note(t){ const n = $("#wakenote"); if(n) n.textContent = t; }
+async function wake(text){
+  let c = null; try{ c = await window.claude.use("comments"); }catch(e){}
+  if(!c){ note("El motor lo toma en su próxima vuelta"); return; }
+  let st = "off"; try{ st = await c.canSendToClaude(); }catch(e){}
+  if(st !== "available"){ note("El motor lo toma en su próxima vuelta"); return; }
+  if(Date.now() - lastWake < 10000){ note("Motor avisado hace un momento"); return; }
+  lastWake = Date.now();
+  text = String(text).slice(0, 900);
+  try{
+    let r = null; const tid = S.motor && S.motor.thread_id;
+    if(tid){ try{ r = await c.sendToClaude({threadId: tid, text}); }catch(e){ if(e && e.code !== "not_found") throw e; } }
+    if(!r){
+      const anchor = await c.anchorFor($("#motor-anchor"));
+      r = await c.sendToClaude({anchor, text: "Hilo de avisos para los motores de la oficina.\n" + text});
+      await S.db.doc("system/motor").set(Object.assign({}, S.motor, {thread_id: r.threadId, updated_at: nowIso()}));
+    }
+    note("Motor avisado · " + fmt(nowIso()));
+  }catch(e){ lastWake = 0; note("El motor lo toma en su próxima vuelta"); }
+}
+
+/* ---------- escritura ---------- */
+async function updTask(t, patch, histText, wakeText){
+  patch.updated_at = nowIso();
+  if(histText) patch.history = hist(t, histText);
+  try{ await S.db.doc("tasks/" + t.id).update(patch); }
+  catch(e){ toast("No se pudo guardar: " + (e && e.message || "error")); return false; }
+  if(wakeText) wake(wakeText);
+  return true;
+}
+function toast(t){ note(t); }
+async function uploadFiles(input, forWhat){
+  const out = []; const files = input && input.files ? Array.from(input.files) : [];
+  if(!files.length) return out;
+  if(!S.assets){ toast("Adjuntar no está disponible en esta vista"); return out; }
+  for(const f of files){
+    try{ const r = await S.assets.upload(f); out.push({id: r.id, name: f.name, by: S.me ? S.me.id : null, at: nowIso(), for: forWhat}); }
+    catch(e){ toast("No se pudo subir " + f.name + (e && e.code === "too_large" ? " (muy pesado)" : "")); }
+  }
+  return out;
+}
+
+/* ---------- render ---------- */
+let rq = 0;
+function render(){ if(rq) return; rq = requestAnimationFrame(() => { rq = 0; renderNow(); }); }
+function renderNow(){ renderNav(); renderRunners(); const m = $("#main");
+  const v = S.view; let html = "";
+  if(v === "mundo" && S.db){ World.mount(m); World.update(); return; }
+  if(World.isMounted()) m._html = null;
+  World.unmount();
+  if(!S.db) html = renderNoDb();
+  else if(v === "toca") html = renderToca();
+  else if(v === "tablero") html = renderBoard();
+  else if(v === "agentes") html = renderAgents();
+  else if(v === "biblioteca") html = renderLib();
+  else if(v === "chat") html = renderChat();
+  if(m._html === html && m.firstChild){ if(v === "chat") markRead(S.chatCh); return; }
+  const ae = document.activeElement, keep = ae && ae.id && m.contains(ae) ? {id: ae.id, s: ae.selectionStart, e: ae.selectionEnd} : null;
+  const msgs = $("#msgs"), atBottom = !msgs || msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 60, prevTop = msgs ? msgs.scrollTop : 0;
+  m.innerHTML = html; m._html = html; bindMain();
+  if(keep){ const n = document.getElementById(keep.id); if(n){ n.focus(); try{ n.setSelectionRange(keep.s, keep.e); }catch(e){} } }
+  const nm = $("#msgs"); if(nm) nm.scrollTop = atBottom ? nm.scrollHeight : prevTop; }
+
+function renderNav(){
+  const toca = myToca().length + myTasks().length, chatN = S.me ? unreadTotal() : 0;
+  const navHtml = '<div class="navlabel">Vistas</div>' + VIEWS.map(v => {
+    const n = v.id === "toca" ? toca : v.id === "chat" ? chatN : 0;
+    const cnt = n ? '<span class="count hot">' + n + "</span>" : "";
+    return '<button class="navbtn" type="button" data-view="' + v.id + '" aria-current="' + (S.view === v.id) + '">' + ico(v.icon) + esc(v.label) + cnt + "</button>";
+  }).join("");
+  const nv = $("#nav-views"); if(nv._html !== navHtml){ nv.innerHTML = navHtml; nv._html = navHtml; }
+  const depts = S.depts.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  const na = $("#nav-areas"), areasHtml = '<div class="navlabel">Áreas</div>' +
+    '<button class="navbtn" type="button" data-area="" aria-current="' + (!S.area) + '"><span class="dot" style="background:var(--fg2)"></span>Todas</button>' +
+    depts.map(d => {
+      const n = S.tasks.filter(t => t.dept === d.id && ["pendiente","cambios","aprobada","en_curso","por_aprobar","bloqueada"].includes(t.status)).length;
+      return '<button class="navbtn" type="button" data-area="' + esc(d.id) + '" aria-current="' + (S.area === d.id) + '"><span class="dot" style="background:' + areaColor(d.id) + '"></span>' + esc(d.name) + (n ? '<span class="count">' + n + "</span>" : "") + "</button>";
+    }).join("");
+  if(na._html !== areasHtml){ na.innerHTML = areasHtml; na._html = areasHtml; }
+}
+
+function renderRunners(){
+  const el = $("#runners"); if(!el) return;
+  if(!S.runners.length){ el.innerHTML = '<span class="runner"><span class="dot sleep"></span>Ningún motor conectado todavía</span>'; return; }
+  el.innerHTML = S.runners.map(r => {
+    const live = isLive(r);
+    const tip = (live ? "Vivo" : "Dormido") + " · último aviso " + (r.last_seen ? ago(r.last_seen) : "nunca") + " · áreas: " + ((r.areas || []).join(", ") || "—");
+    return '<button class="runner" type="button" data-runner="' + esc(r.id) + '" title="' + esc(tip) + '"><span class="dot ' + (live ? "live" : "sleep") + '"></span>' + esc(r.name || r.id) + ' <small>' + esc(live ? (r.note || "Vivo") : "Dormido") + "</small></button>";
+  }).join("");
+}
+
+function renderNoDb(){
+  return '<div class="empty"><b>La oficina no puede abrir su base de datos en esta vista.</b>Ábrela desde claude.ai con tu cuenta. Si eres del equipo y sigues viendo esto, pídele a José acceso como editor.</div>';
+}
+
+function greet(){
+  let h = 12; try{ h = Number(new Intl.DateTimeFormat("en-US",{timeZone:TZ,hour:"numeric",hour12:false}).format(new Date())); }catch(e){}
+  return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
+}
+function claimBanner(){
+  if(!S.loaded || S.me || !S.meId) return "";
+  const free = S.people.filter(p => !p.user_id);
+  if(!free.length) return '<div class="banner warn"><span class="grow">No encontramos tu nombre en el equipo de la oficina. Pídele a José que te agregue.</span></div>';
+  return '<div class="banner"><span class="grow"><b>¿Quién eres?</b> Elige tu nombre para ver lo que te toca aprobar.</span>' +
+    free.map(p => '<button class="btn sm" type="button" data-claim="' + esc(p.id) + '">' + esc(p.name) + "</button>").join("") + "</div>";
+}
+function areaWarn(){
+  if(!S.area || !S.loaded) return "";
+  if(areaHasLiveMotor(S.area)) return "";
+  return '<div class="banner warn"><span class="grow">Ningún motor está atendiendo <b>' + esc((dept(S.area) || {}).name || S.area) + '</b> ahora. Lo que encargues aquí espera a que se encienda uno.</span></div>';
+}
+function inArea(t){ return !S.area || t.dept === S.area; }
+
+function renderToca(){
+  const mine = myToca().filter(inArea);
+  const working = S.tasks.filter(t => t.status === "en_curso").length;
+  const queued = S.tasks.filter(t => ["pendiente","cambios","aprobada"].includes(t.status)).length;
+  const blocked = S.tasks.filter(t => t.status === "bloqueada").length;
+  const active = S.agents.filter(a => a.status === "activo").length;
+  const name = S.me ? S.me.name.split(" ")[0] : "";
+  let html = '<div class="top"><div><h1>' + esc(greet()) + (name ? ", " + esc(name) : "") + '</h1><p>' +
+    (S.loaded ? working + " agente" + (working === 1 ? "" : "s") + " trabajando · " + mine.length + " cosa" + (mine.length === 1 ? "" : "s") + " te necesita" + (mine.length === 1 ? "" : "n") : "Abriendo la oficina…") + "</p></div></div>";
+  html += claimBanner() + areaWarn();
+  html += '<div class="stats">' +
+    '<button class="chip" type="button" data-goto="toca"><span class="dot" style="background:var(--err)"></span>Te toca <b>' + mine.length + "</b></button>" +
+    '<button class="chip" type="button" data-goto="tablero"><span class="dot" style="background:var(--accent)"></span>Trabajando <b>' + working + "</b></button>" +
+    '<button class="chip" type="button" data-goto="tablero"><span class="dot" style="background:var(--info)"></span>Esperan al motor <b>' + queued + "</b></button>" +
+    '<button class="chip" type="button" data-goto="tablero"><span class="dot" style="background:var(--warn)"></span>Bloqueadas <b>' + blocked + "</b></button>" +
+    '<button class="chip" type="button" data-goto="agentes"><span class="dot" style="background:var(--fg2)"></span>Agentes activos <b>' + active + "</b></button></div>";
+  const mt = myTasks();
+  if(mt.length) html += '<section><div class="section-h"><h2>Tus tareas</h2><span>Lo que el equipo te asignó</span></div><div class="list">' + mt.map(personTaskCard).join("") + "</div></section>";
+  html += '<section><div class="section-h"><h2>Te toca</h2><span>Lo que espera tu visto bueno</span></div>';
+  if(!S.loaded) html += '<div class="empty">Cargando…</div>';
+  else if(!mine.length) html += '<div class="empty"><b>Nada pendiente por ahora.</b>Cuando un agente termine algo para ti, aparece aquí para que lo apruebes, pidas cambios o lo descartes.</div>';
+  else html += '<div class="list">' + mine.sort((a, b) => (b.priority || 0) - (a.priority || 0) || String(a.updated_at).localeCompare(String(b.updated_at))).map(inboxCard).join("") + "</div>";
+  html += "</section>";
+  const recent = S.tasks.filter(t => inArea(t) && ["en_curso","bloqueada"].includes(t.status)).slice(0, 6);
+  if(recent.length){
+    html += '<section><div class="section-h"><h2>En marcha</h2><span>Lo que los agentes están haciendo o lo que se trabó</span></div><div class="list">' +
+      recent.map(t => { const ag = agent(t.agent); const last = (t.activity || []).slice(-1)[0];
+        return '<div class="inbox"><div><div class="meta">' + pill(t.status) + '<span>' + esc(ag ? ag.name : "Sin agente") + "</span><span>·</span><span>" + esc(ago(t.updated_at)) + '</span></div><h3 data-open="' + esc(t.id) + '">' + esc(t.title) + "</h3></div>" +
+          (last ? '<div class="note">' + esc(last.text) + "</div>" : "") + "</div>"; }).join("") + "</div></section>";
+  }
+  return html;
+}
+function inboxCard(t){
+  const ag = agent(t.agent); const d = dept(t.dept);
+  const media = (t.media || []).slice(0, 8);
+  const ro = t.read_only;
+  const acts = t.kind === "pregunta"
+    ? '<button class="btn primary sm" type="button" data-act="answer" data-id="' + esc(t.id) + '">Responder</button>'
+    : (ro ? '<button class="btn primary sm" type="button" data-act="read" data-id="' + esc(t.id) + '">Marcar como leído</button>'
+      : '<button class="btn primary sm" type="button" data-act="approve" data-id="' + esc(t.id) + '">Aprobar</button>' +
+        '<button class="btn sm" type="button" data-act="changes" data-id="' + esc(t.id) + '">Pedir cambios</button>');
+  return '<article class="inbox"><div><div class="meta"><span class="dot" style="background:' + areaColor(t.dept) + '"></span><span>' + esc(d ? d.name : t.dept || "") + "</span><span>·</span><span>" + esc(KINDS[t.kind] || t.kind || "Tarea") + "</span><span>·</span><span>" + esc(ag ? ag.name : "Oficina") + "</span><span>·</span><span>" + esc(ago(t.updated_at)) + "</span>" +
+    (t.approval_for === "cualquiera" ? '<span class="pill">Para cualquiera</span>' : "") + '</div><h3 data-open="' + esc(t.id) + '">' + esc(t.title) + "</h3></div>" +
+    '<div class="acts">' + acts + '<button class="btn ghost sm" type="button" data-open="' + esc(t.id) + '">Ver todo</button></div>' +
+    (t.approval_note ? '<div class="note">' + esc(t.approval_note) + "</div>" : "") +
+    (media.length ? '<div class="thumbs">' + media.map(m => '<button class="thumb" type="button" data-zoom="' + esc(m.id) + '" data-cap="' + esc(m.caption || "") + '" aria-label="Ver ' + esc(m.caption || "imagen") + '"><img src="/_blob/' + encodeURIComponent(m.id) + '" alt="' + esc(m.caption || "") + '" loading="lazy"></button>').join("") + "</div>" : "") +
+    "</article>";
+}
+
+function renderBoard(){
+  const cols = [
+    {t:"En cola", s:["pendiente","cambios","aprobada"]},
+    {t:"Trabajando", s:["en_curso"]},
+    {t:"Por aprobar", s:["por_aprobar"]},
+    {t:"Bloqueadas", s:["bloqueada"]},
+    {t:"Hechas", s:["hecha"], lim:25}
+  ];
+  const pid = S.me && S.me.id;
+  let html = '<div class="top"><div><h1>Tablero' + (S.area ? " · " + esc((dept(S.area) || {}).name || "") : "") + '</h1><p>Todas las tareas de la oficina por estado. Toca una para ver el detalle.</p></div></div>' + areaWarn();
+  html += '<div class="board">' + cols.map(c => {
+    let ts = S.tasks.filter(t => inArea(t) && c.s.includes(t.status));
+    if(c.lim) ts = ts.slice(0, c.lim);
+    return '<section class="col" aria-label="' + esc(c.t) + '"><div class="col-h">' + esc(c.t) + "<span>" + ts.length + "</span></div>" +
+      (ts.length ? ts.map(t => { const ag = agent(t.agent);
+        const waits = t.after && S.tasks.find(x => x.id === t.after && !["hecha","descartada"].includes(x.status));
+        return '<button class="card" type="button" data-open="' + esc(t.id) + '"><b>' + esc(t.title) + '</b><div class="meta"><span class="dot" style="background:' + areaColor(t.dept) + '"></span>' + esc(ag ? ag.name : (t.assignee ? personName(t.assignee) : "Sin agente")) + (t.priority >= 2 ? ' <span class="pill prio">P' + esc(t.priority) + "</span>" : "") + "</div>" +
+          '<div class="meta">' + pill(t.status, t.status === "por_aprobar" && (t.approval_for === pid || t.approval_for === "cualquiera")) + (waits ? '<span class="pill">Espera otra tarea</span>' : "") + "<span>" + esc(ago(t.updated_at)) + "</span></div></button>"; }).join("")
+        : '<div class="empty" style="padding:14px;font-size:12.5px">Vacío</div>') + "</section>";
+  }).join("") + "</div>";
+  return html;
+}
+
+function agentState(a){
+  if(a.status !== "activo") return a.status;
+  const ts = S.tasks.filter(t => t.agent === a.id);
+  if(ts.some(t => t.status === "por_aprobar")) return "te_toca";
+  if(ts.some(t => t.status === "bloqueada")) return "bloqueado";
+  if(ts.some(t => t.status === "en_curso")) return "trabajando";
+  if(ts.some(t => ["pendiente","cambios","aprobada"].includes(t.status))) return "en_cola";
+  return "libre";
+}
+const AGENT_STATE = {te_toca:["Espera aprobación","toca"], bloqueado:["Bloqueado","block"], trabajando:["Trabajando","work"], en_cola:["En cola","queue"], libre:["Libre",""], disponible:["Disponible","done"], por_crear:["Por crear","queue"], pausado:["Pausado","done"]};
+function renderAgents(){
+  const f = S.agentFilter;
+  let html = '<div class="top"><div><h1>Agentes</h1><p>Los activos trabajan hoy. Los disponibles vienen del catálogo y los activa el dueño de cada área.</p></div>' +
+    '<div class="stats">' + [["activos","Activos"],["disponibles","Disponibles"],["todos","Todos"]].map(x => '<button class="chip" type="button" data-afilter="' + x[0] + '" aria-pressed="' + (f === x[0]) + '">' + x[1] + "</button>").join("") +
+    '<button class="btn sm" type="button" data-newagent="">' + ico('<path d="M12 5v14M5 12h14"/>') + "Nuevo agente</button></div></div>";
+  const depts = S.depts.slice().sort((a, b) => (a.order || 0) - (b.order || 0)).filter(d => !S.area || d.id === S.area);
+  if(!S.loaded) return html + '<div class="empty">Cargando…</div>';
+  if(!depts.length) return html + '<div class="empty"><b>Todavía no hay áreas.</b>El motor las carga la primera vez que corre.</div>';
+  html += '<div class="areas">' + depts.map(d => {
+    let ags = S.agents.filter(a => a.dept === d.id);
+    if(f === "activos") ags = ags.filter(a => a.status === "activo" || a.status === "por_crear");
+    if(f === "disponibles") ags = ags.filter(a => a.status === "disponible" || a.status === "pausado");
+    const RANK = {activo:0, por_crear:1, pausado:2, disponible:3, integrado:4};
+    ags.sort((a, b) => (RANK[a.status] ?? 5) - (RANK[b.status] ?? 5) || (a.order || 99) - (b.order || 99) || String(a.name).localeCompare(String(b.name)));
+    const owners = (d.owners || []).map(personName).join(", ");
+    return '<section><div class="area-h"><span class="dot" style="background:' + areaColor(d.id) + '"></span><h2>' + esc(d.name) + '</h2><span class="mission">' + esc(d.mission || "") + (owners ? " · Dueño: " + esc(owners) : "") + "</span>" +
+      (areaHasLiveMotor(d.id) ? "" : '<span class="pill block">Sin motor vivo</span>') + "</div>" +
+      (ags.length ? '<div class="agents">' + ags.map(agentCard).join("") + "</div>" : '<div class="empty" style="padding:16px">Ningún agente en este filtro.</div>') + "</section>";
+  }).join("") + "</div>";
+  return html;
+}
+function agentCard(a){
+  const st = agentState(a); const lab = st === "integrado" ? ["Integrado en " + ((agent(a.merged_into) || {}).name || "otro agente"), "done"] : (AGENT_STATE[st] || [st, ""]);
+  const cur = S.tasks.find(t => t.agent === a.id && t.status === "en_curso");
+  const last = cur && (cur.activity || []).slice(-1)[0];
+  const dim = a.status !== "activo";
+  return '<article class="agent' + (dim ? " dim" : "") + '"><div class="agent-top"><div class="av" style="background:' + areaColor(a.dept) + '" aria-hidden="true">' + esc(initials(a.name)) + '</div><div><b>' + esc(a.name) + "</b><small>" + esc(a.role || "") + '</small></div></div>' +
+    '<div><span class="pill ' + lab[1] + '">' + esc(lab[0]) + "</span></div>" +
+    (a.summary ? "<p>" + esc(a.summary) + "</p>" : "") +
+    (cur ? '<div class="now">Ahora: ' + esc(last ? last.text : cur.title) + "</div>" : "") +
+    '<div class="acts"><button class="btn sm ghost" type="button" data-agent="' + esc(a.id) + '">Ver ficha</button>' +
+    (a.status === "activo" ? '<button class="btn sm ghost" type="button" data-editagent="' + esc(a.id) + '">Editar</button>' : "") +
+    (a.status === "disponible" || a.status === "pausado" ? '<button class="btn sm" type="button" data-activate="' + esc(a.id) + '">Activar</button>' : "") + "</div></article>";
+}
+
+function renderLib(){
+  const q = S.libQ.trim().toLowerCase();
+  let docs = S.docs.filter(d => (!S.area || d.area === S.area) && (!q || (String(d.title) + " " + String(d.summary) + " " + String(d.body)).toLowerCase().includes(q)));
+  docs.sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+  let html = '<div class="top"><div><h1>Biblioteca</h1><p>Guías, plantillas, checklists, reportes y decisiones que la oficina reutiliza.</p></div></div>' +
+    '<div class="lib-tools"><label class="sr" for="libq">Buscar en la Biblioteca</label><input id="libq" type="search" placeholder="Buscar por título o contenido" value="' + esc(S.libQ) + '"></div>';
+  if(!docs.length) return html + '<div class="empty"><b>' + (q ? "Nada coincide con tu búsqueda." : "La Biblioteca está vacía.") + "</b>" + (q ? "" : "Cuando un agente entregue algo que se usa más de una vez (una guía, un reporte, una plantilla), el motor lo guarda aquí.") + "</div>";
+  return html + '<div class="docs">' + docs.map(d => '<button class="doc" type="button" data-doc="' + esc(d.id) + '"><div class="meta" style="display:flex;gap:6px;align-items:center;color:var(--muted);font-size:12px"><span class="dot" style="background:' + areaColor(d.area) + '"></span>' + esc(DOC_KINDS[d.kind] || d.kind || "Documento") + " · " + esc(ago(d.updated_at)) + "</div><b>" + esc(d.title || d.id) + "</b><p>" + esc(d.summary || "") + "</p></button>").join("") + "</div>";
+}
+
+/* ---------- eventos ---------- */
+function bindMain(){
+  const ci = $("#chat-in");
+  if(ci){
+    ci.value = S.chatDraft || "";
+    ci.oninput = () => { S.chatDraft = ci.value; };
+    ci.onkeydown = e => { if(e.key === "Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); const sb = document.querySelector("[data-send]"); if(sb) sb.click(); } };
+    markRead(S.chatCh); renderNav();
+  }
+  const q = $("#libq"); if(q){ q.oninput = () => { S.libQ = q.value; const pos = q.selectionStart; renderNow(); const n = $("#libq"); if(n){ n.focus(); try{ n.setSelectionRange(pos, pos); }catch(e){} } }; }
+}
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("button,[data-open]"); if(!b) return;
+  const d = b.dataset;
+  if(d.view){ S.view = d.view; render(); return; }
+  if(d.area !== undefined && b.closest("#nav-areas")){ S.area = d.area || null; render(); return; }
+  if(d.goto){ S.view = d.goto; render(); return; }
+  if(d.afilter){ S.agentFilter = d.afilter; render(); return; }
+  if(d.open){ openTask(d.open); return; }
+  if(d.act){ const t = S.tasks.find(x => x.id === d.id); if(t) act(d.act, t); return; }
+  if(d.zoom){ openZoom(d.zoom, d.cap); return; }
+  if(d.agent){ openAgent(d.agent); return; }
+  if(d.editagent !== undefined){ openAgentForm(d.editagent); return; }
+  if(d.newagent !== undefined){ openAgentForm(null); return; }
+  if(d.activate){ activateAgent(d.activate); return; }
+  if(d.doc){ openDoc(d.doc); return; }
+  if(d.ch){ S.chatCh = d.ch; render(); return; }
+  if(d.send !== undefined){ const ta = $("#chat-in"); const txt = ta ? ta.value.trim() : ""; if(!txt){ if(ta) ta.focus(); return; } b.disabled = true; if(await sendChat(txt)){ S.chatDraft = ""; if(ta) ta.value = ""; } b.disabled = false; return; }
+  if(d.assign !== undefined){ openAssign(); return; }
+  if(d.share !== undefined){ openShare(null); return; }
+  if(d.sharetask){ openShare(d.sharetask); return; }
+  if(d.claim){ claim(d.claim); return; }
+  if(d.runner){ openRunner(d.runner); return; }
+  if(d.close !== undefined){ $("#dlg").close(); return; }
+});
+$("#btn-encargar").addEventListener("click", () => openEncargar());
+
+async function claim(pid){
+  if(!S.meId) return;
+  try{ await S.db.doc("people/" + pid).update({user_id: S.meId, updated_at: nowIso()}); }
+  catch(e){ toast("No se pudo guardar tu nombre"); }
+}
+
+/* ---------- chat del equipo ---------- */
+const PCOL = ["var(--a-protocolo)", "var(--a-producto)", "var(--a-calidad)", "var(--a-direccion)"];
+function pColor(pid){ const i = S.people.findIndex(p => p.id === pid); return PCOL[(i < 0 ? 0 : i) % PCOL.length]; }
+function dmId(a, b){ return "dm:" + [a, b].sort().join("~"); }
+function myChannels(){
+  const me = S.me && S.me.id, list = [{id: "general", name: "General", hint: "Todo el equipo"}];
+  if(me) S.people.filter(p => p.id !== me).forEach(p => list.push({id: dmId(me, p.id), name: p.name, hint: p.user_id ? (p.role || "") : "Todavía no se suma", pid: p.id}));
+  return list;
+}
+function readKey(ch){ return "oficina.chatLeido." + ch; }
+function lastRead(ch){ try{ return localStorage.getItem(readKey(ch)) || ""; }catch(e){ return ""; } }
+function markRead(ch){ const last = S.chat.filter(m => m.channel === ch).reduce((a, m) => String(m.at) > a ? String(m.at) : a, ""); if(last && last > lastRead(ch)){ try{ localStorage.setItem(readKey(ch), last); }catch(e){} } }
+function unread(ch){ const me = S.me && S.me.id, r = lastRead(ch); return S.chat.filter(m => m.channel === ch && m.by !== me && String(m.at) > r).length; }
+function unreadTotal(){ return myChannels().reduce((n, c) => n + (S.view === "chat" && c.id === S.chatCh ? 0 : unread(c.id)), 0); }
+function myTasks(){ const me = S.me && S.me.id; return me ? S.tasks.filter(t => t.kind === "persona" && t.assignee === me && ["pendiente", "en_curso"].includes(t.status)) : []; }
+function fmtDay(iso){ try{ const s = new Intl.DateTimeFormat("es-VE", {timeZone: TZ, weekday: "long", day: "numeric", month: "long"}).format(new Date(iso)); return s.charAt(0).toUpperCase() + s.slice(1); }catch(e){ return ""; } }
+function pillP(t, mine){ if(t.kind === "persona" && ["pendiente", "en_curso"].includes(t.status)) return '<span class="pill ' + (t.status === "en_curso" ? "work" : "queue") + '">' + (t.status === "en_curso" ? "En curso" : "Pendiente") + "</span>"; return pill(t.status, mine); }
+function fmtHour(iso){ try{ return new Intl.DateTimeFormat("es-VE", {timeZone: TZ, hour: "numeric", minute: "2-digit"}).format(new Date(iso)); }catch(e){ return ""; } }
+function personTaskCard(t){
+  return '<article class="inbox"><div><div class="meta"><span class="dot" style="background:' + areaColor(t.dept) + '"></span><span>' + esc((dept(t.dept) || {}).name || "") + "</span><span>·</span><span>Te la asignó " + esc(personName(t.created_by)) + "</span>" + (t.due ? "<span>· vence " + esc(t.due) + "</span>" : "") + "<span>·</span>" + pillP(t) + '</div><h3 data-open="' + esc(t.id) + '">' + esc(t.title) + "</h3></div>" +
+    '<div class="acts">' + (t.status === "pendiente" ? '<button class="btn sm" type="button" data-act="pstart" data-id="' + esc(t.id) + '">Empezar</button>' : "") + '<button class="btn primary sm" type="button" data-act="pdone" data-id="' + esc(t.id) + '">Marcar hecha</button><button class="btn ghost sm" type="button" data-open="' + esc(t.id) + '">Ver todo</button></div>' +
+    (t.detail ? '<div class="note">' + esc(String(t.detail).slice(0, 220)) + (String(t.detail).length > 220 ? "…" : "") + "</div>" : "") + "</article>";
+}
+function taskCard(t, m){
+  if(!t) return '<div class="tcard" style="cursor:default"><small style="color:var(--muted)">Esta tarea ya no está en la cola reciente.</small></div>';
+  const who = t.assignee ? personName(t.assignee) : ((agent(t.agent) || {}).name || "Oficina");
+  const mine = t.status === "por_aprobar" && (t.approval_for === (S.me && S.me.id) || t.approval_for === "cualquiera");
+  return '<button class="tcard" type="button" data-open="' + esc(t.id) + '"><span class="tmeta">' + (m && m.kind === "asignacion" ? '<span class="pill work">Tarea asignada</span>' : "") + pillP(t, mine) + "<span>" + esc(who) + "</span>" + (t.due ? "<span>· vence " + esc(t.due) + "</span>" : "") + '</span><b>' + esc(t.title) + "</b>" +
+    (t.detail ? '<span class="tdet">' + esc(String(t.detail).replace(/[#*`>]/g, "").slice(0, 160)) + (String(t.detail).length > 160 ? "…" : "") + "</span>" : "") +
+    ((t.media || []).length ? '<span class="tthumbs">' + t.media.slice(0, 4).map(x => '<img src="/_blob/' + encodeURIComponent(x.id) + '" alt="" loading="lazy">').join("") + "</span>" : "") + "</button>";
+}
+function msgHtml(m){
+  const p = person(m.by), name = p ? p.name : "Alguien";
+  let body = m.text ? '<div class="txt">' + esc(m.text) + "</div>" : "";
+  if(m.task) body += taskCard(S.tasks.find(x => x.id === m.task), m);
+  return '<div class="msg"><span class="av" style="background:' + pColor(m.by) + '" aria-hidden="true">' + esc(initials(name)) + '</span><div style="min-width:0"><div class="who">' + esc(name) + "<time>" + esc(fmtHour(m.at)) + "</time></div>" + body + "</div></div>";
+}
+function renderChat(){
+  const top = '<div class="top"><div><h1>Chat</h1><p>Habla con el equipo, asigna tareas a personas y comparte lo que hace la oficina.</p></div></div>';
+  if(!S.me) return top + claimBanner() + '<div class="empty"><b>Elige tu nombre para usar el chat.</b>Así el equipo sabe quién escribe.</div>';
+  const chans = myChannels(); if(!chans.find(c => c.id === S.chatCh)) S.chatCh = "general";
+  const cur = chans.find(c => c.id === S.chatCh);
+  const msgs = S.chat.filter(m => m.channel === S.chatCh).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  let h = '<div class="chat"><nav class="ch-list" aria-label="Conversaciones">' + chans.map(c => {
+    const u = c.id === S.chatCh ? 0 : unread(c.id);
+    return '<button class="navbtn" type="button" data-ch="' + esc(c.id) + '" aria-current="' + (c.id === S.chatCh) + '">' +
+      (c.pid ? '<span class="av sm" style="background:' + pColor(c.pid) + '" aria-hidden="true">' + esc(initials(c.name)) + "</span>" : '<span class="av sm" style="background:var(--accent)" aria-hidden="true">#</span>') +
+      '<span class="chn"><span>' + esc(c.pid ? c.name.split(" ")[0] : c.name) + "</span><small>" + esc(c.hint) + "</small></span>" + (u ? '<span class="count hot">' + u + "</span>" : "") + "</button>";
+  }).join("") + "</nav>";
+  h += '<section class="ch-main" aria-label="' + esc(cur.name) + '"><div class="ch-head"><b>' + esc(cur.pid ? cur.name : "# General") + "</b><span>" + esc(cur.pid ? (person(cur.pid) && person(cur.pid).user_id ? "Mensaje directo" : "Mensaje directo · lo verá cuando se sume") : "Canal de todo el equipo") + '</span></div><div class="msgs" id="msgs" aria-live="polite">';
+  if(!msgs.length) h += '<div class="empty" style="margin:auto;max-width:420px"><b>' + (cur.pid ? "Empieza la conversación con " + esc(cur.name.split(" ")[0]) : "Todavía no hay mensajes") + "</b>Escribe abajo, asígnale una tarea a alguien o comparte una tarea de la oficina.</div>";
+  let prev = "";
+  msgs.forEach(m => { const d = fmtDay(m.at); if(d !== prev){ h += '<div class="daysep"><span>' + esc(d) + "</span></div>"; prev = d; } h += msgHtml(m); });
+  h += '</div><div class="composer"><label class="sr" for="chat-in">Mensaje para ' + esc(cur.name) + '</label><textarea id="chat-in" maxlength="2000" rows="2" placeholder="Escribe un mensaje · Enter envía, Mayús+Enter hace salto de línea"></textarea><div class="crow"><div class="cacts"><button class="btn sm" type="button" data-assign>' + ico('<path d="M9 11l3 3 8-8"/><path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11"/>') + 'Asignar tarea</button><button class="btn sm ghost" type="button" data-share>' + ico('<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M16 6l-4-4-4 4M12 2v13"/>') + 'Compartir tarea</button></div><button class="btn primary sm" type="button" data-send>Enviar</button></div></div></section></div>';
+  return top + h;
+}
+async function sendChat(text, extra){
+  if(!S.db || !S.me) return false;
+  const doc = Object.assign({channel: S.chatCh, by: S.me.id, text: String(text || "").slice(0, 2000), at: nowIso(), kind: "texto"}, extra || {});
+  try{ await S.db.collection("chat").add(doc); return true; }
+  catch(e){ toast(e && e.code === "quota_exceeded" ? "El chat llegó al límite de mensajes guardados" : "No se pudo enviar el mensaje"); return false; }
+}
+function channelOptions(sel){ return myChannels().map(c => '<option value="' + esc(c.id) + '"' + (c.id === sel ? " selected" : "") + ">" + esc(c.pid ? "Directo con " + c.name : "# General") + "</option>").join(""); }
+function openAssign(){
+  if(!S.me){ toast("Elige tu nombre primero"); return; }
+  const cur = myChannels().find(c => c.id === S.chatCh) || {};
+  const ppl = S.people.map(p => '<option value="' + esc(p.id) + '"' + ((cur.pid ? cur.pid === p.id : p.id !== S.me.id && !cur.pid && false) ? " selected" : "") + ">" + esc(p.id === S.me.id ? p.name + " (tú)" : p.name) + "</option>").join("");
+  dlg("Asignar tarea", '<div class="field"><label for="a-who">Para</label><select id="a-who">' + ppl + '</select><small>Las tareas de personas no las toma ningún agente: le aparecen a esa persona en «Te toca».</small></div>' +
+    '<div class="field"><label for="a-title">Qué hay que hacer</label><input id="a-title" type="text" maxlength="160" placeholder="Ej.: Revisar el tono de los copies de la semana"></div>' +
+    '<div class="field"><label for="a-detail">Detalles</label><textarea id="a-detail" maxlength="4000" placeholder="Contexto, links, lo que no puede faltar"></textarea></div>' +
+    '<div class="row2"><div class="field"><label for="a-area">Área</label><select id="a-area">' + deptOptions(S.area || "producto") + '</select></div><div class="field"><label for="a-due">Para cuándo (opcional)</label><input id="a-due" type="date"></div></div>' +
+    '<div class="row2"><div class="field"><label for="a-prio">Prioridad</label><select id="a-prio"><option value="1">Normal</option><option value="2">Alta</option><option value="3">Urgente</option></select></div><div class="field"><label for="a-ch">Avisar en</label><select id="a-ch">' + channelOptions(S.chatCh) + "</select></div></div>",
+    '<button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="go">Asignar</button>');
+  if(cur.pid) $("#a-who").value = cur.pid;
+  $("#a-who").onchange = () => { const w = $("#a-who").value; if(w !== S.me.id) $("#a-ch").value = dmId(S.me.id, w); };
+  $("#go").onclick = async ev => {
+    const title = $("#a-title").value.trim(); if(!title){ $("#a-title").focus(); return; }
+    ev.target.disabled = true;
+    const id = uid("t"), now = nowIso(), who = $("#a-who").value, ch = $("#a-ch").value;
+    const task = {title, detail: $("#a-detail").value.trim(), dept: $("#a-area").value, agent: null, assignee: who, kind: "persona", status: "pendiente",
+      priority: Number($("#a-prio").value) || 1, due: $("#a-due").value || null, approval_for: null, chat_channel: ch,
+      created_by: S.me.id, created_at: now, updated_at: now, activity: [], history: [{at: now, by: S.me.id, text: "Se la asignó a " + personName(who)}], claims: {}};
+    try{ await S.db.doc("tasks/" + id).set(task); }catch(e){ ev.target.disabled = false; toast("No se pudo crear la tarea"); return; }
+    await sendChat("", {channel: ch, kind: "asignacion", task: id});
+    closeDlg(); S.chatCh = ch; if(S.view !== "chat"){ S.view = "chat"; } render();
+  };
+  setTimeout(() => { const e = $("#a-title"); if(e) e.focus(); }, 30);
+}
+function openShare(taskId){
+  if(!S.me){ toast("Elige tu nombre primero"); return; }
+  const recent = S.tasks.filter(t => t.status !== "descartada").slice(0, 40);
+  const tsel = taskId ? "" : '<div class="field"><label for="s-task">Tarea</label><select id="s-task">' + recent.map(t => '<option value="' + esc(t.id) + '">' + esc(t.title) + " · " + esc((STATUS[t.status] || {}).t || t.status) + "</option>").join("") + "</select></div>";
+  const t = taskId ? S.tasks.find(x => x.id === taskId) : null;
+  dlg("Compartir en el chat", (t ? '<div class="callout"><b>' + esc(t.title) + "</b></div>" : tsel) +
+    '<div class="field"><label for="s-ch">Dónde</label><select id="s-ch">' + channelOptions(S.chatCh) + "</select></div>" +
+    '<div class="field"><label for="s-msg">Mensaje (opcional)</label><textarea id="s-msg" maxlength="1000" placeholder="Ej.: Steffany, ¿le das una mirada al tono?"></textarea></div>',
+    '<button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="go">Compartir</button>');
+  $("#go").onclick = async ev => {
+    const tid = taskId || ($("#s-task") && $("#s-task").value); if(!tid) return;
+    ev.target.disabled = true; const ch = $("#s-ch").value;
+    if(await sendChat($("#s-msg").value.trim(), {channel: ch, kind: "tarea", task: tid})){ closeDlg(); S.chatCh = ch; S.view = "chat"; render(); }
+    else ev.target.disabled = false;
+  };
+}
+
+/* ---------- diálogos ---------- */
+function dlg(head, body, foot){
+  $("#dlg-body").innerHTML = '<div class="dlg-h"><h2>' + head + '</h2><button class="x" type="button" data-close aria-label="Cerrar">' + ico('<path d="M6 6l12 12M18 6 6 18"/>') + '</button></div><div class="dlg-b">' + body + "</div>" + (foot ? '<div class="dlg-f">' + foot + "</div>" : "");
+  const el = $("#dlg"); if(!el.open) el.showModal();
+}
+function openZoom(id, cap){
+  dlg(esc(cap || "Imagen"), '<div class="lightbox"><img src="/_blob/' + encodeURIComponent(id) + '" alt="' + esc(cap || "") + '"></div>');
+}
+function openRunner(id){
+  const r = S.runners.find(x => x.id === id); if(!r) return;
+  dlg(esc(r.name || r.id), '<dl class="kv"><dt>Estado</dt><dd>' + (isLive(r) ? "Vivo" : "Dormido") + "</dd><dt>Dueño</dt><dd>" + esc(personName(r.owner)) + "</dd><dt>Último aviso</dt><dd>" + esc(r.last_seen ? fmt(r.last_seen) + " (" + ago(r.last_seen) + ")" : "nunca") + "</dd><dt>Áreas</dt><dd>" + esc((r.areas || []).map(a => a === "*" ? "todas" : ((dept(a) || {}).name || a)).join(", ")) + "</dd><dt>Puede</dt><dd>" + esc((r.capabilities || []).join(", ")) + "</dd><dt>Nota</dt><dd>" + esc(r.note || "—") + "</dd></dl>");
+}
+
+function openTask(id){
+  const t = S.tasks.find(x => x.id === id); if(!t) return;
+  const ag = agent(t.agent); const d = dept(t.dept);
+  const pid = S.me && S.me.id;
+  const mine = t.status === "por_aprobar" && (t.approval_for === pid || t.approval_for === "cualquiera");
+  let body = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' + pill(t.status, mine) + '<span class="pill">' + esc(KINDS[t.kind] || t.kind || "Tarea") + "</span>" + (t.priority >= 2 ? '<span class="pill prio">Prioridad ' + esc(t.priority) + "</span>" : "") + "</div>";
+  body += '<dl class="kv"><dt>Área</dt><dd>' + esc(d ? d.name : t.dept || "—") + "</dd><dt>Agente</dt><dd>" + esc(ag ? ag.name : "Sin asignar") + "</dd><dt>Encargó</dt><dd>" + esc(personName(t.created_by)) + " · " + esc(fmt(t.created_at)) + "</dd><dt>Aprueba</dt><dd>" + esc(t.approval_for ? personName(t.approval_for) : "Dueño del área") + "</dd>" + (t.motor ? "<dt>Motor</dt><dd>" + esc(t.motor) + "</dd>" : "") + "</dl>";
+  if(t.approval_note) body += '<div class="callout' + (mine ? " toca" : "") + '">' + esc(t.approval_note) + "</div>";
+  if(t.detail) body += '<section><div class="section-h"><h2>Encargo</h2></div><div class="md">' + md(t.detail) + "</div></section>";
+  const atts = t.attachments || [];
+  if(atts.length) body += '<div class="thumbs">' + atts.map(a => '<button class="thumb" type="button" data-zoom="' + esc(a.id) + '" data-cap="' + esc(a.name || "") + '"><img src="/_blob/' + encodeURIComponent(a.id) + '" alt="' + esc(a.name || "") + '" loading="lazy"></button>').join("") + "</div>";
+  if((t.media || []).length) body += '<section><div class="section-h"><h2>Para revisar</h2></div><div class="thumbs">' + t.media.map(m => '<button class="thumb" type="button" data-zoom="' + esc(m.id) + '" data-cap="' + esc(m.caption || "") + '"><img src="/_blob/' + encodeURIComponent(m.id) + '" alt="' + esc(m.caption || "") + '" loading="lazy"></button>').join("") + "</div></section>";
+  if((t.links || []).length) body += '<div class="list">' + t.links.map(l => /^https:\/\//.test(String(l.url)) ? '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.label || l.url) + "</a>" : "").join("") + "</div>";
+  if(t.output) body += '<section><div class="section-h"><h2>Entregable</h2></div><div class="md">' + md(t.output) + "</div></section>";
+  if(t.feedback) body += '<div class="callout"><b>Cambios pedidos:</b> ' + esc(t.feedback) + "</div>";
+  if(t.answer) body += '<div class="callout"><b>Respuesta:</b> ' + esc(t.answer) + "</div>";
+  if((t.activity || []).length) body += '<section><div class="section-h"><h2>Notas del agente</h2></div><div class="timeline">' + t.activity.slice(-12).map(a => "<div><time>" + esc(fmt(a.at)) + "</time><span>" + esc(a.text) + "</span></div>").join("") + "</div></section>";
+  if((t.history || []).length) body += '<section><div class="section-h"><h2>Historial</h2></div><div class="timeline">' + t.history.slice(-15).map(a => "<div><time>" + esc(fmt(a.at)) + "</time><span>" + esc(personName(a.by)) + ": " + esc(a.text) + "</span></div>").join("") + "</div></section>";
+  body += '<div class="field"><label for="tcomment">Comentar</label><textarea id="tcomment" maxlength="2000" placeholder="Un comentario para el equipo o el agente"></textarea></div>';
+  let foot = '<button class="btn ghost" type="button" data-sharetask="' + esc(t.id) + '">Compartir en el chat</button><button class="btn ghost" type="button" data-act="comment" data-id="' + esc(t.id) + '">Comentar</button>';
+  if(t.kind === "persona" && t.assignee === (S.me && S.me.id) && ["pendiente","en_curso"].includes(t.status)) foot += (t.status === "pendiente" ? '<button class="btn" type="button" data-act="pstart" data-id="' + esc(t.id) + '">Empezar</button>' : "") + '<button class="btn primary" type="button" data-act="pdone" data-id="' + esc(t.id) + '">Marcar hecha</button>';
+  if(mine){
+    if(t.kind === "pregunta") foot += '<button class="btn primary" type="button" data-act="answer" data-id="' + esc(t.id) + '">Responder</button>';
+    else if(t.read_only) foot += '<button class="btn primary" type="button" data-act="read" data-id="' + esc(t.id) + '">Marcar como leído</button>';
+    else foot += '<button class="btn danger" type="button" data-act="discard" data-id="' + esc(t.id) + '">Descartar</button><button class="btn" type="button" data-act="pass" data-id="' + esc(t.id) + '">Pasar a otra persona</button><button class="btn" type="button" data-act="changes" data-id="' + esc(t.id) + '">Pedir cambios</button><button class="btn primary" type="button" data-act="approve" data-id="' + esc(t.id) + '">Aprobar</button>';
+  }
+  dlg(esc(t.title), body, foot);
+}
+
+async function act(kind, t){
+  const who = S.me ? S.me.name.split(" ")[0] : "Alguien";
+  if(kind === "approve"){ if(await updTask(t, {status:"aprobada"}, "Aprobó", who + ' aprobó "' + t.title + '"')) closeDlg(); return; }
+  if(kind === "read"){ if(await updTask(t, {status:"hecha"}, "Lo marcó como leído", null)) closeDlg(); return; }
+  if(kind === "discard"){
+    dlg("Descartar", '<p>¿Descartar <b>' + esc(t.title) + '</b>? El agente no sigue con esto.</p><div class="field"><label for="why">Por qué (opcional)</label><textarea id="why" maxlength="1000"></textarea></div>',
+      '<button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn danger" type="button" id="go">Descartar</button>');
+    $("#go").onclick = async () => { const w = $("#why").value.trim(); if(await updTask(t, {status:"descartada", feedback: w || null}, "Descartó" + (w ? ": " + w : ""), who + ' descartó "' + t.title + '"')) closeDlg(); };
+    return;
+  }
+  if(kind === "changes"){
+    dlg("Pedir cambios", '<p class="callout">' + esc(t.title) + '</p><div class="field"><label for="fb">Qué hay que cambiar</label><textarea id="fb" maxlength="3000" placeholder="Sé concreto: qué cambiar, qué dejar igual"></textarea></div><div class="field"><label for="fbimg">Imágenes de referencia (opcional)</label><input id="fbimg" type="file" accept="image/*" multiple></div>',
+      '<button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="go">Enviar cambios</button>');
+    $("#go").onclick = async ev => {
+      const fb = $("#fb").value.trim(); if(!fb){ $("#fb").focus(); return; }
+      ev.target.disabled = true;
+      const imgs = await uploadFiles($("#fbimg"), "cambios");
+      if(await updTask(t, {status:"cambios", feedback: fb, feedback_images: imgs.map(i => ({id: i.id, name: i.name}))}, "Pidió cambios: " + fb, who + ' pidió cambios en "' + t.title + '"')) closeDlg();
+      else ev.target.disabled = false;
+    };
+    return;
+  }
+  if(kind === "answer"){
+    dlg("Responder", '<div class="md">' + md(t.output || t.detail || t.title) + '</div><div class="field"><label for="ans">Tu respuesta</label><textarea id="ans" maxlength="3000"></textarea><small>Queda como decisión vigente: ningún agente vuelve a preguntarlo.</small></div>',
+      '<button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="go">Responder</button>');
+    $("#go").onclick = async () => { const a = $("#ans").value.trim(); if(!a){ $("#ans").focus(); return; }
+      if(await updTask(t, {status:"aprobada", answer: a}, "Respondió: " + a, who + ' respondió "' + t.title + '"')) closeDlg(); };
+    return;
+  }
+  if(kind === "pass"){
+    const opts = S.people.filter(p => p.id !== (S.me && S.me.id)).map(p => '<option value="' + esc(p.id) + '">' + esc(p.name) + "</option>").join("") + '<option value="cualquiera">Cualquiera</option>';
+    dlg("Pasar a otra persona", '<div class="field"><label for="to">Quién lo aprueba</label><select id="to">' + opts + "</select></div>",
+      '<button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="go">Pasar</button>');
+    $("#go").onclick = async () => { const to = $("#to").value; if(await updTask(t, {approval_for: to}, "Se lo pasó a " + personName(to), null)) closeDlg(); };
+    return;
+  }
+  if(kind === "pstart"){ if(await updTask(t, {status:"en_curso", started_at: nowIso()}, "Empezó", null)) closeDlg(); return; }
+  if(kind === "pdone"){
+    if(await updTask(t, {status:"hecha"}, "La marcó como hecha", null)){ closeDlg(); if(t.chat_channel) sendChat("Terminé esta tarea ✓", {channel: t.chat_channel, kind: "tarea", task: t.id}); }
+    return;
+  }
+  if(kind === "comment"){
+    const c = $("#tcomment"); const txt = c ? c.value.trim() : ""; if(!txt){ if(c) c.focus(); return; }
+    if(await updTask(t, {}, txt, who + ' comentó en "' + t.title + '"')){ c.value = ""; openTask(t.id); }
+  }
+}
+function closeDlg(){ const el = $("#dlg"); if(el.open) el.close(); }
+
+function deptOptions(sel){ return S.depts.slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map(d => '<option value="' + esc(d.id) + '"' + (d.id === sel ? " selected" : "") + ">" + esc(d.name) + "</option>").join(""); }
+function openEncargar(){
+  if(!S.db){ toast("La oficina no está disponible en esta vista"); return; }
+  const area = S.area || ((S.depts[0] || {}).id);
+  const agOpts = a => '<option value="">Que lo decida Eduardo</option>' + S.agents.filter(x => x.status === "activo" && (!a || x.dept === a)).map(x => '<option value="' + esc(x.id) + '">' + esc(x.name) + " · " + esc(x.role || "") + "</option>").join("");
+  const motOpts = '<option value="">Cualquier motor de esa área</option>' + S.runners.map(r => '<option value="' + esc(r.id) + '">' + esc(r.name || r.id) + (isLive(r) ? "" : " (dormido)") + "</option>").join("");
+  dlg("Encargar", '<div class="field"><label for="e-title">Qué necesitas</label><input id="e-title" type="text" maxlength="160" placeholder="Ej.: Calendario de la semana del 20 de octubre"></div>' +
+    '<div class="field"><label for="e-detail">Detalles</label><textarea id="e-detail" maxlength="6000" placeholder="Objetivo, público, país, fechas, referencias, lo que no puede faltar"></textarea></div>' +
+    '<div class="row2"><div class="field"><label for="e-area">Área</label><select id="e-area">' + deptOptions(area) + '</select></div><div class="field"><label for="e-agent">Agente</label><select id="e-agent">' + agOpts(area) + "</select></div></div>" +
+    '<div class="row2"><div class="field"><label for="e-prio">Prioridad</label><select id="e-prio"><option value="1">Normal</option><option value="2">Alta</option><option value="3">Urgente</option></select></div><div class="field"><label for="e-motor">Motor</label><select id="e-motor">' + motOpts + "</select></div></div>" +
+    '<div class="field"><label for="e-files">Imágenes de referencia (opcional)</label><input id="e-files" type="file" accept="image/*" multiple></div>',
+    '<button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="go">Encargar</button>');
+  $("#e-area").onchange = () => { $("#e-agent").innerHTML = agOpts($("#e-area").value); };
+  $("#go").onclick = async ev => {
+    const title = $("#e-title").value.trim(); if(!title){ $("#e-title").focus(); return; }
+    ev.target.disabled = true;
+    const atts = await uploadFiles($("#e-files"), "encargo");
+    const id = uid("t"); const now = nowIso();
+    const t = {title, detail: $("#e-detail").value.trim(), dept: $("#e-area").value, agent: $("#e-agent").value || null, status:"pendiente", kind:"tarea",
+      priority: Number($("#e-prio").value) || 1, approval_for: null, motor: $("#e-motor").value || null, attachments: atts,
+      created_by: S.me ? S.me.id : null, created_at: now, updated_at: now, activity: [], history: [{at: now, by: S.me ? S.me.id : null, text: "Encargó"}], claims: {}};
+    try{ await S.db.doc("tasks/" + id).set(t); }
+    catch(e){ ev.target.disabled = false; toast(e && e.code === "quota_exceeded" ? "La base de datos está llena: archiva tareas viejas" : "No se pudo guardar el encargo"); return; }
+    closeDlg(); S.view = "tablero"; render();
+    wake((S.me ? S.me.name.split(" ")[0] : "Alguien") + ' encargó "' + title + '"');
+  };
+  setTimeout(() => { const e = $("#e-title"); if(e) e.focus(); }, 30);
+}
+
+function openAgent(id){
+  const a = agent(id); if(!a) return;
+  const st = agentState(a); const lab = AGENT_STATE[st] || [st, ""];
+  const ts = S.tasks.filter(t => t.agent === a.id).slice(0, 8);
+  let body = '<div class="agent-top"><div class="av" style="background:' + areaColor(a.dept) + '" aria-hidden="true">' + esc(initials(a.name)) + '</div><div><b>' + esc(a.role || "") + "</b><small>" + esc((dept(a.dept) || {}).name || "") + " · Dueño: " + esc(personName(a.owner)) + '</small></div><span class="pill ' + lab[1] + '" style="margin-left:auto">' + esc(lab[0]) + "</span></div>";
+  if(a.summary) body += "<p>" + esc(a.summary) + "</p>";
+  body += '<dl class="kv"><dt>Recibe</dt><dd>' + esc(a.inputs || "—") + "</dd><dt>Entrega</dt><dd>" + esc(a.outputs || "—") + "</dd><dt>Herramientas</dt><dd>" + esc((a.tools || []).join(", ") || "—") + "</dd><dt>Aprueba</dt><dd>" + esc(a.approval ? personName(a.approval) : "Dueño del área") + "</dd><dt>Archivo</dt><dd class=\"mono\">" + esc(a.file || "—") + "</dd></dl>";
+  body += '<section><div class="section-h"><h2>Sus tareas</h2></div>' + (ts.length ? '<div class="list">' + ts.map(t => '<button class="card" type="button" data-open="' + esc(t.id) + '"><b>' + esc(t.title) + '</b><div class="meta">' + pill(t.status) + "<span>" + esc(ago(t.updated_at)) + "</span></div>" + ((t.activity || []).length ? '<div class="meta">' + esc(t.activity.slice(-1)[0].text) + "</div>" : "") + "</button>").join("") + "</div>" : '<div class="empty" style="padding:14px">Todavía no tiene tareas.</div>') + "</section>";
+  let foot = "";
+  if(a.status === "activo") foot = '<button class="btn" type="button" data-editagent="' + esc(a.id) + '">Editar</button>';
+  if(a.status === "disponible" || a.status === "pausado") foot = '<button class="btn primary" type="button" data-activate="' + esc(a.id) + '">Activar</button>';
+  dlg(esc(a.name), body, foot);
+}
+const TOOL_OPTS = [["web","Buscar en la web"],["leer","Leer archivos"],["crear","Crear archivos (piezas, documentos)"],["metricas","Leer métricas (Metricool, RD Station, PostHog)"]];
+function openAgentForm(id, deptPre){
+  const a = id ? agent(id) : null;
+  const v = a || {name:"", role:"", dept: deptPre || S.area || ((S.depts[0] || {}).id), summary:"", inputs:"", outputs:"", tools:[], approval:""};
+  const people = '<option value="">Dueño del área</option>' + S.people.map(p => '<option value="' + esc(p.id) + '"' + (v.approval === p.id ? " selected" : "") + ">" + esc(p.name) + "</option>").join("");
+  dlg(a ? "Editar a " + esc(a.name) : "Nuevo agente",
+    '<div class="row2"><div class="field"><label for="g-name">Nombre</label><input id="g-name" type="text" maxlength="40" value="' + esc(v.name) + '"' + (a ? " readonly" : "") + '></div><div class="field"><label for="g-role">Rol</label><input id="g-role" type="text" maxlength="80" value="' + esc(v.role) + '" placeholder="Ej.: Guionista de reels"></div></div>' +
+    '<div class="row2"><div class="field"><label for="g-dept">Área</label><select id="g-dept">' + deptOptions(v.dept) + '</select></div><div class="field"><label for="g-appr">Quién aprueba</label><select id="g-appr">' + people + "</select></div></div>" +
+    '<div class="field"><label for="g-sum">Qué hace</label><textarea id="g-sum" maxlength="1500">' + esc(v.summary) + "</textarea></div>" +
+    '<div class="row2"><div class="field"><label for="g-in">Qué recibe</label><input id="g-in" type="text" maxlength="300" value="' + esc(v.inputs) + '"></div><div class="field"><label for="g-out">Qué entrega</label><input id="g-out" type="text" maxlength="300" value="' + esc(v.outputs) + '"></div></div>' +
+    '<fieldset class="field" style="border:0;padding:0;margin:0"><legend style="font-size:12.5px;font-weight:500;color:var(--fg2);margin-bottom:6px">Herramientas que necesita</legend><div class="checks">' + TOOL_OPTS.map(o => '<label><input type="checkbox" name="g-tool" value="' + o[0] + '"' + ((v.tools || []).includes(o[0]) ? " checked" : "") + ">" + esc(o[1]) + "</label>").join("") + "</div></fieldset>" +
+    (a ? '<div class="field"><label for="g-why">Qué quieres cambiar</label><textarea id="g-why" maxlength="2000" placeholder="Ej.: que siempre entregue 5 variantes en vez de 3"></textarea></div>' : "") +
+    '<p class="callout">El motor de esa área escribe (o corrige) el archivo del agente y te lo deja en «Te toca». Al aprobarlo, queda activo para todo el equipo.</p>',
+    '<button class="btn ghost" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="go">' + (a ? "Pedir el cambio" : "Crear agente") + "</button>");
+  $("#go").onclick = async ev => {
+    const name = $("#g-name").value.trim(); const role = $("#g-role").value.trim();
+    if(!name){ $("#g-name").focus(); return; } if(!role){ $("#g-role").focus(); return; }
+    const spec = {name, role, dept: $("#g-dept").value, summary: $("#g-sum").value.trim(), inputs: $("#g-in").value.trim(), outputs: $("#g-out").value.trim(),
+      tools: Array.from(document.querySelectorAll('input[name="g-tool"]:checked')).map(x => x.value), approval: $("#g-appr").value || null};
+    const aid = a ? a.id : slug(name); if(!aid){ $("#g-name").focus(); return; }
+    if(!a && agent(aid)){ toast("Ya existe un agente con ese nombre"); $("#g-name").focus(); return; }
+    ev.target.disabled = true;
+    const now = nowIso(); const d = dept(spec.dept) || {};
+    try{
+      if(!a) await S.db.doc("agents/" + aid).set(Object.assign({}, spec, {status:"por_crear", owner: (d.owners || [])[0] || null, file: ".claude/agents/oficina-" + aid + ".md", order: 50, created_at: now, updated_at: now}));
+      const why = a ? $("#g-why").value.trim() : "";
+      await S.db.doc("tasks/" + uid("t")).set({title: (a ? "Cambiar a " : "Crear a ") + name, detail: (why ? "**Cambio pedido:** " + why + "\n\n" : "") + "```json\n" + JSON.stringify(spec, null, 2) + "\n```",
+        dept: spec.dept, agent: null, agent_id: aid, status:"pendiente", kind:"agente", priority: 2, approval_for: (d.owners || [])[0] || null,
+        created_by: S.me ? S.me.id : null, created_at: now, updated_at: now, activity: [], history: [{at: now, by: S.me ? S.me.id : null, text: a ? "Pidió un cambio" : "Pidió un agente nuevo"}], claims: {}});
+    }catch(e){ ev.target.disabled = false; toast("No se pudo guardar el agente"); return; }
+    closeDlg(); wake((S.me ? S.me.name.split(" ")[0] : "Alguien") + (a ? " pidió cambiar a " : " pidió crear a ") + name);
+  };
+}
+async function activateAgent(id){
+  const a = agent(id); if(!a) return;
+  const d = dept(a.dept) || {}; const now = nowIso();
+  if(S.tasks.some(t => t.kind === "agente" && t.agent_id === id && !["hecha","descartada"].includes(t.status))){ toast("Ya hay un pedido para activar a " + a.name); return; }
+  try{
+    await S.db.doc("tasks/" + uid("t")).set({title: "Activar a " + a.name, detail: "Activar `" + id + "` del catálogo (" + (a.file || "") + "): darle herramientas mínimas, el formato de salida de la oficina y dejarlo activo.",
+      dept: a.dept, agent: null, agent_id: id, status:"pendiente", kind:"agente", priority: 2, approval_for: (d.owners || [])[0] || null,
+      created_by: S.me ? S.me.id : null, created_at: now, updated_at: now, activity: [], history: [{at: now, by: S.me ? S.me.id : null, text: "Pidió activarlo"}], claims: {}});
+  }catch(e){ toast("No se pudo pedir la activación"); return; }
+  closeDlg(); toast("Pedido: activar a " + a.name);
+  wake((S.me ? S.me.name.split(" ")[0] : "Alguien") + " pidió activar a " + a.name);
+}
+
+function checkKey(text){ return slug(text).slice(0, 48) || "item"; }
+function openDoc(id){
+  const d = S.docs.find(x => x.id === id); if(!d) return;
+  let html = md(d.body);
+  const checks = d.checks || {};
+  const wrap = document.createElement("div"); wrap.innerHTML = html;
+  wrap.querySelectorAll('li input[type="checkbox"]').forEach(cb => {
+    const li = cb.closest("li"); const key = checkKey(li ? li.textContent : "");
+    cb.removeAttribute("disabled"); cb.dataset.key = key; cb.checked = !!(checks[key] && checks[key].done);
+  });
+  const by = d.updated_by ? " · " + esc(personName(d.updated_by) === d.updated_by ? d.updated_by : personName(d.updated_by)) : "";
+  dlg(esc(d.title || d.id), '<div class="meta" style="display:flex;gap:6px;color:var(--muted);font-size:12.5px;flex-wrap:wrap"><span class="dot" style="background:' + areaColor(d.area) + '"></span>' + esc(DOC_KINDS[d.kind] || d.kind || "") + " · actualizado " + esc(fmt(d.updated_at)) + by + (d.version_note ? " · " + esc(d.version_note) : "") + "</div>" + '<div class="md" id="docbody">' + wrap.innerHTML + "</div>");
+  $("#docbody").addEventListener("change", async ev => {
+    const cb = ev.target; if(!cb.dataset || !cb.dataset.key) return;
+    const patch = {checks: {}}; patch.checks[cb.dataset.key] = {done: cb.checked, by: S.me ? S.me.id : null, at: nowIso()};
+    try{ await S.db.doc("docs/" + d.id).update(patch); }catch(e){ cb.checked = !cb.checked; toast("No se pudo guardar la casilla"); }
+  });
+}
+
+/* ---------- El mundo (3D, three.js) ---------- */
+const World = (function(){
+  const GW = 32, GD = 19;
+  const AREAS = ["direccion", "protocolo", "producto", "calidad"];
+  const PEOPLE = ["jose", "socio2", "socio3"];
+  const LOGO = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1NjAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgNTYwIDEwMCI+PHRleHQgeD0iMCIgeT0iNzgiIGZvbnQtZmFtaWx5PSJNYW5yb3BlLEhlbHZldGljYSxBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9Ijg0IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMTQ3RDY4IiBsZXR0ZXItc3BhY2luZz0iMiI+UVU8L3RleHQ+PHRleHQgeD0iMTI4IiB5PSI3OCIgZm9udC1mYW1pbHk9Ik1hbnJvcGUsSGVsdmV0aWNhLEFyaWFsLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iODQiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMxODJCNDUiIGxldHRlci1zcGFjaW5nPSIyIj7Dk1JVTTwvdGV4dD48L3N2Zz4=";
+  const COORD = "orquestador";
+  const ICONS = {direccion:["◆","✓","↗"], protocolo:["⚿","✓","∑"], producto:["▲","●","■"], calidad:["✓","✗","⚙"]};
+  const STATE_LABEL = {te_toca:"Te necesita", trabajando:"Trabajando", bloqueado:"Bloqueado", en_cola:"En cola", libre:"Libre", pausado:"Pausado", por_crear:"Por crear"};
+  const reduce = window.matchMedia ? matchMedia("(prefers-reduced-motion: reduce)") : {matches:false};
+  let el = null, cv = null, ov = null, ok = false, built = false, mounted = false;
+  let renderer, scene, camera, sun, staticGroup, raf = 0, lastT = 0, userCam = false;
+  let grid, rooms = [], offices = [], racks = [], cafeSpots = [], recQueue = [];
+  const actors = new Map();
+  const statics = {veils:{}, glow:new Map(), ghosts:[], clockTex:null, clockCtx:null, clockMin:-1, rackMeshes:[]};
+  const cam = {theta: 0.62, phi: 0.92, r: 40, tx: GW/2, tz: GD/2 + 0.5};
+  let particles = [], nextLife = 4, tokens = {}, popId = null, hoverKey = null, deliverQ = [], prevStatus = null;
+  let pointers = new Map(), drag = null, pinch0 = 0;
+  const tex = {};
+
+  /* --- utilidades --- */
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888";
+  function readTokens(){
+    tokens = {bg: css("--bg"), surface: css("--surface"), surface2: css("--surface2"), line: css("--line"), line2: css("--line2"), fg: css("--fg"), fg2: css("--fg2"), muted: css("--muted"),
+      accent: css("--accent"), err: css("--err"), warn: css("--warn"), info: css("--info")};
+    AREAS.forEach(a => tokens[a] = css("--a-" + a));
+    const c = new THREE.Color(tokens.bg); tokens.dark = (c.r*0.299 + c.g*0.587 + c.b*0.114) < 0.5;
+  }
+  const col = s => new THREE.Color(s);
+  function mix(a, b, t){ return col(a).lerp(col(b), t); }
+  function mat(color, extra){ return new THREE.MeshStandardMaterial(Object.assign({color, roughness: 0.75, metalness: 0.02}, extra || {})); }
+  function box(w, h, d, m, x, y, z, parent){ const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); g.position.set(x, y, z); g.castShadow = true; g.receiveShadow = true; (parent || staticGroup).add(g); return g; }
+  function canvasTex(w, h, draw){ const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d"); draw(x, w, h); const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; }
+  function bubbleTex(text, bg, fg){
+    return canvasTex(128, 128, (x, w, h) => { x.fillStyle = "rgba(0,0,0,.25)"; x.beginPath(); x.ellipse(66, 66, 50, 46, 0, 0, 7); x.fill();
+      x.fillStyle = bg; x.beginPath(); x.ellipse(64, 60, 50, 46, 0, 0, 7); x.fill(); x.beginPath(); x.moveTo(50, 98); x.lineTo(64, 124); x.lineTo(76, 98); x.fill();
+      x.fillStyle = fg; x.font = "700 " + (text.length > 2 ? 34 : 60) + "px Poppins, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(text, 64, 62); });
+  }
+  function glyphTex(ch, color){ return canvasTex(64, 64, (x) => { x.fillStyle = color; x.beginPath(); x.roundRect ? x.roundRect(6, 6, 52, 52, 14) : x.rect(6, 6, 52, 52); x.fill(); x.fillStyle = "#fff"; x.font = "700 34px Poppins, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(ch, 32, 34); }); }
+
+  /* --- grilla y lugares --- */
+  function buildGrid(){
+    grid = Array.from({length: GW}, () => new Uint8Array(GD));
+    const block = (x, z) => { if(x >= 0 && x < GW && z >= 0 && z < GD) grid[x][z] = 1; };
+    rooms = AREAS.map((id, i) => {
+      const rx = i * 8;
+      for(let x = rx; x < rx + 8; x++){ block(x, 0); if(x !== rx + 3 && x !== rx + 4) block(x, 7); }
+      for(let z = 0; z < 8; z++){ block(rx, z); block(rx + 7, z); }
+      const desks = [];
+      [2, 4].forEach(dz => [rx + 1, rx + 3, rx + 5].forEach(dx => { desks.push({x: dx, z: dz}); block(dx, dz); }));
+      block(rx + 6, 1); block(rx + 6, 6);
+      return {id, rx, door: {x: rx + 3, z: 8}, desks, prop: {x: rx + 6, z: 1}, plant: {x: rx + 6, z: 6}};
+    });
+    for(let x = 2; x <= 6; x++) block(x, 14);          // mostrador
+    for(let x = 1; x <= 7; x++) block(x, 18);          // muro de marca
+    for(let z = 12; z <= 15; z++) block(0, z);         // racks de motores
+    recQueue = [[4,13],[3,13],[5,13],[2,13],[6,13],[4,12],[3,12],[5,12]];
+    for(let x = 11; x <= 15; x++) block(x, 18);        // barra de café
+    block(16, 13); block(17, 13); block(10, 12); block(17, 18); block(10, 18);
+    cafeSpots = [[11,17],[12,17],[13,17],[14,17],[15,17]];
+    offices = PEOPLE.map((pid, i) => {
+      const x0 = 19 + i * 4;
+      for(let z = 11; z <= 18; z++){ block(x0, z); block(x0 + 3, z); }
+      for(let x = x0; x <= x0 + 3; x++){ if(x !== x0 + 1) block(x, 11); block(x, 18); }
+      block(x0 + 2, 14); block(x0 + 1, 17);
+      const d = x0 + 1;
+      return {pid, x0, seat: {x: x0 + 2, z: 15}, queue: [[d,10],[d+1,10],[d-1,10],[d,9],[d+1,9],[d-1,9],[d+2,9],[d+2,10]]};
+    });
+  }
+  function bfs(sx, sz, tx, tz){
+    sx = Math.round(sx); sz = Math.round(sz);
+    if(sx === tx && sz === tz) return [];
+    const K = (x, z) => x * 64 + z, prev = new Map([[K(sx, sz), null]]), q = [[sx, sz]];
+    const goalBlocked = grid[tx] && grid[tx][tz];
+    let found = null;
+    while(q.length){
+      const [x, z] = q.shift();
+      if((x === tx && z === tz) || (goalBlocked && Math.abs(x - tx) + Math.abs(z - tz) === 1)){ found = [x, z]; break; }
+      for(const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx = x + dx, nz = z + dz;
+        if(nx < 0 || nz < 0 || nx >= GW || nz >= GD || grid[nx][nz]) continue;
+        const k = K(nx, nz); if(prev.has(k)) continue; prev.set(k, [x, z]); q.push([nx, nz]);
+      }
+    }
+    if(!found) return [];
+    const path = []; let cur = found;
+    while(cur){ path.unshift(cur); cur = prev.get(K(cur[0], cur[1])); }
+    path.shift();
+    const out = [];
+    for(let i = 0; i < path.length; i++){
+      const a = out[out.length - 1], b = path[i], c = path[i + 1];
+      if(a && c && ((a[0] === b[0] && b[0] === c[0]) || (a[1] === b[1] && b[1] === c[1]))) continue;
+      out.push(b);
+    }
+    return out;
+  }
+
+  /* --- escena estática --- */
+  function buildStatic(){
+    if(staticGroup) scene.remove(staticGroup);
+    staticGroup = new THREE.Group(); scene.add(staticGroup);
+    statics.veils = {}; statics.glow = new Map(); statics.ghosts = []; statics.rackMeshes = [];
+    scene.background = col(tokens.bg);
+    const dk = tokens.dark;
+    const wallM = mat(dk ? "#2A2A2A" : "#E6EAE8"), wallTop = mat(dk ? "#3D3D3D" : "#C9D0CC");
+    const glassM = new THREE.MeshStandardMaterial({color: dk ? "#9FE0C3" : "#7FBFA6", transparent: true, opacity: dk ? 0.12 : 0.18, roughness: 0.1, metalness: 0.3, depthWrite: false});
+    const frameM = mat(dk ? "#4A4F4C" : "#AEB7B2");
+    const woodM = mat(dk ? "#5A4636" : "#C9A27E"), deskM = mat(dk ? "#33302C" : "#F2EEE8"), darkM = mat("#1E1E1E"), plantM = mat("#2E8B57"), potM = mat(dk ? "#6B6B6B" : "#D9D9D9");
+    // base del edificio
+    const base = box(GW + 1.2, 0.4, GD + 1.2, mat(dk ? "#1A1A1A" : "#D7DDDA"), GW/2, -0.2, GD/2); base.castShadow = false;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(GW, GD), mat(dk ? "#202020" : "#F4F6F5")); floor.rotation.x = -Math.PI/2; floor.position.set(GW/2, 0.001, GD/2); floor.receiveShadow = true; staticGroup.add(floor);
+    // juntas cada 2 casillas
+    const lines = []; for(let x = 0; x <= GW; x += 2){ lines.push(x, 0.004, 0, x, 0.004, GD); } for(let z = 0; z <= GD; z += 2){ lines.push(0, 0.004, z, GW, 0.004, z); }
+    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute(lines, 3));
+    staticGroup.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({color: dk ? "#262626" : "#E3E8E5"})));
+    const logoTex = new THREE.TextureLoader().load(LOGO);
+    const H = 1.5;
+    function wallSeg(x1, z1, x2, z2, glass, colorTop){
+      const len = Math.hypot(x2 - x1, z2 - z1), cx = (x1 + x2)/2, cz = (z1 + z2)/2, horiz = z1 === z2;
+      const w = horiz ? len : 0.12, d = horiz ? 0.12 : len;
+      if(glass){ const g = box(w, H, d, glassM, cx, H/2, cz); g.castShadow = false; box(horiz ? len : 0.08, 0.06, horiz ? 0.08 : len, frameM, cx, H, cz); }
+      else { box(w, H, d, wallM, cx, H/2, cz); box(horiz ? len : 0.13, 0.1, horiz ? 0.13 : len, colorTop || wallTop, cx, H + 0.05, cz); }
+    }
+    // salas por área
+    rooms.forEach(r => {
+      const ac = tokens[r.id], rx = r.rx;
+      const tint = mix(dk ? "#202020" : "#F4F6F5", ac, dk ? 0.20 : 0.12);
+      const fl = new THREE.Mesh(new THREE.PlaneGeometry(7.8, 7.8), mat(tint)); fl.rotation.x = -Math.PI/2; fl.position.set(rx + 4, 0.006, 4); fl.receiveShadow = true; staticGroup.add(fl);
+      // damero
+      const chk = mix(tint.getStyle(), ac, 0.08);
+      for(let x = 1; x < 7; x++) for(let z = 1; z < 7; z++) if((x + z) % 2 === 0){ const t = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat(chk)); t.rotation.x = -Math.PI/2; t.position.set(rx + x + 0.5, 0.008, z + 0.5); t.receiveShadow = true; staticGroup.add(t); }
+      const rug = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 3.6), mat(mix(tint.getStyle(), ac, 0.22))); rug.rotation.x = -Math.PI/2; rug.position.set(rx + 3.5, 0.01, 4); rug.receiveShadow = true; staticGroup.add(rug);
+      const acM = mat(ac);
+      wallSeg(rx + 0.06, 0.06, rx + 7.94, 0.06, false, acM);       // fondo
+      wallSeg(rx + 0.06, 0.06, rx + 0.06, 7.94, false, acM);       // izquierda
+      wallSeg(rx + 7.94, 0.06, rx + 7.94, 7.94, true);             // derecha (vidrio)
+      wallSeg(rx + 0.06, 7.94, rx + 3, 7.94, true); wallSeg(rx + 5, 7.94, rx + 7.94, 7.94, true); // frente con puerta
+      box(0.08, 0.2, 0.12, frameM, rx + 3, H - 0.1, 7.94); box(0.08, 0.2, 0.12, frameM, rx + 5, H - 0.1, 7.94); box(2, 0.12, 0.12, frameM, rx + 4, H - 0.06, 7.94);
+      // cuadro del área, logo, reloj
+      const pic = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.7), new THREE.MeshBasicMaterial({map: glyphTex(ICONS[r.id][0], ac)})); pic.position.set(rx + 2.5, 0.95, 0.13); staticGroup.add(pic);
+      const lg2 = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.1), new THREE.MeshBasicMaterial({map: logoTex, transparent: true, color: dk ? "#FFFFFF" : "#1E1E1E"})); lg2.rotation.y = Math.PI/2; lg2.position.set(rx + 0.13, 1.0, 3.5); staticGroup.add(lg2);
+      const clk = new THREE.Mesh(new THREE.CircleGeometry(0.28, 32), new THREE.MeshBasicMaterial({map: statics.clockTex})); clk.position.set(rx + 4.6, 1.05, 0.13); staticGroup.add(clk);
+      // planta
+      box(0.34, 0.34, 0.34, potM, r.plant.x + 0.5, 0.17, r.plant.z + 0.5); const pl = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), plantM); pl.position.set(r.plant.x + 0.5, 0.62, r.plant.z + 0.5); pl.castShadow = true; staticGroup.add(pl);
+      buildProp(r, acM, darkM);
+      // velo «dormida»
+      const veil = new THREE.Mesh(new THREE.BoxGeometry(7.9, 1.65, 7.9), new THREE.MeshBasicMaterial({color: tokens.bg, transparent: true, opacity: 0.45, depthWrite: false}));
+      veil.position.set(rx + 4, 0.83, 4); veil.visible = false; staticGroup.add(veil); statics.veils[r.id] = veil;
+    });
+    // escritorios (según agentes)
+    layoutDesks(deskM, darkM);
+    // recepción
+    const recFl = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 7.6), mat(mix(dk ? "#202020" : "#F4F6F5", tokens.accent, dk ? 0.10 : 0.07))); recFl.rotation.x = -Math.PI/2; recFl.position.set(4.9, 0.006, 15); recFl.receiveShadow = true; staticGroup.add(recFl);
+    const rugL = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.2), new THREE.MeshBasicMaterial({map: logoTex, transparent: true, color: tokens.accent})); rugL.rotation.x = -Math.PI/2; rugL.position.set(4.5, 0.012, 16.2); staticGroup.add(rugL);
+    box(5, 0.9, 0.7, mat(dk ? "#2A2A2A" : "#FFFFFF"), 4.5, 0.45, 14.5); box(5.1, 0.06, 0.8, mat(tokens.accent), 4.5, 0.92, 14.5);
+    const cLogo = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.15), new THREE.MeshBasicMaterial({map: logoTex, transparent: true, color: dk ? "#FFFFFF" : "#121212"})); cLogo.position.set(4.5, 0.55, 14.14); cLogo.rotation.y = Math.PI; staticGroup.add(cLogo);
+    const cLogo2 = cLogo.clone(); cLogo2.rotation.y = 0; cLogo2.position.z = 14.86; staticGroup.add(cLogo2);
+    box(7, 2.2, 0.3, mat(dk ? "#181818" : "#121212"), 4.5, 1.1, 18.5);
+    const bw = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 0.31), new THREE.MeshBasicMaterial({map: logoTex, transparent: true})); bw.position.set(4.5, 1.25, 18.34); bw.rotation.y = Math.PI; staticGroup.add(bw);
+    const bwl = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 0.31), new THREE.MeshBasicMaterial({map: logoTex, transparent: true})); bwl.position.set(4.5, 1.25, 18.66); staticGroup.add(bwl);
+    const rClk = new THREE.Mesh(new THREE.CircleGeometry(0.28, 32), new THREE.MeshBasicMaterial({map: statics.clockTex})); rClk.position.set(4.5, 1.85, 18.66); staticGroup.add(rClk);
+    // café
+    const cafFl = new THREE.Mesh(new THREE.PlaneGeometry(8, 7.6), mat(dk ? "#262320" : "#F3EDE6")); cafFl.rotation.x = -Math.PI/2; cafFl.position.set(14, 0.006, 15); cafFl.receiveShadow = true; staticGroup.add(cafFl);
+    box(5, 1, 0.8, woodM, 13.5, 0.5, 18.5); box(5.1, 0.06, 0.9, mat(dk ? "#3D3D3D" : "#FFFFFF"), 13.5, 1.02, 18.5);
+    const machine = box(0.6, 0.6, 0.5, darkM, 12.2, 1.35, 18.55); machine.userData.steam = true;
+    box(1.9, 0.45, 0.8, mat(tokens.accent), 17, 0.3, 13.5); box(1.9, 0.5, 0.2, mat(tokens.accent), 17, 0.6, 13.15);
+    box(0.4, 1.1, 0.4, mat(dk ? "#4A6A7A" : "#BFE3F2"), 10.5, 0.55, 12.5);
+    [[10.5, 18.5], [17.5, 18.5]].forEach(([x, z]) => { box(0.34, 0.34, 0.34, potM, x, 0.17, z); const p = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), plantM); p.position.set(x, 0.66, z); p.castShadow = true; staticGroup.add(p); });
+    [[12.5, 13.6], [14, 13.4]].forEach(([x, z]) => { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.32, 0.36, 16), mat(tokens.calidad)); p.position.set(x, 0.18, z); p.castShadow = true; staticGroup.add(p); });
+    statics.steam = [];
+    for(let i = 0; i < 3; i++){ const s = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({color: "#FFFFFF", transparent: true, opacity: 0.5})); s.position.set(12.2, 1.75, 18.4); staticGroup.add(s); statics.steam.push(s); }
+    // oficinas de las personas
+    offices.forEach(o => {
+      const p = person(o.pid), pc = (p && p.color) || tokens.accent, x0 = o.x0;
+      const fl = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 7.8), woodM); fl.rotation.x = -Math.PI/2; fl.position.set(x0 + 2, 0.006, 15); fl.receiveShadow = true; staticGroup.add(fl);
+      const rug = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.4), mat(mix(pc, dk ? "#202020" : "#FFFFFF", 0.4))); rug.rotation.x = -Math.PI/2; rug.position.set(x0 + 2, 0.01, 15); rug.receiveShadow = true; staticGroup.add(rug);
+      wallSeg(x0 + 0.06, 11.06, x0 + 1, 11.06, false); wallSeg(x0 + 2, 11.06, x0 + 3.94, 11.06, false);
+      wallSeg(x0 + 0.06, 11.06, x0 + 0.06, 18.94, false); wallSeg(x0 + 3.94, 11.06, x0 + 3.94, 18.94, true); wallSeg(x0 + 0.06, 18.94, x0 + 3.94, 18.94, true);
+      const win = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.7), new THREE.MeshBasicMaterial({map: windowTex()})); win.rotation.y = Math.PI/2; win.position.set(x0 + 0.14, 1.0, 13.4); staticGroup.add(win);
+      const lgo = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.07), new THREE.MeshBasicMaterial({map: logoTex, transparent: true, color: dk ? "#FFFFFF" : "#121212"})); lgo.rotation.y = Math.PI/2; lgo.position.set(x0 + 0.14, 1.0, 16.2); staticGroup.add(lgo);
+      const ck = new THREE.Mesh(new THREE.CircleGeometry(0.2, 24), new THREE.MeshBasicMaterial({map: statics.clockTex})); ck.position.set(x0 + 2.8, 1.15, 11.2); staticGroup.add(ck);
+      box(1.3, 0.55, 0.7, deskM, x0 + 2.5, 0.28, 14.5); box(0.5, 0.32, 0.04, darkM, x0 + 2.5, 0.75, 14.25);
+      box(0.6, 0.45, 0.55, mat(pc), x0 + 2.5, 0.23, 15.75);
+      box(0.9, 1.4, 0.35, woodM, x0 + 1.5, 0.7, 17.7);
+      for(let i = 0; i < 3; i++) box(0.12, 0.28, 0.25, mat([tokens.direccion, tokens.protocolo, tokens.producto][i]), x0 + 1.2 + i * 0.16, 0.96, 17.7);
+      box(0.08, 1.3, 0.08, darkM, x0 + 3.5, 0.65, 12); const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), new THREE.MeshBasicMaterial({color: "#FFD9A0"})); lamp.position.set(x0 + 3.5, 1.35, 12); staticGroup.add(lamp);
+      const halo = new THREE.PointLight("#FFC98A", dk ? 0.6 : 0.25, 3); halo.position.set(x0 + 3.5, 1.3, 12); staticGroup.add(halo);
+    });
+    // racks de motores
+    S.runners.slice(0, 4).forEach((r, i) => {
+      const z = 12.5 + i, g = new THREE.Group(); g.position.set(0.5, 0, z); staticGroup.add(g);
+      const body = box(0.7, 1.4, 0.8, darkM, 0, 0.7, 0, g); body.userData.runner = r.id; statics.rackMeshes.push(body);
+      const leds = [];
+      for(let j = 0; j < 5; j++){ const l = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.08), new THREE.MeshBasicMaterial({color: "#24D683"})); l.position.set(0.36, 0.35 + j * 0.2, -0.2 + (j % 2) * 0.2); g.add(l); leds.push(l); }
+      g.userData = {runner: r.id, leds};
+    });
+    statics.rackGroups = staticGroup.children.filter(c => c.userData && c.userData.leds);
+  }
+  function windowTex(){
+    return canvasTex(128, 80, (x, w, h) => { const night = isNight(); const gr = x.createLinearGradient(0, 0, 0, h);
+      gr.addColorStop(0, night ? "#0B1630" : "#7EC8F0"); gr.addColorStop(1, night ? "#24345A" : "#CFEAF8"); x.fillStyle = gr; x.fillRect(0, 0, w, h);
+      x.fillStyle = night ? "#0E1A2C" : "#9FB7C4"; for(let i = 0; i < 8; i++){ const bw = 10 + (i * 7) % 9, bh = 20 + (i * 13) % 30; x.fillRect(i * 16, h - bh, bw, bh); if(night){ x.fillStyle = "#FFD97A"; for(let k = 0; k < 4; k++) x.fillRect(i * 16 + 2 + (k % 2) * 4, h - bh + 4 + k * 6, 2, 2); x.fillStyle = "#0E1A2C"; } }
+      x.strokeStyle = "#555"; x.lineWidth = 4; x.strokeRect(0, 0, w, h); x.beginPath(); x.moveTo(w/2, 0); x.lineTo(w/2, h); x.stroke(); });
+  }
+  function isNight(){ let h = 12; try{ h = Number(new Intl.DateTimeFormat("en-US", {timeZone: TZ, hour: "numeric", hour12: false}).format(new Date())); }catch(e){} return h < 6 || h >= 19; }
+  function drawClock(){
+    const d = new Date(); let hh = d.getHours(), mm = d.getMinutes();
+    try{ const p = new Intl.DateTimeFormat("en-US", {timeZone: TZ, hour: "numeric", minute: "numeric", hour12: false}).formatToParts(d); hh = Number(p.find(x => x.type === "hour").value) % 24; mm = Number(p.find(x => x.type === "minute").value); }catch(e){}
+    if(mm === statics.clockMin) return; statics.clockMin = mm;
+    const x = statics.clockCtx, w = 128;
+    x.clearRect(0, 0, w, w); x.fillStyle = "#FFFFFF"; x.beginPath(); x.arc(64, 64, 62, 0, 7); x.fill(); x.lineWidth = 6; x.strokeStyle = "#1E1E1E"; x.stroke();
+    x.fillStyle = "#1E1E1E"; for(let i = 0; i < 12; i++){ const a = i / 12 * Math.PI * 2; x.fillRect(64 + Math.sin(a) * 50 - 2, 64 - Math.cos(a) * 50 - 2, 4, 4); }
+    const hand = (a, len, wd, c) => { x.strokeStyle = c; x.lineWidth = wd; x.lineCap = "round"; x.beginPath(); x.moveTo(64, 64); x.lineTo(64 + Math.sin(a) * len, 64 - Math.cos(a) * len); x.stroke(); };
+    hand((hh % 12 + mm / 60) / 12 * Math.PI * 2, 30, 7, "#1E1E1E"); hand(mm / 60 * Math.PI * 2, 46, 4, "#147D68");
+    statics.clockTex.needsUpdate = true;
+  }
+  function buildProp(r, acM, darkM){
+    const x = r.prop.x + 0.5, z = r.prop.z + 0.5;
+    if(r.id === "direccion"){ box(1.0, 0.5, 0.7, mat(tokens.dark ? "#3A3530" : "#E9E2D8"), x - 0.3, 0.25, z + 0.2); box(0.9, 0.55, 0.05, darkM, x - 0.3, 1.0, 0.16); const sc = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.45), new THREE.MeshBasicMaterial({map: new THREE.TextureLoader().load(LOGO), color: "#24D683", transparent: true})); sc.position.set(x - 0.3, 1.0, 0.19); staticGroup.add(sc); }
+    if(r.id === "protocolo"){ box(0.05, 1.1, 0.05, darkM, x, 0.55, z); const cam3 = box(0.32, 0.22, 0.4, darkM, x, 1.15, z); const rec = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshBasicMaterial({color: "#EE4F39"})); rec.position.set(x + 0.12, 1.3, z + 0.2); staticGroup.add(rec); statics.recLight = rec; const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.04, 8, 24), new THREE.MeshBasicMaterial({color: "#FFF4D6"})); ring.position.set(x - 0.5, 1.2, z); staticGroup.add(ring); }
+    if(r.id === "producto"){ box(0.7, 0.04, 0.5, mat("#FFFFFF"), x, 0.9, z); box(0.05, 0.9, 0.05, darkM, x, 0.45, z); [tokens.direccion, tokens.protocolo, tokens.producto, tokens.calidad].forEach((c, i) => box(0.12, 0.02, 0.12, mat(c), x - 0.22 + i * 0.15, 0.93, z)); }
+    if(r.id === "calidad"){ box(0.06, 1.3, 1.0, mat("#FFFFFF"), x + 0.35, 0.95, z + 0.1); [0.8, 0.6, 0.4, 0.22].forEach((w, i) => box(0.02, 0.12, w, mat(tokens.calidad), x + 0.31, 1.35 - i * 0.18, z + 0.1)); }
+  }
+  function deskAgents(deptId){
+    return S.agents.filter(a => a.dept === deptId && ["activo", "pausado", "por_crear"].includes(a.status))
+      .sort((a, b) => ({activo:0, pausado:1, por_crear:2}[a.status] - {activo:0, pausado:1, por_crear:2}[b.status]) || (a.order || 99) - (b.order || 99) || String(a.name).localeCompare(String(b.name))).slice(0, 6);
+  }
+  function layoutDesks(deskM, darkM){
+    rooms.forEach(r => {
+      const ags = deskAgents(r.id);
+      r.desks.forEach((d, i) => {
+        const a = ags[i]; if(!a) return;
+        const ghost = a.status === "por_crear";
+        const dm = ghost ? new THREE.MeshStandardMaterial({color: deskM.color, transparent: true, opacity: 0.35}) : deskM;
+        const g = new THREE.Group(); g.position.set(d.x + 0.5, 0, d.z + 0.5); staticGroup.add(g);
+        box(0.9, 0.5, 0.6, dm, 0, 0.25, 0, g);
+        box(0.48, 0.3, 0.04, darkM, 0, 0.72, -0.15, g);
+        box(0.36, 0.02, 0.14, mat("#3D3D3D"), 0, 0.51, 0.08, g);
+        const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.08, 10), mat("#FFFFFF")); cup.position.set(0.32, 0.54, 0.1); g.add(cup);
+        const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.26), new THREE.MeshBasicMaterial({color: tokens[r.id], transparent: true, opacity: 0, depthWrite: false})); glow.position.set(0, 0.72, -0.125); g.add(glow);
+        statics.glow.set(a.id, glow);
+        box(0.42, 0.42, 0.4, mat(tokens.dark ? "#3D3D3D" : "#9AA39E"), 0, 0.21, 1.25, g);
+        if(ghost){ const plus = new THREE.Sprite(new THREE.SpriteMaterial({map: bubbleTex("+", tokens[r.id], "#FFFFFF")})); plus.position.set(0, 1.0, 0.5); plus.scale.set(0.5, 0.5, 1); plus.userData.ghost = {dept: r.id}; g.add(plus); statics.ghosts.push(plus); }
+      });
+    });
+  }
+
+  /* --- personitas --- */
+  const HAIR = ["#2B1D14", "#3B2A20", "#111111", "#6B4A2E", "#A0522D"];
+  const SKIN = ["#E8B894", "#C68E62", "#F1C9A5", "#A86B45", "#D9A37C"];
+  function hash(s){ let h = 0; for(const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+  function makeFigure(color, seed, opts){
+    opts = opts || {};
+    const h = hash(seed), g = new THREE.Group();
+    const transp = opts.opacity < 1;
+    const m = (c) => new THREE.MeshStandardMaterial({color: c, roughness: 0.7, transparent: transp, opacity: opts.opacity || 1});
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.46, 14), m(color)); body.position.y = 0.6; body.castShadow = true;
+    const collar = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.1, 3), m(SKIN[h % 5])); collar.position.set(0, 0.8, 0.13); collar.rotation.x = Math.PI;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), m(SKIN[h % 5])); head.position.y = 1.0; head.castShadow = true;
+    const hairM = m(HAIR[(h >> 3) % 5]);
+    const style = (h >> 6) % 5, hair = new THREE.Group(); hair.position.y = 1.0;
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.165, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), hairM); cap.rotation.x = -0.25; hair.add(cap);
+    if(style === 2){ const bun = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), hairM); bun.position.set(0, 0.14, -0.1); hair.add(bun); }
+    if(style === 3){ const long = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.1), hairM); long.position.set(0, -0.1, -0.11); hair.add(long); }
+    if(style === 4){ for(let i = 0; i < 6; i++){ const c = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), hairM); c.position.set(Math.cos(i) * 0.12, 0.09, Math.sin(i) * 0.1 - 0.03); hair.add(c); } }
+    const eyes = new THREE.Group(); eyes.position.set(0, 1.02, 0.14);
+    [-0.055, 0.055].forEach(x => { const e = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), m("#1A1A1A")); e.position.x = x; eyes.add(e); });
+    if((h >> 9) % 4 === 0){ const gl = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12), m("#1A1A1A")); gl.position.set(-0.055, 0, 0.01); const gr = gl.clone(); gr.position.x = 0.055; eyes.add(gl, gr); }
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.014, 0.01), m("#7A3B2E")); mouth.position.set(0, 0.95, 0.15);
+    const limb = (w, hgt, c) => { const p = new THREE.Group(); const me = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, w), m(c)); me.position.y = -hgt/2; me.castShadow = true; p.add(me); return p; };
+    const legL = limb(0.09, 0.38, "#2A2A2A"), legR = limb(0.09, 0.38, "#2A2A2A"); legL.position.set(-0.08, 0.38, 0); legR.position.set(0.08, 0.38, 0);
+    const armL = limb(0.07, 0.34, color), armR = limb(0.07, 0.34, color); armL.position.set(-0.22, 0.8, 0); armR.position.set(0.22, 0.8, 0);
+    const folder = new THREE.Group(); const fb = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.03), m("#FFFFFF")); const fs = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.035), m(color)); fs.position.y = 0.1; folder.add(fb, fs); folder.position.set(0.05, -0.34, 0.08); armR.add(folder); folder.visible = false;
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.09, 10), m("#FFFFFF")); mug.position.set(0, -0.36, 0.06); armL.add(mug); mug.visible = false;
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.25, 20), new THREE.MeshBasicMaterial({color: "#000000", transparent: true, opacity: 0.18, depthWrite: false})); shadow.rotation.x = -Math.PI/2; shadow.position.y = 0.01;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.26, 0.31, 28), new THREE.MeshBasicMaterial({color: "#147D68", transparent: true, opacity: 0.9, depthWrite: false})); ring.rotation.x = -Math.PI/2; ring.position.y = 0.015;
+    const rig = new THREE.Group(); rig.add(body, collar, head, hair, eyes, mouth, legL, legR, armL, armR);
+    g.add(rig, shadow, ring);
+    g.userData = {rig, body, head, eyes, mouth, legs: [legL, legR], arms: [armL, armR], folder, mug, ring, shadow, phase: (h % 100) / 100 * 4.2};
+    return g;
+  }
+
+  /* --- actores --- */
+  function seatOf(aid){
+    for(const r of rooms){ const ags = deskAgents(r.id); const i = ags.findIndex(a => a.id === aid); if(i >= 0){ const d = r.desks[i]; return {x: d.x, z: d.z + 1, room: r.id}; } }
+    return null;
+  }
+  function syncActors(){
+    const want = new Set();
+    rooms.forEach(r => deskAgents(r.id).forEach(a => { if(a.status !== "por_crear") want.add(a.id); }));
+    for(const [id, ac] of actors) if(!want.has(id) && !ac.isPerson){ scene.remove(ac.mesh); actors.delete(id); if(ac.label) ac.label.remove(); }
+    want.forEach(id => {
+      const a = agent(id), seat = seatOf(id); if(!seat) return;
+      let ac = actors.get(id);
+      if(!ac){
+        const mesh = makeFigure(tokens[a.dept] || tokens.accent, id, {opacity: a.status === "pausado" ? 0.55 : 1});
+        mesh.position.set(seat.x + 0.5, 0, seat.z + 0.5); scene.add(mesh);
+        ac = {id, mesh, x: seat.x, z: seat.z, path: [], goal: null, goalKind: "seat", plan: null, sit: true, talkUntil: 0, facing: Math.PI, nextParticle: 0};
+        mesh.userData.actor = id; actors.set(id, ac);
+      }
+      ac.seat = seat; ac.dept = a.dept; ac.state = agentState(a);
+    });
+    // la persona que mira, sentada en su oficina
+    const meId = S.me && S.me.id, o = offices.find(o => o.pid === meId);
+    let me = actors.get("__me");
+    if(o && !me){
+      const mesh = makeFigure(tokens.accent, "me" + meId); mesh.position.set(o.seat.x + 0.5, 0, o.seat.z + 0.5); scene.add(mesh);
+      me = {id: "__me", isPerson: true, mesh, x: o.seat.x, z: o.seat.z, path: [], seat: o.seat, sit: true, facing: Math.PI, state: "libre"}; mesh.userData.actor = "__me"; actors.set("__me", me);
+    }
+  }
+  function approverQueue(ac){
+    const t = S.tasks.find(t => t.agent === ac.id && t.status === "por_aprobar");
+    const who = t ? t.approval_for : null;
+    const o = offices.find(o => o.pid === who);
+    const list = (o ? o.queue : recQueue);
+    const peers = [...actors.values()].filter(x => x.state === "te_toca" && !x.isPerson && (() => { const tt = S.tasks.find(t => t.agent === x.id && t.status === "por_aprobar"); return (tt ? tt.approval_for : null) === who; })()).map(x => x.id).sort();
+    const i = Math.max(0, peers.indexOf(ac.id));
+    const c = list[Math.min(i, list.length - 1)];
+    return {x: c[0], z: c[1], who: o ? o.pid : "cualquiera"};
+  }
+  function setGoal(ac, cell, kind){
+    if(ac.goal && ac.goal.x === cell.x && ac.goal.z === cell.z && ac.goalKind === kind) return;
+    ac.goal = {x: cell.x, z: cell.z}; ac.goalKind = kind;
+    const cx = Math.round(ac.x), cz = Math.round(ac.z);
+    ac.path = bfs(cx, cz, cell.x, cell.z);
+    if(ac.sit){ ac.sit = false; }
+  }
+  function freeNeighbor(c){
+    for(const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ const x = c.x + dx, z = c.z + dz; if(x >= 0 && z >= 0 && x < GW && z < GD && !grid[x][z]) return {x, z}; }
+    return c;
+  }
+  function areaAsleep(dept){ return S.loaded && !areaHasLiveMotor(dept); }
+  function decide(ac, now){
+    if(ac.isPerson) return;
+    if(reduce.matches){ ac.path = []; ac.x = ac.seat.x; ac.z = ac.seat.z; ac.sit = true; ac.goal = ac.seat; ac.goalKind = "seat"; return; }
+    if(ac.state === "te_toca"){ const q = approverQueue(ac); ac.plan = null; setGoal(ac, q, "queue"); return; }
+    if(ac.state === "pausado"){ setGoal(ac, ac.seat, "seat"); return; }
+    if(ac.plan){
+      const p = ac.plan;
+      if(p.phase === "go"){ setGoal(ac, p.goal, p.kind); if(!ac.path.length){ p.phase = "stay"; p.until = now + p.stay; if(p.buddy){ const b = actors.get(p.buddy); if(b) b.talkUntil = p.until; } ac.talkUntil = (p.kind === "chat" || p.kind === "deliver") ? p.until : 0; if(p.kind === "deliver"){ const b = actors.get(p.target); if(b) b.talkUntil = p.until; } } return; }
+      if(p.phase === "stay" && now < p.until) return;
+      ac.plan = null;
+    }
+    if(ac.id === COORD && !areaAsleep(ac.dept)){
+      if(deliverQ.length){ const tid = deliverQ.shift(), t = actors.get(tid); if(t){ ac.plan = {kind: "deliver", goal: freeNeighbor(t.seat), stay: 3.5, phase: "go", target: tid, carry: true}; return; } }
+      const stops = rooms.map(r => r.door).concat([{x: 4, z: 12}]);
+      ac.patrol = ((ac.patrol || 0) + 1) % stops.length;
+      ac.plan = {kind: "patrol", goal: stops[ac.patrol], stay: 1.5, phase: "go"}; return;
+    }
+    setGoal(ac, ac.seat, "seat");
+  }
+  function arrived(ac){ return ac.goal && Math.abs(ac.x - ac.goal.x) < 0.05 && Math.abs(ac.z - ac.goal.z) < 0.05; }
+  function backgroundLife(now){
+    if(reduce.matches || now < nextLife) return;
+    nextLife = now + 3.5 + Math.random() * 4;
+    const all = [...actors.values()].filter(a => !a.isPerson);
+    if(all.filter(a => a.plan).length >= 4) return;
+    const cands = all.filter(a => !a.plan && a.sit && a.id !== COORD && ["libre", "trabajando", "en_cola"].includes(a.state) && !areaAsleep(a.dept));
+    if(!cands.length) return;
+    const a = cands[Math.floor(Math.random() * cands.length)];
+    const mates = all.filter(b => b !== a && b.dept === a.dept && b.sit && !b.plan && b.state !== "te_toca");
+    if(mates.length && (a.state === "trabajando" || Math.random() < 0.7)){
+      const b = mates[Math.floor(Math.random() * mates.length)];
+      a.plan = {kind: "chat", goal: freeNeighbor(b.seat), stay: 4.5 + Math.random() * 2, phase: "go", buddy: b.id};
+    } else if(a.state === "libre"){
+      const s = cafeSpots[Math.floor(Math.random() * cafeSpots.length)];
+      a.plan = {kind: "cafe", goal: {x: s[0], z: s[1]}, stay: 3.5, phase: "go", mug: true};
+    }
+  }
+  function move(ac, dt){
+    if(!ac.path.length){ if(ac.goal && arrived(ac) && ac.goalKind === "seat") ac.sit = true; return false; }
+    const [tx, tz] = ac.path[0], dx = tx - ac.x, dz = tz - ac.z, d = Math.hypot(dx, dz), step = 2.4 * dt;
+    if(d <= step){ ac.x = tx; ac.z = tz; ac.path.shift(); }
+    else { ac.x += dx / d * step; ac.z += dz / d * step; }
+    if(d > 0.001) ac.facing = Math.atan2(dx, dz);
+    return true;
+  }
+  function spawnParticle(ac, now){
+    const glyphs = ICONS[ac.dept] || ["•"];
+    const key = ac.dept + glyphs[0];
+    if(!tex[key]) tex[key] = glyphTex(glyphs[0], tokens[ac.dept] || tokens.accent);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({map: tex[key], transparent: true}));
+    s.scale.set(0.22, 0.22, 1); s.position.set(ac.x + 0.5, 0.95, ac.z - 0.3); scene.add(s);
+    particles.push({s, born: now, vx: (Math.random() - 0.5) * 0.15});
+  }
+  function bubbleFor(ac, kind){
+    const map = {toca: ["!", tokens.err, "#FFFFFF"], block: ["?", tokens.warn, "#FFFFFF"], zzz: ["zzz", tokens.surface2, tokens.fg2], chat: [(ICONS[ac.dept] || ["…"])[Math.floor(Math.random() * 3)], "#FFFFFF", tokens[ac.dept] || "#147D68"]};
+    const k = kind + ac.dept + (kind === "chat" ? Math.floor(Date.now() / 1300) % 3 : "");
+    if(!tex[k]) tex[k] = bubbleTex(...map[kind]);
+    if(!ac.bubble){ ac.bubble = new THREE.Sprite(new THREE.SpriteMaterial({map: tex[k], transparent: true, depthTest: false})); ac.bubble.renderOrder = 10; ac.mesh.add(ac.bubble); ac.bubble.position.y = 1.55; }
+    if(ac.bubble.material.map !== tex[k]){ ac.bubble.material.map = tex[k]; ac.bubble.material.needsUpdate = true; }
+    ac.bubble.visible = true;
+  }
+  function animate(ac, t, dt){
+    const u = ac.mesh.userData, moving = move(ac, dt);
+    ac.mesh.position.set(ac.x + 0.5, 0, ac.z + 0.5);
+    const sitting = !moving && ac.sit;
+    let face = ac.facing;
+    if(sitting) face = Math.PI;
+    if(ac.talkUntil > t && !moving){ const partner = [...actors.values()].find(b => b !== ac && b.talkUntil > t && Math.hypot(b.x - ac.x, b.z - ac.z) < 1.6); if(partner) face = Math.atan2(partner.x - ac.x, partner.z - ac.z); }
+    ac.mesh.rotation.y = face;
+    const rm = reduce.matches, rig = u.rig;
+    rig.position.y = sitting ? -0.2 : (moving && !rm ? Math.abs(Math.sin(t * 9)) * 0.05 : 0);
+    rig.position.z = sitting ? -0.12 : 0;
+    const sw = moving && !rm ? Math.sin(t * 9) * 0.6 : 0;
+    u.legs[0].rotation.x = sitting ? -1.45 : sw; u.legs[1].rotation.x = sitting ? -1.45 : -sw;
+    const working = sitting && ac.state === "trabajando" && !areaAsleep(ac.dept);
+    if(working && !rm){ u.arms[0].rotation.x = -1.1 + Math.sin(t * 18) * 0.15; u.arms[1].rotation.x = -1.1 + Math.sin(t * 18 + Math.PI) * 0.15; rig.rotation.z = Math.sin(t * 14) * 0.01; }
+    else if(ac.talkUntil > t && !moving && !rm){ u.arms[1].rotation.x = -0.6 + Math.sin(t * 6) * 0.4; u.arms[0].rotation.x = 0; rig.rotation.z = 0; }
+    else { u.arms[0].rotation.x = moving ? -sw : (sitting ? -0.5 : 0); u.arms[1].rotation.x = moving ? sw : (sitting ? -0.5 : 0); rig.rotation.z = 0; }
+    u.folder.visible = ac.state === "te_toca" || !!(ac.plan && ac.plan.carry && ac.plan.phase === "go");
+    if(u.folder.visible) u.arms[1].rotation.x = -0.7;
+    u.mug.visible = !!(ac.plan && ac.plan.mug && ac.plan.phase === "stay");
+    u.body.scale.y = sitting && !rm ? 1 + Math.sin(t * 1.7) * 0.012 : 1;
+    u.eyes.scale.y = !rm && ((t + u.phase) % 4.2) < 0.12 ? 0.15 : 1;
+    u.mouth.scale.set(1, ac.talkUntil > t && !rm ? 1 + Math.abs(Math.sin(t * 12)) * 3 : 1, 1);
+    u.shadow.visible = !sitting;
+    const st = ac.state, ringC = {te_toca: tokens.err, trabajando: tokens.accent, bloqueado: tokens.warn, en_cola: tokens.info}[st];
+    u.ring.visible = !!ringC && !ac.isPerson; if(ringC) u.ring.material.color.set(ringC);
+    // burbujas
+    let bub = null;
+    if(st === "te_toca" && !moving) bub = "toca"; else if(st === "bloqueado") bub = "block"; else if(areaAsleep(ac.dept) && ["en_cola", "trabajando"].includes(st)) bub = "zzz"; else if(ac.talkUntil > t && !moving) bub = "chat";
+    if(bub && !ac.isPerson){ bubbleFor(ac, bub); const s = bub === "toca" && !rm ? 0.42 * (1 + Math.sin(t * 5) * 0.08) : 0.38; ac.bubble.scale.set(s, s, 1); ac.bubble.position.y = sitting ? 1.35 : 1.55; }
+    else if(ac.bubble) ac.bubble.visible = false;
+    // monitor y partículas
+    const glow = statics.glow.get(ac.id); if(glow) glow.material.opacity = working ? (rm ? 0.25 : 0.2 + 0.12 * Math.sin(t * 3)) : 0;
+    if(working && !rm && t > ac.nextParticle){ ac.nextParticle = t + 0.55; spawnParticle(ac, t); }
+  }
+  function tick(t, dt){
+    drawClock();
+    backgroundLife(t);
+    for(const ac of actors.values()){ decide(ac, t); animate(ac, t, dt); }
+    particles = particles.filter(p => { const age = t - p.born; if(age > 1.8){ scene.remove(p.s); p.s.material.dispose(); return false; } p.s.position.y += 1.0 * dt; p.s.position.x += p.vx * dt; p.s.material.opacity = 1 - age / 1.8; return true; });
+    (statics.rackGroups || []).forEach(g => { const live = isLive(S.runners.find(r => r.id === g.userData.runner)); g.userData.leds.forEach((l, i) => { l.material.color.set(live ? ((Math.sin(t * 4 + i * 1.7) > -0.2 || reduce.matches) ? "#24D683" : "#0A2E1F") : (i === 0 ? ((Math.sin(t * 1.2) > 0) ? "#EE4F39" : "#3A1410") : "#151515")); }); });
+    if(statics.recLight) statics.recLight.visible = reduce.matches || Math.sin(t * 3) > -0.3;
+    (statics.steam || []).forEach((s, i) => { const k = ((t * 0.5 + i / 3) % 1); s.position.y = 1.7 + k * 0.6; s.material.opacity = reduce.matches ? 0 : 0.5 * (1 - k); s.scale.setScalar(0.6 + k); });
+    Object.entries(statics.veils).forEach(([id, v]) => { v.visible = areaAsleep(id); });
+  }
+
+  /* --- cámara --- */
+  function fit(){
+    if(!el) return;
+    const w = el.clientWidth, h = el.clientHeight, aspect = w / Math.max(1, h);
+    const R = 19, fov = camera.fov * Math.PI / 180, fovH = 2 * Math.atan(Math.tan(fov / 2) * aspect);
+    cam.r = R / Math.sin(Math.min(fov, fovH) / 2) * (aspect < 1 ? 0.92 : 0.7); cam.tx = GW / 2; cam.tz = GD / 2 + 0.5; userCam = false; placeCam();
+  }
+  function placeCam(){
+    cam.phi = Math.max(0.3, Math.min(1.3, cam.phi)); cam.r = Math.max(6, Math.min(90, cam.r));
+    camera.position.set(cam.tx + cam.r * Math.sin(cam.phi) * Math.sin(cam.theta), cam.r * Math.cos(cam.phi), cam.tz + cam.r * Math.sin(cam.phi) * Math.cos(cam.theta));
+    camera.lookAt(cam.tx, 0, cam.tz);
+  }
+  function zoomBy(f){ cam.r *= f; userCam = true; placeCam(); }
+
+  /* --- capa HTML --- */
+  function project(x, y, z){ const v = new THREE.Vector3(x, y, z).project(camera); return {x: (v.x + 1) / 2 * el.clientWidth, y: (1 - v.y) / 2 * el.clientHeight, vis: v.z < 1}; }
+  function buildOverlay(){
+    ov.innerHTML = '<div class="w-panel" id="w-panel"><b></b><span></span></div>' +
+      '<div class="w-legend" aria-hidden="true"><span><i class="dot" style="background:var(--accent)"></i>Trabajando</span><span><i class="dot" style="background:var(--err)"></i>Te toca</span><span><i class="dot" style="background:var(--warn)"></i>Bloqueado</span><span><i class="dot" style="background:var(--info)"></i>En cola</span><span><i class="dot"></i>Libre</span></div>' +
+      '<div class="w-chips" id="w-chips" style="pointer-events:auto"></div>' +
+      '<div class="w-zoom" style="pointer-events:auto"><button type="button" data-z="in" aria-label="Acercar">+</button><button type="button" data-z="out" aria-label="Alejar">−</button><button type="button" data-z="fit" aria-label="Encuadrar">⤢</button></div>' +
+      '<div id="w-signs"></div><div id="w-labels"></div><div class="w-tip" id="w-tip" hidden></div><div class="w-pop" id="w-pop" hidden></div>';
+    ov.querySelectorAll("[data-z]").forEach(b => b.onclick = () => { const z = b.dataset.z; if(z === "fit") fit(); else zoomBy(z === "in" ? 0.8 : 1.25); });
+  }
+  function signsData(){
+    const out = [];
+    const tocaArea = id => S.tasks.filter(t => t.dept === id && t.status === "por_aprobar").length;
+    rooms.forEach(r => { const d = dept(r.id); out.push({key: "r" + r.id, x: r.rx + 4, y: 2.6, z: 0.6, text: d ? d.name : r.id, badge: tocaArea(r.id), color: tokens[r.id], off: areaAsleep(r.id), go: () => { S.area = r.id; S.view = "tablero"; render(); }}); });
+    out.push({key: "rec", x: 4.5, y: 2.8, z: 18.5, text: "Recepción", badge: S.tasks.filter(t => t.status === "por_aprobar" && t.approval_for === "cualquiera").length, color: "#1E1E1E", go: () => { S.view = "toca"; render(); }});
+    offices.forEach(o => { const p = person(o.pid); if(!p) return; const mine = S.me && S.me.id === o.pid; out.push({key: "o" + o.pid, x: o.x0 + 2, y: 2.1, z: 11.2, text: (mine ? "Tu oficina" : "Oficina de " + p.name.split(" ")[0]), badge: S.tasks.filter(t => t.status === "por_aprobar" && t.approval_for === o.pid).length, color: p.color || "#3D3D3D", go: () => { S.view = "toca"; render(); }}); });
+    return out;
+  }
+  function placeOverlays(t){
+    if(!ov) return;
+    const sw = ov.querySelector("#w-signs"), lw = ov.querySelector("#w-labels");
+    if(!sw._els) sw._els = {};
+    const seen = new Set();
+    signsData().forEach(s => {
+      let b = sw._els[s.key];
+      if(!b){ b = document.createElement("button"); b.type = "button"; b.className = "w-sign"; b.onclick = () => s.go(); sw.appendChild(b); sw._els[s.key] = b; }
+      b.onclick = () => s.go();
+      b.style.background = "linear-gradient(135deg," + s.color + "," + "color-mix(in srgb," + s.color + " 70%, #000))";
+      b.classList.toggle("off", !!s.off);
+      const html = esc(s.text) + (s.off ? " · dormida" : "") + (s.badge ? '<span class="b">' + s.badge + "</span>" : "");
+      if(b._h !== html){ b.innerHTML = html; b._h = html; }
+      const p = project(s.x, s.y, s.z); b.style.left = p.x + "px"; b.style.top = p.y + "px"; b.hidden = !p.vis; seen.add(s.key);
+    });
+    Object.keys(sw._els).forEach(k => { if(!seen.has(k)){ sw._els[k].remove(); delete sw._els[k]; } });
+    const near = cam.r < 26;
+    for(const ac of actors.values()){
+      if(!ac.label){ ac.label = document.createElement("div"); ac.label.className = "w-label"; lw.appendChild(ac.label); }
+      const a = ac.isPerson ? null : agent(ac.id);
+      const name = ac.isPerson ? "Tú" : (a ? a.name : ac.id);
+      const color = ac.isPerson ? "var(--accent)" : ({te_toca: "var(--err)", trabajando: "var(--accent)", bloqueado: "var(--warn)", en_cola: "var(--info)"}[ac.state] || "var(--muted)");
+      const html = '<span class="dot" style="background:' + color + '"></span>' + esc(name);
+      if(ac.label._h !== html){ ac.label.innerHTML = html; ac.label._h = html; }
+      const show = ac.isPerson || near || ["te_toca", "trabajando"].includes(ac.state) || hoverKey === ac.id || popId === ac.id;
+      const p = project(ac.x + 0.5, ac.sit ? 1.45 : 1.65, ac.z + 0.5);
+      ac.label.hidden = !show || !p.vis; ac.label.style.left = p.x + "px"; ac.label.style.top = (p.y - (ac.bubble && ac.bubble.visible ? 18 : 0)) + "px";
+    }
+    if(popId) positionPop();
+  }
+  function renderPanel(){
+    if(!ov) return;
+    const pn = ov.querySelector("#w-panel"); if(!pn) return;
+    const name = S.me ? S.me.name.split(" ")[0] : "";
+    const working = S.tasks.filter(t => t.status === "en_curso").length, toca = myToca().length;
+    pn.querySelector("b").textContent = greet() + (name ? ", " + name : "");
+    pn.querySelector("span").textContent = S.loaded ? working + " agente" + (working === 1 ? "" : "s") + " trabajando · " + toca + " cosa" + (toca === 1 ? "" : "s") + " te necesita" + (toca === 1 ? "" : "n") : "Abriendo la oficina…";
+    const queued = S.tasks.filter(t => ["pendiente", "cambios", "aprobada"].includes(t.status)).length, active = S.agents.filter(a => a.status === "activo").length;
+    const ch = ov.querySelector("#w-chips");
+    ch.innerHTML = '<button class="chip" type="button" data-goto="toca"><span class="dot" style="background:var(--err)"></span>Te toca <b>' + toca + '</b></button><button class="chip" type="button" data-goto="tablero"><span class="dot" style="background:var(--accent)"></span>Trabajando <b>' + working + '</b></button><button class="chip" type="button" data-goto="tablero"><span class="dot" style="background:var(--info)"></span>Esperan al motor <b>' + queued + '</b></button><button class="chip" type="button" data-goto="agentes"><span class="dot" style="background:var(--fg2)"></span>Agentes activos <b>' + active + "</b></button>";
+  }
+  function currentTask(id){ return S.tasks.find(t => t.agent === id && t.status === "en_curso") || S.tasks.find(t => t.agent === id && t.status === "por_aprobar") || S.tasks.find(t => t.agent === id && t.status === "bloqueada") || S.tasks.find(t => t.agent === id && ["pendiente", "cambios", "aprobada"].includes(t.status)); }
+  function doing(ac){ if(ac.plan && ac.plan.kind === "cafe") return "tomando café"; if(ac.talkUntil > performance.now() / 1000) return "conversando"; return ""; }
+  function openPop(id, px, py){
+    popId = id; const pop = ov.querySelector("#w-pop"); pop.hidden = false; pop._px = px; pop._py = py; fillPop(); positionPop();
+  }
+  function fillPop(){
+    const pop = ov && ov.querySelector("#w-pop"); if(!pop || !popId) return;
+    const a = agent(popId), ac = actors.get(popId); if(!a || !ac){ pop.hidden = true; popId = null; return; }
+    const t = currentTask(a.id), d = dept(a.dept);
+    const html = '<div class="agent-top"><div class="av" style="background:' + areaColor(a.dept) + '">' + esc(initials(a.name)) + '</div><div><b>' + esc(a.name) + "</b><small>" + esc(a.role || "") + " · " + esc(d ? d.name : "") + " · " + esc(STATE_LABEL[ac.state] || ac.state) + (doing(ac) ? " · " + doing(ac) : "") + "</small></div></div>" +
+      (t ? '<div class="now"><b>Ahora: ' + esc(t.title) + "</b>" + (t.activity || []).slice(-3).map(x => "<small>" + esc(x.text) + "</small>").join("") + "</div>" : '<div class="now"><small>Sin tareas por ahora.</small></div>') +
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm ghost" type="button" data-wclose>Cerrar</button><button class="btn sm" type="button" data-agent="' + esc(a.id) + '">Ver ficha</button></div>';
+    if(pop._h !== html){ pop.innerHTML = html; pop._h = html; const c = pop.querySelector("[data-wclose]"); if(c) c.onclick = () => { popId = null; pop.hidden = true; }; }
+  }
+  function positionPop(){
+    const pop = ov.querySelector("#w-pop"), ac = actors.get(popId); if(!ac) return;
+    const p = project(ac.x + 0.5, 1.2, ac.z + 0.5), W = el.clientWidth, H = el.clientHeight, pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let left = Math.min(Math.max(14, p.x - pw / 2), W - pw - 14);
+    let top = p.y - ph - 30; if(top < 14) top = Math.min(H - ph - 14, p.y + 40);
+    pop.style.left = left + "px"; pop.style.top = top + "px";
+  }
+
+  /* --- entrada --- */
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  function pick(cx, cy){
+    const r = cv.getBoundingClientRect(); ndc.set((cx - r.left) / r.width * 2 - 1, -(cy - r.top) / r.height * 2 + 1); ray.setFromCamera(ndc, camera);
+    const objs = []; actors.forEach(a => objs.push(a.mesh)); statics.rackMeshes.forEach(m => objs.push(m)); statics.ghosts.forEach(g => objs.push(g));
+    const hit = ray.intersectObjects(objs, true)[0]; if(!hit) return null;
+    let o = hit.object; while(o){ if(o.userData && o.userData.actor) return {actor: o.userData.actor}; if(o.userData && o.userData.runner) return {runner: o.userData.runner}; if(o.userData && o.userData.ghost) return {ghost: o.userData.ghost.dept}; o = o.parent; }
+    return null;
+  }
+  function bindInput(){
+    cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if(pointers.size === 1) drag = {x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false, pan: e.shiftKey || e.button === 2}; if(pointers.size === 2){ const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); } });
+    cv.addEventListener("pointermove", e => {
+      if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
+      if(pointers.size === 2){ const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if(pinch0){ cam.r *= pinch0 / d; userCam = true; placeCam(); } pinch0 = d; if(drag) drag.moved = true; return; }
+      if(drag && pointers.size === 1){
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+        if(Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 4){ drag.moved = true; cv.classList.add("drag"); }
+        if(drag.moved){ if(drag.pan){ const k = cam.r * 0.0016; cam.tx -= (dx * Math.cos(cam.theta) + dy * Math.sin(cam.theta)) * k; cam.tz -= (-dx * Math.sin(cam.theta) + dy * Math.cos(cam.theta)) * k; } else { cam.theta -= dx * 0.008; cam.phi -= dy * 0.006; } userCam = true; placeCam(); }
+        return;
+      }
+      const h = pick(e.clientX, e.clientY), tip = ov.querySelector("#w-tip");
+      hoverKey = h && h.actor ? h.actor : null;
+      cv.style.cursor = h ? "pointer" : "";
+      if(!h){ tip.hidden = true; return; }
+      let txt = "";
+      if(h.actor === "__me") txt = "Tú";
+      else if(h.actor){ const a = agent(h.actor), ac = actors.get(h.actor), t = currentTask(h.actor); txt = (a ? a.name : "") + " · " + (STATE_LABEL[ac.state] || "") + (doing(ac) ? " · " + doing(ac) : "") + (t ? " · " + t.title : ""); }
+      else if(h.runner){ const r = S.runners.find(r => r.id === h.runner); txt = (r ? r.name : "Motor") + " · " + (isLive(r) ? "vivo" : "dormido"); }
+      else if(h.ghost) txt = "Escritorio libre · crear un agente";
+      const r = el.getBoundingClientRect(); tip.textContent = txt; tip.style.left = (e.clientX - r.left) + "px"; tip.style.top = (e.clientY - r.top) + "px"; tip.hidden = false;
+    });
+    const up = e => {
+      const wasDrag = drag && drag.moved; pointers.delete(e.pointerId); if(pointers.size < 2) pinch0 = 0;
+      if(pointers.size === 0){ cv.classList.remove("drag"); if(drag && !wasDrag && e.type === "pointerup"){ const h = pick(e.clientX, e.clientY); if(h && h.actor && h.actor !== "__me") openPop(h.actor); else if(h && h.runner) openRunner(h.runner); else if(h && h.ghost) openAgentForm(null, h.ghost); else { popId = null; ov.querySelector("#w-pop").hidden = true; } } drag = null; }
+    };
+    cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+    cv.addEventListener("contextmenu", e => e.preventDefault());
+    cv.addEventListener("wheel", e => { e.preventDefault(); const f = Math.exp(e.deltaY * 0.0015); cam.r *= f; userCam = true; placeCam(); }, {passive: false});
+    cv.addEventListener("pointerleave", () => { const tip = ov.querySelector("#w-tip"); if(tip) tip.hidden = true; hoverKey = null; });
+  }
+
+  /* --- ciclo --- */
+  function loop(ms){
+    raf = requestAnimationFrame(loop);
+    if(document.hidden) return;
+    const t = ms / 1000, dt = Math.min(0.05, t - (lastT || t)); lastT = t;
+    tick(t, dt); renderer.render(scene, camera); placeOverlays(t);
+  }
+  function init(){
+    if(!window.THREE){ el.innerHTML = '<div class="w-fallback">No se pudo cargar la vista 3D. El resto de la oficina funciona igual: usa «Te toca» o el Tablero.</div>'; return false; }
+    readTokens();
+    cv = document.createElement("canvas"); cv.setAttribute("aria-label", "Vista 3D de la oficina: cada agente se mueve según el estado real de sus tareas"); cv.setAttribute("role", "img");
+    ov = document.createElement("div"); ov.className = "w-ov";
+    el.append(cv, ov);
+    renderer = new THREE.WebGLRenderer({canvas: cv, antialias: true});
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(38, 1, 0.5, 300);
+    scene.add(new THREE.HemisphereLight("#FFFFFF", "#445044", 0.75));
+    sun = new THREE.DirectionalLight("#FFFFFF", 0.8); sun.position.set(GW / 2 + 14, 30, GD / 2 + 18); sun.target.position.set(GW / 2, 0, GD / 2);
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, {left: -24, right: 24, top: 20, bottom: -20, near: 1, far: 80}); sun.shadow.bias = -0.0006;
+    scene.add(sun, sun.target);
+    statics.clockCtx = document.createElement("canvas").getContext("2d"); statics.clockCtx.canvas.width = statics.clockCtx.canvas.height = 128;
+    statics.clockTex = new THREE.CanvasTexture(statics.clockCtx.canvas);
+    buildGrid(); buildOverlay(); bindInput();
+    new ResizeObserver(() => { if(!el || !mounted) return; const w = el.clientWidth, h = el.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); if(!userCam) fit(); }).observe(el);
+    const retheme = () => { if(!ok) return; Object.keys(tex).forEach(k => delete tex[k]); readTokens(); rebuild(true); if(mounted){ syncActors(); renderPanel(); } };
+    if(window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+    new MutationObserver(retheme).observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+    return true;
+  }
+  let sig = "";
+  function rebuild(force){
+    const s = JSON.stringify([S.agents.filter(a => ["activo", "pausado", "por_crear"].includes(a.status)).map(a => [a.id, a.dept, a.status, a.order]), S.runners.map(r => r.id), S.people.map(p => [p.id, p.color]), S.me && S.me.id]);
+    if(!force && s === sig && built) return;
+    sig = s;
+    actors.forEach(a => { scene.remove(a.mesh); if(a.label) a.label.remove(); }); actors.clear();
+    buildStatic(); built = true; statics.clockMin = -1;
+  }
+  return {
+    mount(main){
+      if(!el){ el = document.createElement("div"); el.className = "world"; ok = init(); }
+      if(el.parentNode !== main){ main.innerHTML = ""; main.appendChild(el); }
+      if(!ok) return;
+      if(!mounted){ mounted = true; lastT = 0; raf = requestAnimationFrame(loop); requestAnimationFrame(() => { const w = el.clientWidth, h = el.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); if(!userCam) fit(); }); }
+    },
+    isMounted(){ return mounted; },
+    unmount(){ if(!mounted) return; mounted = false; cancelAnimationFrame(raf); raf = 0; if(el && el.parentNode) el.parentNode.removeChild(el); },
+    update(){
+      if(!ok || !mounted) return;
+      // tareas que pasaron a «en curso»: el coordinador las reparte
+      const cur = new Map(S.tasks.map(t => [t.id, t.status]));
+      if(prevStatus){ S.tasks.forEach(t => { if(t.status === "en_curso" && prevStatus.get(t.id) !== "en_curso" && t.agent && t.agent !== COORD && !deliverQ.includes(t.agent)) deliverQ.push(t.agent); }); }
+      prevStatus = cur;
+      rebuild(false); syncActors(); renderPanel(); fillPop();
+    }
+  };
+})();
+
+/* ---------- arranque ---------- */
+function snapArr(snap){ return snap.docs.map(d => Object.assign({id: d.id}, d.data())); }
+async function boot(){
+  render();
+  let db = null, user = null;
+  try{ [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]); }catch(e){}
+  S.db = db; S.user = user;
+  if(user){ try{ S.meId = await user.id(); S.canEdit = await user.canEdit(); }catch(e){} }
+  window.claude.use("assets").then(a => { S.assets = a; }).catch(() => {});
+  if(!db){ S.loaded = true; render(); return; }
+  let pending = 7; const done = () => { if(--pending <= 0){ S.loaded = true; } render(); };
+  const onErr = e => { note("Conexión inestable con la base de datos"); };
+  const once = fn => { let first = true; return snap => { fn(snap); if(first){ first = false; done(); } else render(); }; };
+  db.collection("departments").onSnapshot(once(s => { S.depts = snapArr(s); }), onErr);
+  db.collection("agents").onSnapshot(once(s => { S.agents = snapArr(s); }), onErr);
+  db.collection("people").onSnapshot(once(s => { S.people = snapArr(s); S.me = S.people.find(p => p.user_id && p.user_id === S.meId) || null; }), onErr);
+  db.collection("tasks").orderBy("updated_at", "desc").limit(500).onSnapshot(once(s => { S.tasks = snapArr(s); }), onErr);
+  db.collection("docs").onSnapshot(once(s => { S.docs = snapArr(s); }), onErr);
+  db.collection("runners").onSnapshot(once(s => { S.runners = snapArr(s); }), onErr);
+  db.collection("chat").orderBy("at", "desc").limit(400).onSnapshot(once(s => { S.chat = snapArr(s); }), onErr);
+  db.doc("system/contexto").onSnapshot(s => { S.ctx = s.exists ? s.data() : {}; render(); }, onErr);
+  db.doc("system/motor").onSnapshot(s => { S.motor = s.exists ? Object.assign({}, s.data()) : {}; }, onErr);
+  setInterval(render, 60000);
+}
+if(window.claude && window.claude.use) boot(); else { S.loaded = true; render(); }
+})();
+</script>
