@@ -38,6 +38,26 @@ describe("PhaseTimeline", () => {
     expect(screen.getAllByText("(completada)", { exact: false })).toHaveLength(1);
   });
 
+  it("sin candidatos no hay paso «Sorteo» (4 de 4 en auditable); con candidatos sí (5 de 6 y «Sorteo» visible)", () => {
+    render(<PhaseTimeline phase="auditable" />);
+    expect(screen.queryByText("Sorteo")).toBeNull();
+    expect(screen.getAllByRole("listitem")).toHaveLength(5);
+    expect(screen.getByTestId("phase-timeline").textContent).toContain("5 de 5");
+    cleanup();
+    render(<PhaseTimeline phase="auditable" continuous />);
+    expect(screen.queryByText("Sorteo")).toBeNull();
+    expect(screen.getByTestId("phase-timeline").textContent).toContain("4 de 4");
+    cleanup();
+    render(<PhaseTimeline phase="auditable" hasDraw />);
+    expect(screen.getByText("Sorteo")).toBeTruthy();
+    expect(screen.getAllByRole("listitem")).toHaveLength(6);
+    expect(screen.getByTestId("phase-timeline").textContent).toContain("5 de 6");
+    cleanup();
+    // `drawn` con sorteo: último paso actual; sin paso «Sorteo» no se sale de la línea (se queda en Resultado).
+    render(<PhaseTimeline phase="drawn" hasDraw />);
+    expect(screen.getByText("Sorteo").closest("li")?.getAttribute("aria-current")).toBe("step");
+  });
+
   it("failed se muestra como fallo con texto", () => {
     render(<PhaseTimeline phase="failed" />);
     expect(screen.getByText("(falló la verificación)", { exact: false })).toBeTruthy();
@@ -57,6 +77,31 @@ describe("AuditChecklist con salidas REALES del verificador", () => {
     expect(screen.getByTestId("verifier-version").textContent).toMatch(/quorum-verifier/);
     expect(screen.getByTestId("input-artifact-digest").getAttribute("title")).toMatch(/^sha256:[0-9a-f]{64}$/);
   }, 30_000);
+
+  it("«Propiedades no evaluadas» (unsupportedGuarantees) ya no se lista en la UI: sigue en el JSON, nunca se pinta «verificado»", async () => {
+    const r = await realResult("valid.json");
+    expect(r.unsupportedGuarantees.length).toBeGreaterThan(0);
+    render(<AuditChecklist result={r} runtime="navegador" />);
+    expect(screen.queryByText(/Propiedades no evaluadas/)).toBeNull();
+    // Sólo aparecen (si acaso) dentro del JSON íntegro (<pre>), nunca como lista con pills.
+    for (const g of r.unsupportedGuarantees) expect(screen.queryAllByText(g).filter((el) => !el.closest("pre"))).toHaveLength(0);
+    // El resumen de comprobaciones (checks, no propiedades) sí se queda; la pill ámbar del veredicto viene del ancla sin RPC.
+    expect(screen.getByTestId("checks-summary").textContent).toMatch(/comprobaciones · \d+ verificadas · 1 sin evaluar/);
+    expect(screen.getByTestId("audit-verdict").querySelectorAll("span.rounded-full")).toHaveLength(2);
+    // El JSON descargable (pre de «Detalles técnicos») conserva el dato íntegro.
+    expect(screen.getByText(/"unsupportedGuarantees"/)).toBeTruthy();
+  }, 30_000);
+
+  it("sin checks «no evaluado» y con unsupportedGuarantees: veredicto con UNA sola pill (sin «no verificable» por propiedades)", () => {
+    const r: AuditResult = { electionId: "el-x", verifierVersion: "quorum-verifier@test", protocol: "semaphore-ledger", inputArtifactDigest: `sha256:${"1a".repeat(32)}`, checkedAt: "2026-10-24T22:01:00.000Z", valid: true, checks: [{ name: "tally_matches", passed: true, status: "verificado" }], unsupportedGuarantees: ["secreto-del-contenido-frente-al-servidor: el servidor ve la opción"] };
+    render(<AuditChecklist result={r} />);
+    const verdict = screen.getByTestId("audit-verdict");
+    expect(verdict.textContent).toContain("verificado");
+    expect(verdict.textContent).not.toContain("no verificable");
+    expect(screen.queryByText(/Verificación parcial/)).toBeNull();
+    expect(screen.queryByText(/Propiedades no evaluadas/)).toBeNull();
+    expect(screen.queryAllByText(/secreto-del-contenido-frente-al-servidor/).filter((el) => !el.closest("pre"))).toHaveLength(0);
+  });
 
   it("check.status del verificador manda: 'no evaluado' es ámbar ('no verificable') aunque passed sea true; nunca verde", () => {
     expect(checkStatus({ passed: true, status: "no evaluado", reason: "ancla presente" })).toBe("no verificable");
@@ -131,16 +176,28 @@ describe("MyVoteCheck · pasos y sello", () => {
       expect(steps.querySelectorAll("[data-step-state=done]")).toHaveLength(3);
       const result = screen.getByTestId("my-vote-result");
       expect(result.dataset.status).toBe("incluido");
-      expect(result.textContent).toContain("posición #12");
-      expect(screen.getByTestId("my-vote-hash").textContent).toBe(HASH);
-      expect(screen.getByTestId("my-vote-index").textContent).toBe("#12");
-      expect(screen.getByTestId("my-vote-code").textContent).toBe("777");
+      // (a) Una sola frase arriba: estado + «Tu boleta está en … · posición #N».
+      expect(screen.getByTestId("my-vote-summary").textContent).toBe("Tu boleta está en el paquete que verificaste · posición #12");
+      // (b) Fila del sello: «Sellado en Base Sepolia», estado corto y «Ver en Basescan» con el hash abreviado.
+      const anchor = screen.getByTestId("my-vote-anchor");
+      expect(anchor.dataset.anchorCheck).toBe("verificado");
+      expect(anchor.textContent).toContain("Sellado en Base Sepolia");
+      expect(anchor.textContent).toContain("coincide · comprobado por tu teléfono");
       const link = screen.getByTestId("my-vote-anchor-link") as HTMLAnchorElement;
       expect(link.getAttribute("href")).toBe(`https://sepolia.basescan.org/tx/${ANCHOR.txHash}`);
       expect(link.getAttribute("target")).toBe("_blank");
       expect(link.getAttribute("rel")).toBe("noreferrer");
-      expect(result.textContent).toContain("Tu teléfono comprobó que el sello coincide con el registro");
+      expect(link.textContent).toContain("Ver en Basescan");
+      expect(link.textContent).toContain("0xabab…abab");
+      // (c) «Detalles técnicos» plegado por defecto; dentro, código, hash y posición con Copiar (siguen en el DOM).
+      const details = screen.getByTestId("my-vote-details") as HTMLDetailsElement;
+      expect(details.open).toBe(false);
+      expect(screen.getByTestId("my-vote-hash").textContent).toBe(HASH);
+      expect(screen.getByTestId("my-vote-index").textContent).toBe("#12");
+      expect(screen.getByTestId("my-vote-code").textContent).toBe("777");
+      details.open = true;
       expect(screen.getByRole("button", { name: "Copiar hash de tu boleta en el registro" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Copiar código del comprobante" })).toBeTruthy();
       expect(result.textContent).not.toMatch(FORBIDDEN_CLAIMS);
       expect(steps.textContent).not.toMatch(FORBIDDEN_CLAIMS);
     } finally {
@@ -177,6 +234,8 @@ describe("MyVoteCheck · pasos y sello", () => {
       await runCheck(<MyVoteCheck electionId="e1" verified={verified} anchor={null} />, "4242");
       await act(() => vi.advanceTimersByTimeAsync(STEP_MS * 3));
       expect(screen.getByTestId("my-vote-result").dataset.status).toBe("no verificable");
+      expect(screen.getByTestId("my-vote-summary").textContent).toBe("No encontrado");
+      expect(screen.getByTestId("my-vote-result").textContent).toContain("Revisa que lo hayas copiado completo");
       expect(screen.queryByTestId("my-vote-hash")).toBeNull();
     } finally {
       vi.useRealTimers();
@@ -196,9 +255,11 @@ describe("MyVoteCheck · pasos y sello", () => {
       await act(() => vi.advanceTimersByTimeAsync(STEP_MS * 3));
       expect(ledger).toHaveBeenCalledWith("e2");
       expect(inclusion).toHaveBeenCalledWith("e2", "31");
-      expect(screen.getByTestId("my-vote-result").textContent).toContain("registro del servidor (posición #6)");
+      expect(screen.getByTestId("my-vote-summary").textContent).toBe("Tu boleta está en el registro del servidor · posición #6");
       expect(screen.getByTestId("my-vote-hash").textContent).toBe(HASH);
-      expect(screen.getByTestId("my-vote-result").textContent).toContain("según el comprobante de este teléfono");
+      // La nota «según el comprobante de este teléfono» va dentro de «Detalles técnicos» (plegado).
+      expect((screen.getByTestId("my-vote-details") as HTMLDetailsElement).open).toBe(false);
+      expect(screen.getByTestId("my-vote-details").textContent).toContain("según el comprobante de este teléfono");
     } finally {
       localStorage.removeItem("quorum.receipt.e2");
       ledger.mockRestore();

@@ -1,16 +1,16 @@
 import { AlertTriangle, Check } from "lucide-react";
 import { cn } from "@/lib/client/cn";
-import { PHASE_LINE, phaseIndex, phaseLabel } from "@/lib/client/phases";
+import { PHASE_GRID_COLS, phaseIndex, phaseLabel, phaseLine } from "@/lib/client/phases";
 import type { ElectionStatus as ElectionPhase } from "@quorum/contracts";
 
 /**
- * Línea de fases `registration → open → closed → tallying → auditable → drawn`.
+ * Línea de fases `registration → open → closed → tallying → auditable (→ drawn)`.
  * Texto siempre visible (no sólo color); `aria-current="step"` en la fase actual; `failed` se marca en rojo con texto.
+ * El paso «Sorteo» sólo existe si la votación tiene candidatos (`hasDraw`); en modo continuo no hay inscripción aparte (D-22).
  */
-export function PhaseTimeline({ phase, className, continuous = false }: { phase: ElectionPhase; className?: string; continuous?: boolean }) {
-  // D-22, modo continuo: no hay fase de inscripción aparte; se inscriben y votan a la vez.
-  const line = continuous ? PHASE_LINE.filter((p) => p.id !== "registration").map((p) => (p.id === "open" ? { ...p, label: "Inscripción y votación", hint: "Se inscriben y votan en el momento" } : p)) : PHASE_LINE;
-  const current = continuous ? (phase === "draft" ? -1 : phaseIndex(phase) - 1) : phaseIndex(phase);
+export function PhaseTimeline({ phase, className, continuous = false, hasDraw = false }: { phase: ElectionPhase; className?: string; continuous?: boolean; hasDraw?: boolean }) {
+  const line = phaseLine({ continuous, hasDraw });
+  const current = phaseIndex(phase, line);
   const failed = phase === "failed";
   return (
     <nav aria-label="Fases de la votación" className={cn("w-full", className)} data-testid="phase-timeline">
@@ -18,7 +18,7 @@ export function PhaseTimeline({ phase, className, continuous = false }: { phase:
         Fase actual: <span className="font-semibold text-foreground">{phaseLabel[phase]}</span>
         {current >= 0 ? <span className="md:hidden"> · {current + 1} de {line.length}</span> : null}
       </p>
-      <ol className={cn("flex gap-1.5 md:grid md:gap-2", continuous ? "md:grid-cols-5" : "md:grid-cols-6")}>
+      <ol className={cn("flex gap-1.5 md:grid md:gap-2", PHASE_GRID_COLS[line.length] ?? "md:grid-cols-6")}>
         {line.map((p, i) => {
           const state = failed && i === current ? "failed" : i < current ? "done" : i === current ? "current" : "todo";
           return (

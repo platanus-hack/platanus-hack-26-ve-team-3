@@ -15,7 +15,7 @@ import { cn } from "@/lib/client/cn";
 import { downloadJson } from "@/lib/client/download";
 import { FIXTURE_PACKAGE_ID, FIXTURE_PACKAGE_URL } from "@/lib/client/fixtures";
 import { formatDateTime, kindLabel, shortHash } from "@/lib/client/format";
-import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
+import { hasAuditPackage, hasDraw, phaseLabel } from "@/lib/client/phases";
 import { basescanTxUrl } from "@/lib/client/room";
 import type { BrowserVerification } from "@/lib/client/zk";
 import { MIN_VOTES_FOR_BREAKDOWN, type Aggregates as AggregatesV1, type AuditResponse as StoredAudit, type Election as ElectionV1 } from "@quorum/contracts";
@@ -147,7 +147,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
     <div className="q-fade-in q-container flex flex-col gap-5 py-6 md:py-10">
       <PageHeader title={election.title} description={election.description || undefined}>
         {isFixture ? <Badge tone="warning" className="self-start">Datos de ejemplo: el servidor no respondió</Badge> : null}
-        <PhaseTimeline phase={election.status} continuous={election.votingMode === "continuous"} />
+        <PhaseTimeline phase={election.status} continuous={election.votingMode === "continuous"} hasDraw={hasDraw(election)} />
         <ActionBar>
           <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "soft" }))}>
             En vivo
