@@ -138,7 +138,7 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
         ) : null}
 
         {data && phase !== "registration" ? (
-          <ResultsCard options={data.options} totalVotes={data.totalVotes} eligible={data.eligible} turnout={data.turnout} live={data.status === "open"} statusLabel={phaseLabel[data.status]} closesAt={data.closesAt} />
+          <ResultsCard options={data.options} totalVotes={data.totalVotes} eligible={data.eligible} turnout={data.turnout} live={data.status === "open"} statusLabel={phaseLabel[data.status]} closesAt={data.closesAt} compact={closed || breakdown} />
         ) : null}
 
         {data && extraTiles.length > 0 ? (

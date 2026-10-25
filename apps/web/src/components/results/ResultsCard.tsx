@@ -22,6 +22,8 @@ type Props = {
   className?: string;
   ariaLabel?: string;
   closesAt?: string;
+  /** Oculta la lista por opción (barras) cuando otra pieza de la página ya la muestra, p. ej. las tarjetas con foto de /live. La tabla accesible se conserva. */
+  compact?: boolean;
 };
 
 function useCountdown(closesAt: string | undefined) {
@@ -38,7 +40,7 @@ function useCountdown(closesAt: string | undefined) {
   return ms > 0 ? formatCountdown(ms) : null;
 }
 
-export function ResultsCard({ options, totalVotes, eligible, turnout, live, statusLabel, title, className, ariaLabel, closesAt }: Props) {
+export function ResultsCard({ options, totalVotes, eligible, turnout, live, statusLabel, title, className, ariaLabel, closesAt, compact = false }: Props) {
   const left = useCountdown(live ? closesAt : undefined);
   const hidden = options.some((o) => o.count === null);
   const ranked = options
@@ -104,7 +106,7 @@ export function ResultsCard({ options, totalVotes, eligible, turnout, live, stat
                 <span key={o.id} className="q-grow h-full" style={{ flexGrow: o.votes, background: o.color, animationDelay: `${i * 80}ms` }} />
               ))}
           </div>
-          <ul className="mt-6 flex flex-col gap-4 border-t border-border pt-5" aria-hidden="true">
+          <ul className="mt-6 flex flex-col gap-4 border-t border-border pt-5" aria-hidden="true" hidden={compact}>
             {ranked.map((o, i) => (
               <li key={o.id}>
                 <ProgressRow
