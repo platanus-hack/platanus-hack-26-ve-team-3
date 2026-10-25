@@ -31,7 +31,7 @@ import {
 } from "@quorum/contracts";
 import { z } from "zod";
 import { request, VotersResponse, InvitesResponse } from "./api";
-import { orgAuthHeaders } from "./orgStore";
+import { createCodeHeaders, orgAuthHeaders } from "./orgStore";
 
 /** Cuerpo de `POST /api/elections` (v1): v0 + candidatos y regla de ganadores del sorteo. */
 export type CreateElectionV1 = z.input<typeof CreateElectionInput>;
@@ -50,7 +50,11 @@ export const apiV1 = {
   getTally: (id: string) => request(`/api/elections/${e(id)}/tally`, undefined, Aggregates),
   /** Con token del organizador trae `voters`; sin token sólo `counts` (nunca lista nominal pública). */
   listVoters: (id: string) => request(`/api/elections/${e(id)}/voters`, org(id), VotersListResponse),
-  createElection: (body: CreateElectionV1) => request(`/api/elections`, post(body), CreateElectionResult),
+  createElection: (body: CreateElectionV1) => request(`/api/elections`, { ...post(body), headers: createCodeHeaders() }, CreateElectionResult),
+  /** D-25: ¿crear pide código? */
+  createAccessRequired: () => request(`/api/org/access`, undefined, z.object({ required: z.boolean() })),
+  /** D-25: comprueba el código (403 `forbidden` si no coincide). */
+  createAccessCheck: (code: string) => request(`/api/org/access`, post({ code }), z.object({ ok: z.literal(true) })),
   addVoters: (id: string, voters: { displayName: string; phoneE164?: string }[]) => request(`/api/elections/${e(id)}/voters`, org(id, post({ voters })), VotersResponse),
   sendInvites: (id: string, body: { electionId: string; voterIds: string[]; channel: "kapso" | "meta" | "wame" | "dry-run" }) =>
     request(`/api/elections/${e(id)}/invites`, org(id, post(body)), InvitesResponse),

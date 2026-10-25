@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { CreateGate } from "@/components/org/CreateGate";
 import { ElectionComposer } from "@/components/org/ElectionComposer";
 import { LoadingState } from "@/components/states";
 
@@ -15,7 +16,9 @@ export default function NewElectionPage() {
         </div>
       }
     >
-      <ElectionComposer />
+      <CreateGate>
+        <ElectionComposer />
+      </CreateGate>
     </Suspense>
   );
 }

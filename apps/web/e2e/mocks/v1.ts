@@ -216,6 +216,10 @@ export class MockV1 {
     const E = `/api/elections/${E2E.electionId}`;
     this.sync();
 
+    // D-25: en los mocks crear no pide código (el servidor real lo pide solo con QUORUM_CREATE_CODE).
+    if (p === "/api/org/access" && m === "GET") return this.json(route, { required: false });
+    if (p === "/api/org/access" && m === "POST") return this.json(route, { ok: true });
+
     if (p === `/api/invite/${E2E.token}`)
       return this.json(route, {
         election: { id: E2E.electionId, title: E2E.title, kind: "multiple", options: this.options, status: this.phase, endsAt: "2026-10-24T22:00:00.000Z", votingStartsAt: this.votingStartsAt, ...(this.continuous ? { votingMode: "continuous", minAnonymitySet: this.minAnonymitySet } : {}) },

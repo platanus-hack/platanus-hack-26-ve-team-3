@@ -152,12 +152,10 @@ function Copy({ title }: { title: React.ReactNode }) {
         {title}
       </h1>
       <p className="max-w-[40ch] text-body text-muted-foreground sm:text-heading">Cada voto trae su prueba. Cualquiera recalcula el resultado.</p>
+      {/* D-25: sin «Crear votación» en la landing; se entra por /org/new con código de acceso. */}
       <div className="flex gap-2.5 sm:gap-3">
-        <Link href="/org/new" className={cn(buttonVariants({ size: "lg" }), "whitespace-nowrap max-sm:min-h-12 max-sm:flex-1 max-sm:px-3 max-sm:text-body")}>
-          Crear votación <ArrowRight aria-hidden="true" className="max-[400px]:hidden" />
-        </Link>
-        <Link href="/votaciones" className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "whitespace-nowrap max-sm:min-h-12 max-sm:flex-1 max-sm:px-3 max-sm:text-body")}>
-          Mis votaciones
+        <Link href="/votaciones" className={cn(buttonVariants({ size: "lg" }), "whitespace-nowrap max-sm:min-h-12 max-sm:flex-1 max-sm:px-3 max-sm:text-body")}>
+          Mis votaciones <ArrowRight aria-hidden="true" className="max-[400px]:hidden" />
         </Link>
       </div>
     </div>

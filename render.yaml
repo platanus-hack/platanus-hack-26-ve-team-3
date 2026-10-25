@@ -48,3 +48,6 @@ services:
         generateValue: true
       - key: ORGANIZER_PRIVATE_KEY
         sync: false
+      # D-25: código de acceso para crear votaciones (se pega a mano en el dashboard; sin él, crear queda abierto).
+      - key: QUORUM_CREATE_CODE
+        sync: false

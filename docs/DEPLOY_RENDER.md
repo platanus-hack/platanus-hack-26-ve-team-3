@@ -11,6 +11,7 @@ Quórum corre completo (páginas + API) como **un Web Service de Node** en Rende
 - No secretas: en `render.yaml` (incluidas las `NEXT_PUBLIC_*`, que se incrustan en el build).
 - `FACE_KEY`: la genera Render (`generateValue`). No cambiarla durante una inscripción abierta: invalida las plantillas faciales cifradas.
 - `ORGANIZER_PRIVATE_KEY`: se pega a mano en Render → Environment (clave de testnet con ETH de faucet). Sin ella, el cierre no ancla y el verificador lo marca "no evaluado".
+- `QUORUM_CREATE_CODE` (D-25): código de acceso para crear votaciones. Se pega a mano en Render → Environment. Con él, `/org/new` pide el código y `POST /api/elections` lo exige en la cabecera `x-quorum-create-code`; sin él, crear queda abierto. **Ojo:** las variables nuevas de `render.yaml` no se aplican solas al servicio existente; hay que añadirlas en el dashboard.
 - `NEXT_PUBLIC_BASE_SEPOLIA_RPC`: RPC público que el verificador del navegador usa para leer el ancla. Sin él, «Verificar ahora» y «Mi voto está» marcan `anchor_matches` como «no evaluado» en el teléfono. Va al bundle: solo URLs públicas.
 - `APP_URL`: opcional; si falta se usa `RENDER_EXTERNAL_URL` (la URL pública del servicio) para el QR de la sala.
 

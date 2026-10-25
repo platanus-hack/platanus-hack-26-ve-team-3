@@ -61,6 +61,10 @@ export const env = {
   get aiGatewayKey(): string | undefined {
     return str("AI_GATEWAY_API_KEY");
   },
+  /** D-25: código de acceso para crear votaciones (demo). Sin él, crear queda abierto (desarrollo/tests). */
+  get createCode(): string | undefined {
+    return str("QUORUM_CREATE_CODE");
+  },
   get kapsoWebhookSecret(): string | undefined {
     return str("KAPSO_WEBHOOK_SECRET");
   },

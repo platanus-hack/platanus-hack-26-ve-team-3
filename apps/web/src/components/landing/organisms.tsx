@@ -23,11 +23,8 @@ function HeroCopy() {
       </h1>
       <p className="max-w-[38ch] text-heading text-muted-foreground">Cada voto trae una prueba matemática. Cada resultado se recalcula desde cualquier teléfono.</p>
       <div className="flex flex-col gap-3 sm:flex-row">
-        <Link href="/org/new" className={cn(buttonVariants({ size: "lg" }))}>
-          Crear votación <ArrowRight aria-hidden="true" />
-        </Link>
-        <Link href="/votaciones" className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "border-glass-border bg-glass backdrop-blur-xl")}>
-          Mis votaciones
+        <Link href="/votaciones" className={cn(buttonVariants({ size: "lg" }))}>
+          Mis votaciones <ArrowRight aria-hidden="true" />
         </Link>
       </div>
       <Glass className="max-w-lg px-5 py-4">
