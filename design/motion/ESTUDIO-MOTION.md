@@ -66,3 +66,4 @@ La calma de `rossark-motion` («sin rebote, amplitudes pequeñas») manda en la 
 
 ## Lo que ya sabemos (actualízalo después de cada pieza)
 - 2026-10-24, «Cómo funciona por detrás» (landing): rúbrica en verde a la 2.ª vuelta. Arreglos: escena a escala 1 en 360 px (título fuera del sticky), cadena centrada en el beat 4, boleta que sale por detrás del teléfono, enlaces rotos más visibles. Detalle en `design/motion/LANDING.md`.
+- 2026-10-24, hero animado (landing): la v1 por pasos con raíl numerado se descartó por «de plantilla». Lo que funcionó: un solo objeto que se convierte en el siguiente (tarjeta → teléfono → boleta → sobre → bloque → sello → tarjeta), titular cinético por acto con máscara por palabra, loop automático con pausa y saltos discretos, cámara que empuja solo en el golpe. Un acto intercalado (impostor) se mete con un mapeo de tiempo sin reescribir los demás. Detalle en `design/motion/LANDING.md`.

@@ -8,6 +8,7 @@ import { ApiClientError, voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { CAPTURES, clientLog, DESCRIPTOR_DIMS, formatMB, humanSelfTest, humanTimings, LivenessTracker, loadHuman, onDownloadProgress, TURN_DELTA, yawProxy, type DownloadProgress, type HumanInstance } from "@/lib/client/human";
 import { cn } from "@/lib/client/cn";
+import { FaceRing } from "./FaceRing";
 
 /** Umbrales mínimos de antispoof (`face.real`) y liveness (`face.live`) de Human (threat model M5). Siguen siendo demo. */
 const REAL_MIN = 0.5;
@@ -336,33 +337,6 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onPendin
       {phase === "error" && error ? <FaceError error={error} onRetry={() => (E2E_FAKE_FACE && error.kind !== "duplicate" && error.kind !== "camera-denied" ? void fakeFace() : void start())} onObserve={onObserve} /> : null}
     </div>,
     document.body,
-  );
-}
-
-const TICKS = 72;
-
-/** Anillo de marcas tipo Face ID: se encienden en sentido horario según el avance; verde al terminar. */
-function FaceRing({ progress, done }: { progress: number; done: boolean }) {
-  const lit = Math.round(progress * TICKS);
-  return (
-    <svg viewBox="0 0 100 100" className="absolute inset-0 size-full" aria-hidden="true">
-      {Array.from({ length: TICKS }, (_, i) => {
-        const a = (i / TICKS) * 2 * Math.PI - Math.PI / 2;
-        const on = i < lit;
-        return (
-          <line
-            key={i}
-            x1={50 + 44 * Math.cos(a)}
-            y1={50 + 44 * Math.sin(a)}
-            x2={50 + (on ? 49 : 47.5) * Math.cos(a)}
-            y2={50 + (on ? 49 : 47.5) * Math.sin(a)}
-            strokeWidth={1.4}
-            strokeLinecap="round"
-            className={cn("transition-colors duration-200", on ? (done ? "stroke-[#4fb58a]" : "stroke-[#ff714e]") : "stroke-white/20")}
-          />
-        );
-      })}
-    </svg>
   );
 }
 

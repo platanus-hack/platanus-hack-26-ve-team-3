@@ -1,10 +1,7 @@
 /**
- * Motor de movimiento de «Cómo funciona por detrás» (método rossark-motion, design/motion/MOTION.md).
- * Todo es función pura del progreso `p` (0→1) de la sección: el mismo estado sale del scroll o de `window.__seek(p)`.
+ * Motor del hero animado (método rossark-motion, design/motion/MOTION.md): curvas, ventanas y pistas.
+ * Todo es función pura del tiempo `t` del loop: el mismo estado sale del reloj o de `window.__seek(t)`.
  */
-
-export const BEATS = 6;
-const B = 1 / BEATS;
 
 export const clamp = (x: number, lo = 0, hi = 1) => (x < lo ? lo : x > hi ? hi : x);
 
@@ -51,23 +48,6 @@ export const leave = bezier(0.55, 0, 1, 0.45);
 
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-/** Progreso local (0→1) del beat `i` (0-based) dentro de `p`. Fuera del beat queda en 0 o 1. */
-export const local = (p: number, i: number) => clamp((p - i * B) / B);
-
-/** Beat activo para el texto: 0..5. */
-export const activeBeat = (p: number) => Math.min(BEATS - 1, Math.floor(clamp(p) * BEATS));
-
-/**
- * Opacidad del texto del paso `i`: entra al empezar su beat y sale al terminar (cruce corto con el siguiente).
- * El primero está visible en p=0 y el último en p=1 (cuadros publicables en los extremos).
- */
-export function stepOpacity(p: number, i: number) {
-  const a = i * B, b = (i + 1) * B, f = 0.035;
-  const inn = i === 0 ? 1 : arrive(seg(p, a - f * 0.2, a + f));
-  const out = i === BEATS - 1 ? 1 : 1 - leave(seg(p, b - f, b + f * 0.2));
-  return Math.min(inn, out);
-}
-
 /** Aparece entre `a` y `b` (ease-out) y desaparece entre `c` y `d` (ease-in). Sin `c` no desaparece. */
 export function presence(u: number, a: number, b: number, c = Infinity, d = Infinity) {
   const inn = arrive(seg(u, a, b));
@@ -75,8 +55,24 @@ export function presence(u: number, a: number, b: number, c = Infinity, d = Infi
   return Math.min(inn, out);
 }
 
-/** p central "publicable" de cada beat (para el modo quieto y las capturas). */
-export const beatHold = (i: number) => (i + 0.86) * B;
-
-/** Temblor único y amortiguado (solo para «fallo detectado»): ±amp px, 2 ciclos. */
+/** Temblor único y amortiguado (solo para golpes: «rechazado», «fallo detectado»): ±amp px, 2 ciclos. */
 export const shake = (u: number, amp = 4) => (u <= 0 || u >= 1 ? 0 : Math.sin(u * Math.PI * 4) * amp * (1 - u));
+
+/** Rebote sobrio: sube a 1 y se asienta con una sola oscilación pequeña (física de contacto, sin muelles infinitos). */
+export const settle = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : 1 - Math.cos(u * Math.PI * 1.5) * Math.pow(1 - u, 2.2));
+
+/**
+ * Pista de keyframes `[t, valor]` con recorrido ease-in-out entre claves (se detiene en cada una: un movimiento por tramo).
+ * Antes de la primera clave vale la primera; después de la última, la última.
+ */
+export function keys(t: number, k: ReadonlyArray<readonly [number, number]>, ease: (x: number) => number = travel) {
+  if (t <= k[0][0]) return k[0][1];
+  for (let i = 1; i < k.length; i++) {
+    const [t1, v1] = k[i];
+    if (t <= t1) {
+      const [t0, v0] = k[i - 1];
+      return lerp(v0, v1, ease(seg(t, t0, t1)));
+    }
+  }
+  return k[k.length - 1][1];
+}
