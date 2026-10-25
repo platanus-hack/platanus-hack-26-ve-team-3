@@ -103,6 +103,8 @@ export class MockV1 {
    * fase de `registration` a `open` (y cierra la sala). `null` = la abre el organizador a mano.
    */
   votingStartsAt: string | null = null;
+  /** Opciones de la elección (se pueden sustituir en un test, p. ej. con `subtitle` e `image`). Las usan GET /election, /tally y /invite. */
+  options: { id: string; label: string; subtitle?: string; image?: string }[] = E2E.options;
   /** Cierre de la votación (ISO). Fijo por defecto; las capturas lo ponen en el futuro para ver «Quedan». */
   endsAt = "2026-10-24T22:00:00.000Z";
   /** Retiene la apertura automática (para capturar "Abriendo la votación…"). */
@@ -121,7 +123,7 @@ export class MockV1 {
       title: E2E.title,
       description: "Votación de demostración (fixture). Condominio y vecinos ficticios.",
       kind: "multiple",
-      options: E2E.options,
+      options: this.options,
       status: this.phase,
       protocol: "semaphore-ledger",
       manifestHash: "0x6b1c3e5f0a9d4c2b8e7f6a5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b",
@@ -162,7 +164,7 @@ export class MockV1 {
         leadingShare: null,
         closesAt: "2026-10-24T22:00:00.000Z",
         status: this.phase,
-        options: E2E.options.map((o) => ({ ...o, count: null })),
+        options: this.options.map((o) => ({ id: o.id, label: o.label, count: null })),
       };
     }
     const total = this.phase === "registration" || this.phase === "draft" ? 0 : 7;
@@ -174,7 +176,7 @@ export class MockV1 {
       leadingShare: total ? 3 / 7 : null,
       closesAt: "2026-10-24T22:00:00.000Z",
       status: this.phase,
-      options: E2E.options.map((o, i) => ({ ...o, count: total >= 5 ? [1, 3, 2, 1, 0][i] : null })),
+      options: this.options.map((o, i) => ({ id: o.id, label: o.label, count: total >= 5 ? [1, 3, 2, 1, 0][i] ?? 0 : null })),
     };
   }
 
@@ -214,7 +216,7 @@ export class MockV1 {
 
     if (p === `/api/invite/${E2E.token}`)
       return this.json(route, {
-        election: { id: E2E.electionId, title: E2E.title, kind: "multiple", options: E2E.options, status: this.phase, endsAt: "2026-10-24T22:00:00.000Z", votingStartsAt: this.votingStartsAt, ...(this.continuous ? { votingMode: "continuous", minAnonymitySet: this.minAnonymitySet } : {}) },
+        election: { id: E2E.electionId, title: E2E.title, kind: "multiple", options: this.options, status: this.phase, endsAt: "2026-10-24T22:00:00.000Z", votingStartsAt: this.votingStartsAt, ...(this.continuous ? { votingMode: "continuous", minAnonymitySet: this.minAnonymitySet } : {}) },
         voter: {
           id: E2E.voterId,
           displayName: "Vecina Ana (ficticia)",
