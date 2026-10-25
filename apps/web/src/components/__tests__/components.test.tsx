@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuditResult } from "@quorum/contracts";
 import { AuditChecklist, checkStatus, overallStatus } from "@/components/AuditChecklist";
 import { PhaseTimeline } from "@/components/election/PhaseTimeline";
-import { judgeInclusion } from "@/components/election/MyVoteCheck";
+import { buildSteps, judgeInclusion, MyVoteCheck, STEP_MS } from "@/components/election/MyVoteCheck";
+import { apiV1 } from "@/lib/client/apiV1";
+import { anchorCheckOf } from "@/lib/client/onchain";
 import { CandidatesEditor, candidateId } from "@/components/org/CandidatesEditor";
 import { BallotScreen } from "@/components/voter/BallotScreen";
 import { VoteReceiptCard } from "@/components/voter/VoteReceiptCard";
@@ -79,6 +81,129 @@ describe("MyVoteCheck · judgeInclusion", () => {
   it("comprobante local ausente del paquete ⇒ fallo detectado; tecleado a mano ⇒ no verificable", () => {
     expect(judgeInclusion({ found: null, source: "paquete verificado", fromReceipt: true }).status).toBe("fallo detectado");
     expect(judgeInclusion({ found: null, source: "ledger publicado", fromReceipt: false }).status).toBe("no verificable");
+  });
+});
+
+const ANCHOR = { chainId: 84532, txHash: `0x${"ab".repeat(32)}` };
+const HASH = `0x${"3c".repeat(32)}`;
+/** Afirmaciones prohibidas (CLAUDE.md regla 1 y 2, D-13): el voto NO va a la cadena. */
+const FORBIDDEN_CLAIMS = /voto (está|queda|quedó) en (la )?blockchain|boleta (está|queda|quedó) en (la )?blockchain|anónim|identidad verificada/i;
+
+describe("MyVoteCheck · pasos y sello", () => {
+  it("buildSteps: con sello el tercer paso compara con Base Sepolia (✓ sólo si el verificador lo dijo); sin sello, «se ancla al cerrar»", () => {
+    expect(buildSteps({ anchor: null, anchorCheck: undefined }).map((s) => s.label)).toEqual(["Buscando tu código en el registro", "Comprobando el hash de tu boleta", "Sin sello todavía: se ancla al cerrar"]);
+    expect(buildSteps({ anchor: ANCHOR, anchorCheck: "verificado" })[2]).toEqual({ label: "Comparando con el sello en Base Sepolia", mark: "ok" });
+    expect(buildSteps({ anchor: ANCHOR, anchorCheck: undefined })[2].mark).toBe("skip");
+    expect(buildSteps({ anchor: ANCHOR, anchorCheck: "fallo detectado" })[2].mark).toBe("fail");
+  });
+
+  it("anchorCheckOf: tri-estado del check anchor_matches, nunca verde por «no evaluado»", () => {
+    const r = (c: { passed: boolean; status?: "verificado" | "fallo detectado" | "no evaluado"; reason?: string }) => ({ checks: [{ name: "anchor_matches", ...c }] });
+    expect(anchorCheckOf(r({ passed: true, status: "verificado" }))).toBe("verificado");
+    expect(anchorCheckOf(r({ passed: true, status: "no evaluado", reason: "no evaluado: sin RPC" }))).toBe("no verificable");
+    expect(anchorCheckOf(r({ passed: true, reason: "no evaluado: sin RPC" }))).toBe("no verificable");
+    expect(anchorCheckOf(r({ passed: false, status: "fallo detectado" }))).toBe("fallo detectado");
+    expect(anchorCheckOf({ checks: [{ name: "tally_matches", passed: true }] })).toBeNull();
+  });
+
+  async function runCheck(ui: React.ReactElement, code: string) {
+    render(ui);
+    fireEvent.change(screen.getByLabelText("Código del comprobante"), { target: { value: code } });
+    fireEvent.submit(screen.getByRole("button", { name: "Comprobar" }).closest("form")!);
+  }
+
+  it("paquete verificado con sello verificado: secuencia de 3 pasos (≥ 1,8 s), luego hash, posición, código y enlace a Basescan", async () => {
+    vi.useFakeTimers();
+    try {
+      const verified = { ledger: [{ idx: 12, hash: HASH, nullifier: "777" }], finalHash: null, digest: "sha256:00", anchorCheck: "verificado" as const };
+      await runCheck(<MyVoteCheck electionId="e1" verified={verified} anchor={ANCHOR} />, "777");
+      const steps = screen.getByTestId("my-vote-steps");
+      expect(steps.textContent).toContain("Buscando tu código en el registro…");
+      expect(screen.queryByTestId("my-vote-result")).toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(STEP_MS));
+      expect(steps.querySelectorAll("[data-step-state=done]")).toHaveLength(1);
+      expect(steps.textContent).toContain("Comprobando el hash de tu boleta…");
+      expect(screen.queryByTestId("my-vote-result")).toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(STEP_MS));
+      expect(steps.textContent).toContain("Comparando con el sello en Base Sepolia…");
+      await act(() => vi.advanceTimersByTimeAsync(STEP_MS));
+      expect(steps.querySelectorAll("[data-step-state=done]")).toHaveLength(3);
+      const result = screen.getByTestId("my-vote-result");
+      expect(result.dataset.status).toBe("incluido");
+      expect(result.textContent).toContain("posición #12");
+      expect(screen.getByTestId("my-vote-hash").textContent).toBe(HASH);
+      expect(screen.getByTestId("my-vote-index").textContent).toBe("#12");
+      expect(screen.getByTestId("my-vote-code").textContent).toBe("777");
+      const link = screen.getByTestId("my-vote-anchor-link") as HTMLAnchorElement;
+      expect(link.getAttribute("href")).toBe(`https://sepolia.basescan.org/tx/${ANCHOR.txHash}`);
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noreferrer");
+      expect(result.textContent).toContain("Tu teléfono comprobó que el sello coincide con el registro");
+      expect(screen.getByRole("button", { name: "Copiar hash de tu boleta en el registro" })).toBeTruthy();
+      expect(result.textContent).not.toMatch(FORBIDDEN_CLAIMS);
+      expect(steps.textContent).not.toMatch(FORBIDDEN_CLAIMS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sello publicado pero no evaluado por el navegador ⇒ «no evaluado por tu teléfono», nunca «coincide»", async () => {
+    vi.useFakeTimers();
+    try {
+      const verified = { ledger: [{ idx: 0, hash: HASH, nullifier: "5" }], finalHash: null, digest: "sha256:00" };
+      await runCheck(<MyVoteCheck electionId="e1" verified={verified} anchor={ANCHOR} />, "5");
+      await act(() => vi.advanceTimersByTimeAsync(STEP_MS * 3));
+      const anchor = screen.getByTestId("my-vote-anchor");
+      expect(anchor.dataset.anchorCheck).toBe("no verificable");
+      expect(anchor.textContent).toContain("no evaluado por tu teléfono");
+      expect(anchor.textContent).not.toContain("coincide");
+      expect(screen.getByTestId("my-vote-steps").querySelector("[data-step-mark=skip]")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sin sello: «El sello se publica al cerrar» y ningún enlace a Basescan; código ausente ⇒ no verificable sin hash", async () => {
+    vi.useFakeTimers();
+    try {
+      const verified = { ledger: [{ idx: 3, hash: HASH, nullifier: "9" }], finalHash: null, digest: "sha256:00" };
+      await runCheck(<MyVoteCheck electionId="e1" verified={verified} anchor={null} />, "9");
+      await act(() => vi.advanceTimersByTimeAsync(STEP_MS * 3));
+      expect(screen.getByTestId("my-vote-anchor").textContent).toContain("se publica al cerrar la votación");
+      expect(screen.queryByTestId("my-vote-anchor-link")).toBeNull();
+      expect(screen.getByTestId("my-vote-steps").textContent).toContain("Sin sello todavía: se ancla al cerrar");
+      cleanup();
+      await runCheck(<MyVoteCheck electionId="e1" verified={verified} anchor={null} />, "4242");
+      await act(() => vi.advanceTimersByTimeAsync(STEP_MS * 3));
+      expect(screen.getByTestId("my-vote-result").dataset.status).toBe("no verificable");
+      expect(screen.queryByTestId("my-vote-hash")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("durante la votación (ledger sin entradas): posición del servidor y hash «según el comprobante de este teléfono»", async () => {
+    vi.useFakeTimers();
+    const ledger = vi.spyOn(apiV1, "getLedger").mockResolvedValue({ electionId: "e2", status: "open", groupRoot: null, scope: null, genesisHash: null, finalHash: null, count: 7, proofsPublished: false, entries: [] });
+    const inclusion = vi.spyOn(apiV1, "getInclusion").mockResolvedValue({ electionId: "e2", inclusionId: "31", receivedAt: "2026-10-24T15:00:00.000Z", includedAt: "2026-10-24T15:00:00.000Z", state: "incluido", nullifier: "31", index: 6 });
+    try {
+      localStorage.setItem("quorum.receipt.e2", JSON.stringify({ inclusionId: "31", nullifier: "31", index: 6, hash: HASH, state: "incluido", savedAt: "2026-10-24T15:00:00.000Z" }));
+      render(<MyVoteCheck electionId="e2" verified={null} anchor={null} />);
+      await act(() => vi.advanceTimersByTimeAsync(10));
+      expect((screen.getByLabelText("Código del comprobante") as HTMLInputElement).value).toBe("31");
+      fireEvent.submit(screen.getByRole("button", { name: "Comprobar" }).closest("form")!);
+      await act(() => vi.advanceTimersByTimeAsync(STEP_MS * 3));
+      expect(ledger).toHaveBeenCalledWith("e2");
+      expect(inclusion).toHaveBeenCalledWith("e2", "31");
+      expect(screen.getByTestId("my-vote-result").textContent).toContain("registro del servidor (posición #6)");
+      expect(screen.getByTestId("my-vote-hash").textContent).toBe(HASH);
+      expect(screen.getByTestId("my-vote-result").textContent).toContain("según el comprobante de este teléfono");
+    } finally {
+      localStorage.removeItem("quorum.receipt.e2");
+      ledger.mockRestore();
+      inclusion.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -122,6 +122,35 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     await expect(page.getByTestId("my-vote-result")).toContainText("paquete que verificaste");
   });
 
+  test("Comprobar mi voto con sello: pasos animados, hash y posición de la boleta, enlace a la transacción en Basescan", async ({ page }) => {
+    const mock = new MockV1("auditable");
+    mock.anchorTx = `0x${"ab".repeat(32)}`;
+    await mock.install(page);
+    // Comprobante guardado por este teléfono al votar (misma forma que `saveReceipt`), como al tocar «Comprobar mi voto».
+    await page.addInitScript(
+      ([id, nullifier, hash]) => localStorage.setItem(`quorum.receipt.${id}`, JSON.stringify({ inclusionId: nullifier, nullifier, index: 0, hash, state: "incluido", savedAt: "2026-10-24T15:00:00.000Z" })),
+      [E2E.electionId, E2E.fixtureNullifier, E2E.fixtureBallotHash],
+    );
+    await page.goto(`/e/${E2E.electionId}?comprobar=1#mi-voto`);
+    await expect(page.getByLabel("Código del comprobante")).toHaveValue(E2E.fixtureNullifier);
+    const steps = page.getByTestId("my-vote-steps");
+    await expect(steps).toContainText("Buscando tu código en el registro");
+    await expect(steps).toContainText("Comparando con el sello en Base Sepolia");
+    const result = page.getByTestId("my-vote-result");
+    await expect(result).toContainText("incluido");
+    await expect(result).toContainText("registro publicado (posición #0)");
+    await expect(page.getByTestId("my-vote-hash")).toHaveText(E2E.fixtureBallotHash);
+    await expect(page.getByTestId("my-vote-index")).toHaveText("#0");
+    await expect(page.getByTestId("my-vote-code")).toHaveText(E2E.fixtureNullifier);
+    const link = page.getByTestId("my-vote-anchor-link");
+    await expect(link).toHaveAttribute("href", `https://sepolia.basescan.org/tx/${mock.anchorTx}`);
+    await expect(link).toHaveAttribute("target", "_blank");
+    // Sin «Verificar ahora», el sello está publicado pero el teléfono no lo evaluó: nunca «coincide».
+    await expect(page.getByTestId("my-vote-anchor")).toContainText("no evaluado por tu teléfono");
+    await expect(result).not.toContainText(/voto está en la blockchain|anónim|identidad verificada/i);
+    await expect(steps.locator("[data-step-state=done]")).toHaveCount(3);
+  });
+
   test("paquete con total alterado ⇒ fallo detectado con la causa", async ({ page }) => {
     const mock = new MockV1("auditable");
     mock.packageFile = "tampered_total.json";

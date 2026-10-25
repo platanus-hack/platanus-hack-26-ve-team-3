@@ -161,7 +161,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
         </Card>
       )}
 
-      {!isFixture ? <MyVoteCheck electionId={electionId} verified={verified} /> : null}
+      {!isFixture ? <MyVoteCheck electionId={electionId} verified={verified} anchor={election.anchor ?? null} /> : null}
 
       {tally ? <ResultsCard options={tally.options} totalVotes={tally.totalVotes} eligible={tally.eligible} turnout={tally.turnout} live={tally.status === "open"} statusLabel={phaseLabel[tally.status]} /> : null}
       {election.votingMode === "continuous" && election.status !== "draft" ? <AnonymityCard electionId={electionId} k={election.minAnonymitySet ?? 5} closed={auditable} /> : null}

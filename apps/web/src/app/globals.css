@@ -496,3 +496,51 @@ dialog.q-sheet::backdrop {
     transform: none !important;
   }
 }
+
+/* ---------- Comprobar mi voto (election/MyVoteCheck): pasos de verificación con un punto que pulsa ---------- */
+.q-step-dot {
+  position: relative;
+}
+.q-step-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  animation: q-step-pulse 1.1s ease-out infinite;
+  will-change: transform, opacity;
+}
+@keyframes q-step-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.q-step-in {
+  animation: q-step-in 220ms ease-out both;
+}
+@keyframes q-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Sin movimiento: halo fijo y tenue alrededor del paso en curso; los pasos aparecen sin deslizarse. */
+@media (prefers-reduced-motion: reduce) {
+  .q-step-dot::after {
+    animation: none;
+    transform: scale(1.6);
+    opacity: 0.18;
+  }
+  .q-step-in {
+    animation: none;
+  }
+}

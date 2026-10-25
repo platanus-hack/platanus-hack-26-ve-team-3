@@ -11,11 +11,13 @@ import { fetchAuditPackageBytes } from "@/lib/client/apiV1";
 import type { AuditResponse as StoredAudit } from "@quorum/contracts";
 import { downloadJson } from "@/lib/client/download";
 import { shortHash } from "@/lib/client/format";
+import { anchorCheckOf, type AnchorCheck } from "@/lib/client/onchain";
 import { publicAnchorRpc, verifyPackageInBrowser, type BrowserVerification } from "@/lib/client/zk";
 
 export type PackageSource = { kind: "api"; electionId: string } | { kind: "fixture"; url: string; label: string };
 
-export type VerifiedPackage = { ledger: { nullifier: string; idx: number; hash: string }[]; finalHash: string | null; digest: string };
+/** Lo que "Mi voto está" necesita del paquete YA verificado en este navegador. `anchorCheck` viene del check `anchor_matches` del verificador. */
+export type VerifiedPackage = { ledger: { nullifier: string; idx: number; hash: string }[]; finalHash: string | null; digest: string; anchorCheck?: AnchorCheck };
 
 type Phase = "idle" | "downloading" | "verifying" | "done" | "error";
 
@@ -59,7 +61,7 @@ export function VerifyNowPanel({ source, serverAudit, onVerified }: { source: Pa
       setPhase(out.ok ? "done" : "error");
       if (out.ok) {
         const p = extract(bytes, out.inputDigest);
-        if (p) onVerified?.(p);
+        if (p) onVerified?.({ ...p, anchorCheck: anchorCheckOf(out.result) ?? undefined });
       } else setError(out.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

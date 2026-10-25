@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { Check, Copy, ExternalLink, Minus, Search, X } from "lucide-react";
 import { StatusPill, type HonestStatus } from "@/components/StatusPill";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, Input } from "@/components/ui/input";
 import { ApiClientError, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
+import { cn } from "@/lib/client/cn";
+import { copyText } from "@/lib/client/download";
+import { shortHash } from "@/lib/client/format";
 import { loadReceipt } from "@/lib/client/identityVault";
-import { findNullifier, normalizeNullifier } from "@/lib/client/onchain";
+import { findNullifier, normalizeNullifier, type AnchorCheck } from "@/lib/client/onchain";
+import { basescanTxUrl } from "@/lib/client/room";
+import type { Election } from "@quorum/contracts";
 import type { VerifiedPackage } from "./VerifyNowPanel";
 
 type Outcome = { status: HonestStatus; title: string; body: string };
+/** `election.anchor` de `GET /api/elections/:id` (contracts exporta el esquema, no el tipo). */
+export type AnchorInfo = NonNullable<Election["anchor"]>;
 
 /** Decide el estado honesto de "mi voto está". Exportado para tests. */
 export type InclusionSource = "paquete verificado" | "ledger publicado" | "registro del servidor";
@@ -35,18 +42,51 @@ export function judgeInclusion(args: { found: { idx?: number } | null; source: I
   return { status: "no verificable", title: "No encontrado", body: `Ese código no está en ${where}. Revisa que lo hayas copiado completo.` };
 }
 
+/* ---------- Pasos de la verificación (animación honesta: cada paso dice qué se hizo de verdad) ---------- */
+
+export type StepMark = "ok" | "skip" | "fail";
+export type Step = { label: string; mark: StepMark };
+
+/** Duración mínima de cada paso: la secuencia dura ≥ 1,8 s aunque la respuesta llegue antes. Exportada para tests. */
+export const STEP_MS = 600;
+
+/**
+ * Pasos que se muestran. El tercero depende del sello: con `anchor` se compara con lo que el verificador del navegador
+ * dijo de `anchor_matches` (✓ sólo si lo verificó; «no evaluado» si no corrió); sin sello, se dice que se ancla al cerrar.
+ */
+export function buildSteps(args: { anchor: AnchorInfo | null; anchorCheck: AnchorCheck | null | undefined }): Step[] {
+  const third: Step = !args.anchor
+    ? { label: "Sin sello todavía: se ancla al cerrar", mark: "skip" }
+    : args.anchorCheck === "verificado"
+      ? { label: "Comparando con el sello en Base Sepolia", mark: "ok" }
+      : args.anchorCheck === "fallo detectado"
+        ? { label: "Comparando con el sello en Base Sepolia", mark: "fail" }
+        : { label: "Comparando con el sello en Base Sepolia", mark: "skip" };
+  return [{ label: "Buscando tu código en el registro", mark: "ok" }, { label: "Comprobando el hash de tu boleta", mark: "ok" }, third];
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+type Found = { idx?: number; hash?: string; hashFromReceipt?: boolean } | null;
+type Result = { outcome: Outcome; found: Found; nullifier: string };
+
 /**
  * "Mi voto está": busca el nullifier del votante (de su comprobante en este navegador o pegado a mano) en el paquete
  * que verificó en su navegador o, si aún no verificó, en `GET /api/elections/:id/ledger`. No revela la opción.
+ * Lo que puede afirmar: la boleta está en el registro (posición y hash) y ese registro quedó sellado en Base Sepolia
+ * al cerrar (`anchor`). Nunca «tu voto está en la blockchain».
  */
-export function MyVoteCheck({ electionId, verified }: { electionId: string; verified: VerifiedPackage | null }) {
+export function MyVoteCheck({ electionId, verified, anchor = null }: { electionId: string; verified: VerifiedPackage | null; anchor?: AnchorInfo | null }) {
   const inputId = useId();
   const [value, setValue] = useState("");
   const [fromReceipt, setFromReceipt] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [steps, setSteps] = useState<Step[] | null>(null);
+  const [done, setDone] = useState(0);
+  const [result, setResult] = useState<Result | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const runRef = useRef(0);
 
   // El comprobante vive en localStorage (sólo cliente): se lee tras montar para no romper la hidratación.
   useEffect(() => {
@@ -61,37 +101,62 @@ export function MyVoteCheck({ electionId, verified }: { electionId: string; veri
     return () => clearTimeout(t);
   }, [electionId]);
 
+  async function lookup(n: string): Promise<Result> {
+    if (verified) {
+      const f = findNullifier(verified.ledger, n);
+      return { outcome: judgeInclusion({ found: f, source: "paquete verificado", fromReceipt }), found: f ? { idx: f.idx, hash: f.hash } : null, nullifier: n };
+    }
+    const ledger = await apiV1.getLedger(electionId);
+    if (ledger.entries.length > 0 || ledger.proofsPublished !== false) {
+      const f = findNullifier(ledger.entries, n);
+      return { outcome: judgeInclusion({ found: f, source: "ledger publicado", fromReceipt }), found: f ? { idx: f.idx, hash: f.hash } : null, nullifier: n };
+    }
+    // Durante la votación el ledger no publica entradas (threat model C3): se consulta el recibo por nullifier.
+    try {
+      const inc = await apiV1.getInclusion(electionId, n);
+      const stored = loadReceipt(electionId);
+      const fromStored = !inc.hash && stored && normalizeNullifier(stored.nullifier) === n && typeof stored.hash === "string";
+      const found: Found = { idx: inc.index, hash: inc.hash ?? (fromStored ? stored.hash : undefined), hashFromReceipt: !!fromStored };
+      return { outcome: judgeInclusion({ found: { idx: inc.index }, source: "registro del servidor", fromReceipt }), found, nullifier: n };
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === "not_found") return { outcome: judgeInclusion({ found: null, source: "registro del servidor", fromReceipt }), found: null, nullifier: n };
+      throw err;
+    }
+  }
+
   async function check(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setOutcome(null);
+    setResult(null);
     const n = normalizeNullifier(value);
     if (!n) return setError("El código son solo números. Cópialo completo desde tu comprobante.");
+    const run = ++runRef.current;
+    const plan = buildSteps({ anchor, anchorCheck: verified?.anchorCheck });
+    setSteps(plan);
+    setDone(0);
     setLoading(true);
+    // La consulta corre en paralelo con la secuencia: cada paso dura al menos STEP_MS para que se vea.
+    const work = lookup(n);
+    work.catch(() => undefined);
     try {
-      if (verified) {
-        setOutcome(judgeInclusion({ found: findNullifier(verified.ledger, n), source: "paquete verificado", fromReceipt }));
-      } else {
-        const ledger = await apiV1.getLedger(electionId);
-        if (ledger.entries.length > 0 || ledger.proofsPublished !== false) {
-          setOutcome(judgeInclusion({ found: findNullifier(ledger.entries, n), source: "ledger publicado", fromReceipt }));
-        } else {
-          // Durante la votación el ledger no publica entradas (threat model C3): se consulta el recibo por nullifier.
-          try {
-            const inc = await apiV1.getInclusion(electionId, n);
-            setOutcome(judgeInclusion({ found: { idx: inc.index }, source: "registro del servidor", fromReceipt }));
-          } catch (err) {
-            if (err instanceof ApiClientError && err.code === "not_found") setOutcome(judgeInclusion({ found: null, source: "registro del servidor", fromReceipt }));
-            else throw err;
-          }
-        }
+      for (let i = 0; i < plan.length; i++) {
+        await sleep(STEP_MS);
+        if (runRef.current !== run) return;
+        setDone(i + 1);
       }
+      const r = await work;
+      if (runRef.current !== run) return;
+      setResult(r);
     } catch (err) {
+      if (runRef.current !== run) return;
+      setSteps(null);
       setError(describeError(err));
     } finally {
-      setLoading(false);
+      if (runRef.current === run) setLoading(false);
     }
   }
+
+  const anchorUrl = anchor ? basescanTxUrl(anchor.chainId, anchor.txHash) : null;
 
   return (
     <Card id="mi-voto">
@@ -124,17 +189,158 @@ export function MyVoteCheck({ electionId, verified }: { electionId: string; veri
               {error}
             </Alert>
           ) : null}
-          {outcome ? (
-            <div role="status" aria-live="polite" className="flex flex-col gap-1 rounded-md border border-border p-3" data-testid="my-vote-result">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusPill status={outcome.status} />
-                <span className="font-semibold">{outcome.title}</span>
-              </div>
-              <p className="text-small text-muted-foreground">{outcome.body}</p>
-            </div>
-          ) : null}
+          <div role="status" aria-live="polite" className="flex flex-col gap-3">
+            {steps ? <StepList steps={steps} done={done} finished={result !== null} /> : null}
+            {result ? <ResultCard result={result} anchor={anchor} anchorUrl={anchorUrl} anchorCheck={verified?.anchorCheck ?? null} /> : null}
+          </div>
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+/* ---------- Secuencia de pasos ---------- */
+
+function StepList({ steps, done, finished }: { steps: Step[]; done: number; finished: boolean }) {
+  return (
+    <ol className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3 text-small" data-testid="my-vote-steps" aria-label="Pasos de la comprobación">
+      {steps.map((s, i) => {
+        const state: "pending" | "active" | "done" = i < done ? "done" : i === done && !finished ? "active" : "pending";
+        if (state === "pending") return null;
+        return (
+          <li key={s.label} className="q-step-in flex items-center gap-3" data-step-state={state} data-step-mark={state === "done" ? s.mark : undefined}>
+            <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
+              {state === "active" ? (
+                <span className="q-step-dot block size-2.5 rounded-full bg-primary" />
+              ) : s.mark === "ok" ? (
+                <Check className="size-4 text-success-strong" strokeWidth={3} />
+              ) : s.mark === "fail" ? (
+                <X className="size-4 text-danger-strong" strokeWidth={3} />
+              ) : (
+                <Minus className="size-4 text-warning-strong" strokeWidth={3} />
+              )}
+            </span>
+            <span className={cn(state === "active" ? "font-semibold" : "text-muted-foreground")}>
+              {s.label}
+              {state === "active" ? "…" : ""}
+            </span>
+            <span className="sr-only">{state === "active" ? "en curso" : s.mark === "ok" ? "listo" : s.mark === "fail" ? "fallo detectado" : "no evaluado"}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/* ---------- Resultado: estado honesto + código, hash, posición y sello ---------- */
+
+function ResultCard({ result, anchor, anchorUrl, anchorCheck }: { result: Result; anchor: AnchorInfo | null; anchorUrl: string | null; anchorCheck: AnchorCheck | null }) {
+  const { outcome, found, nullifier } = result;
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border p-3" data-testid="my-vote-result" data-status={outcome.status}>
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill status={outcome.status} />
+          <span className="font-semibold">{outcome.title}</span>
+        </div>
+        <p className="text-small text-muted-foreground">{outcome.body}</p>
+      </div>
+
+      <dl className="flex flex-col gap-2">
+        <MonoRow label="Código del comprobante" value={nullifier} testId="my-vote-code" />
+        {found ? (
+          <>
+            <MonoRow
+              label="Hash de tu boleta en el registro"
+              value={found.hash ?? null}
+              note={found.hashFromReceipt ? "según el comprobante de este teléfono" : undefined}
+              empty="El registro aún no publica el hash; se verá al cierre."
+              testId="my-vote-hash"
+            />
+            <MonoRow label="Posición" value={typeof found.idx === "number" && found.idx >= 0 ? `#${found.idx}` : null} empty="Sin posición publicada" testId="my-vote-index" copy={false} />
+          </>
+        ) : null}
+      </dl>
+
+      <AnchorBlock anchor={anchor} anchorUrl={anchorUrl} anchorCheck={anchorCheck} included={outcome.status === "incluido"} />
+    </div>
+  );
+}
+
+function MonoRow({ label, value, note, empty, testId, copy = true }: { label: string; value: string | null; note?: string; empty?: string; testId: string; copy?: boolean }) {
+  const [copied, setCopied] = useState<"ok" | "fail" | null>(null);
+  async function onCopy() {
+    if (!value) return;
+    const ok = await copyText(value);
+    setCopied(ok ? "ok" : "fail");
+    setTimeout(() => setCopied(null), 2000);
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <dt className="text-small text-muted-foreground">
+        {label}
+        {note ? <span className="ml-1 text-subtle">· {note}</span> : null}
+      </dt>
+      <dd className="flex items-start gap-2">
+        {value ? (
+          <>
+            <span className="q-mono min-w-0 flex-1 break-all rounded-md border border-border bg-muted px-2 py-2 text-small" data-testid={testId}>
+              {value}
+            </span>
+            {copy ? (
+              <Button type="button" variant="ghost" size="sm" onClick={onCopy} aria-label={`Copiar ${label.toLowerCase()}`} className="min-w-tap shrink-0 px-3">
+                {copied === "ok" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                <span className="sr-only sm:not-sr-only">{copied === "ok" ? "Copiado" : copied === "fail" ? "No se pudo" : "Copiar"}</span>
+              </Button>
+            ) : null}
+          </>
+        ) : (
+          <span className="text-small text-muted-foreground" data-testid={testId}>
+            {empty ?? "—"}
+          </span>
+        )}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * Sello del registro. Lo único on-chain es el `finalHash` del registro, anclado al cerrar (D-13); la boleta NO va a la
+ * cadena. «Coincide» sólo cuando el verificador del navegador evaluó `anchor_matches` como verificado.
+ */
+function AnchorBlock({ anchor, anchorUrl, anchorCheck, included }: { anchor: AnchorInfo | null; anchorUrl: string | null; anchorCheck: AnchorCheck | null; included: boolean }) {
+  if (!anchor) {
+    return (
+      <p className="text-small text-muted-foreground" data-testid="my-vote-anchor">
+        <span className="font-semibold text-foreground">Sello:</span> el sello se publica al cerrar la votación.
+      </p>
+    );
+  }
+  const line =
+    anchorCheck === "verificado"
+      ? "Tu teléfono comprobó que el sello coincide con el registro."
+      : anchorCheck === "fallo detectado"
+        ? "El sello publicado no coincide con el registro que verificó tu teléfono."
+        : "Sello publicado · no evaluado por tu teléfono (toca «Verificar ahora»).";
+  return (
+    <div className="flex flex-col gap-1.5 text-small" data-testid="my-vote-anchor" data-anchor-check={anchorCheck ?? "no verificable"}>
+      <p>
+        <span className="font-semibold">Sello:</span> {included ? "el registro donde está tu boleta" : "el registro"} quedó sellado en Base Sepolia.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {anchorCheck === "fallo detectado" ? <StatusPill status="fallo detectado" size="sm" /> : null}
+        <span className="text-muted-foreground">{line}</span>
+      </div>
+      {anchorUrl ? (
+        <a href={anchorUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-tap w-fit items-center gap-2 font-semibold underline underline-offset-4" data-testid="my-vote-anchor-link">
+          <ExternalLink className="size-4" aria-hidden="true" />
+          Ver transacción en Basescan <span className="q-mono font-normal">{shortHash(anchor.txHash, 10, 6)}</span>
+        </a>
+      ) : (
+        <span className="q-mono break-all" data-testid="my-vote-anchor-tx">
+          Transacción {anchor.txHash} (cadena {anchor.chainId})
+        </span>
+      )}
+    </div>
   );
 }
