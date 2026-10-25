@@ -9,7 +9,9 @@ import { compressOptionImage, OptionImageError } from "@/lib/client/optionImage"
 import { DEFAULT_ELIGIBILITY } from "@/components/org/EligibilityPicker";
 import { inMinutes, whatsappHref } from "@/components/org/ReadyScreen";
 import { isoForTime } from "@/components/org/StartTimePicker";
-import { cockpitPhase } from "@/components/org/OrgPanel";
+import { cockpitPhase, OrgPanel } from "@/components/org/OrgPanel";
+import { ContinuousCard } from "@/components/org/ContinuousCard";
+import { roomApi } from "@/lib/client/room";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }) }));
 // Foto de opción: el recorte/compresión usa canvas (no existe en jsdom); se simula la data URI resultante.
@@ -19,9 +21,15 @@ vi.mock("@/lib/client/apiV1", () => ({
     createElection: vi.fn(async (body: { title: string }) => ({ id: "el-fixture", title: body.title, organizerToken: "org-token-fixture" })),
     addVoters: vi.fn(async () => ({ voters: [] })),
     publish: vi.fn(async () => ({})),
+    // Panel cerrado: cada test fija getElection / getTally / getAudit.
+    getElection: vi.fn(),
+    getTally: vi.fn(),
+    getAudit: vi.fn(),
+    listVoters: vi.fn(async () => ({ voters: [], counts: { total: 9, withIdentity: 9, invited: 0, registered: 2, voted: 7 } })),
+    listReviews: vi.fn(async () => ({ reviews: [] })),
   },
 }));
-vi.mock("@/lib/client/room", async (orig) => ({ ...(await orig<typeof import("@/lib/client/room")>()), roomApi: { open: vi.fn(async () => ({})) } }));
+vi.mock("@/lib/client/room", async (orig) => ({ ...(await orig<typeof import("@/lib/client/room")>()), roomApi: { open: vi.fn(async () => ({})), status: vi.fn(async () => ({ open: false })) } }));
 
 afterEach(cleanup);
 
@@ -168,5 +176,97 @@ describe("panel cabina", () => {
     expect(hmsText(97 * 60_000 + 5_000)).toBe("1:37:05");
     expect(hmsText(65_000)).toBe("0:01:05");
     expect(hmsText(-5)).toBe("0:00:00");
+  });
+});
+
+/* ---------- Panel cerrado: la misma carta del ganador que /live, con el veredicto real de GET /audit ---------- */
+
+const closedElection = (status: "auditable" | "failed") => ({
+  id: "el-1",
+  title: "Fixture: ¿qué mejora del espacio financia el fondo simulado?",
+  kind: "multiple",
+  status,
+  options: [
+    { id: "o0", label: "Opción 1" },
+    { id: "o1", label: "Opción 2", subtitle: "Cancha" },
+    { id: "o2", label: "Opción 3" },
+  ],
+  candidates: [],
+  endsAt: "2026-10-24T22:00:00.000Z",
+});
+const auditFixture = (valid: boolean) => ({
+  auditResult: { electionId: "el-1", verifierVersion: "fixture-0.0.0", protocol: "semaphore-ledger", inputArtifactDigest: `sha256:${"7e".repeat(32)}`, checkedAt: "2026-10-24T22:01:00.000Z", valid, checks: [], unsupportedGuarantees: [] },
+  packageDigest: null,
+  anchorStatus: null,
+});
+
+describe("panel cerrado", () => {
+  it("auditable con audit.valid: carta del ganador con nombre, subtítulo y «Resultado verificado» del verificador; la línea «Ganó» no repite las tarjetas", async () => {
+    vi.mocked(apiV1.getElection).mockResolvedValue(closedElection("auditable") as never);
+    vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([1, 3, 2], 6), status: "auditable" } as never);
+    vi.mocked(apiV1.getAudit).mockResolvedValue(auditFixture(true) as never);
+    render(<OrgPanel electionId="el-1" />);
+    const win = await screen.findByTestId("winner-screen");
+    expect(win.getAttribute("data-outcome")).toBe("winner");
+    expect(screen.getByTestId("winner-name").textContent).toBe("Opción 2");
+    expect(win.textContent).toContain("Cancha"); // subtítulo cruzado por id con las opciones de la elección
+    await waitFor(() => expect(screen.getByTestId("winner-verdict").textContent).toContain("Resultado verificado"));
+    expect(win.textContent).toContain("semaphore-ledger · verificador fixture-0.0.0 · entrada");
+    expect(apiV1.getAudit).toHaveBeenCalledWith("el-1");
+    // Debajo: solo la línea «Ganó X por N votos» con la tabla accesible; el ranking con fotos ya está en la carta.
+    const box = screen.getByTestId("live-breakdown");
+    expect(box.getAttribute("data-headline-only")).toBe("true");
+    expect(screen.getByTestId("live-leader").textContent).toBe("GanóOpción 2por 1 voto");
+    expect(box.textContent).toContain("Se confirma con el verificador");
+    expect(box.querySelectorAll("[data-testid=ranked-card]").length).toBe(0);
+    expect(Array.from(box.querySelectorAll("tbody th")).map((t) => t.textContent)).toEqual(["Opción 2", "Opción 3", "Opción 1"]);
+    expect(screen.getByTestId("org-turnout")).toBeTruthy();
+  });
+
+  it("auditable sin respuesta del verificador (404): la carta sale «pendiente de comprobar», nunca «verificado»", async () => {
+    vi.mocked(apiV1.getElection).mockResolvedValue(closedElection("auditable") as never);
+    vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([1, 3, 2], 6), status: "auditable" } as never);
+    vi.mocked(apiV1.getAudit).mockRejectedValue(new Error("not_found"));
+    render(<OrgPanel electionId="el-1" />);
+    const win = await screen.findByTestId("winner-screen");
+    await waitFor(() => expect(apiV1.getAudit).toHaveBeenCalled());
+    expect(screen.getByTestId("winner-verdict").textContent).toContain("pendiente de comprobar");
+    expect(win.textContent).not.toMatch(/\bverificado\b/i);
+  });
+
+  it("failed: «Fallo detectado», sin winner-name ni «verificado»", async () => {
+    vi.mocked(apiV1.getElection).mockResolvedValue(closedElection("failed") as never);
+    vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([1, 3, 2], 6), status: "failed" } as never);
+    vi.mocked(apiV1.getAudit).mockResolvedValue(auditFixture(false) as never);
+    render(<OrgPanel electionId="el-1" />);
+    const win = await screen.findByTestId("winner-screen");
+    expect(win.getAttribute("data-outcome")).toBe("failed");
+    expect(win.textContent).toContain("Fallo detectado");
+    expect(screen.queryByTestId("winner-name")).toBeNull();
+    expect(win.textContent).not.toMatch(/\bverificado\b/i);
+    expect(screen.getByText("La verificación falló: el resultado se publica con el error.")).toBeTruthy();
+    // La línea de abajo no contradice la carta: sin «Ganó», píldora «Fallo detectado».
+    const box = screen.getByTestId("live-breakdown");
+    expect(screen.getByTestId("live-leader").textContent).toBe("Resultado");
+    expect(box.textContent).toContain("Fallo detectado: no hay ganador");
+    expect(box.textContent).not.toContain("Se confirma con el verificador");
+  });
+});
+
+/* ---------- Votación al instante (continuo, open): QR grande de la sala encima del enlace ---------- */
+
+describe("ContinuousCard", () => {
+  it("en open con la sala abierta muestra el QR del joinUrl (data-qr-value termina en /j/<código>), el código, el enlace y «Copiar enlace»", async () => {
+    vi.mocked(roomApi.status).mockResolvedValue({ electionId: "el-1", open: true, roomCode: "K7M3QP", joinUrl: "http://localhost:3000/j/K7M3QP", seatsTaken: 3, maxSeats: 500, expiresAt: "2026-10-24T22:00:00.000Z", closedReason: null } as never);
+    vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([null, null], 1), eligible: 3 } as never);
+    render(<ContinuousCard election={{ id: "el-1", title: "Fixture", status: "open", votingMode: "continuous", options: [] } as never} hasToken onChanged={() => {}} />);
+    const qr = await screen.findByTestId("qr");
+    expect(qr.getAttribute("data-qr-value")).toMatch(/\/j\/K7M3QP$/);
+    expect(qr.getAttribute("aria-label")).toBe("Código QR para entrar a la sala K7M3QP");
+    expect(screen.getByTestId("room-code").textContent).toBe("K7M3QP");
+    expect(screen.getByTestId("room-join-url").textContent).toBe("http://localhost:3000/j/K7M3QP");
+    expect(screen.getByRole("button", { name: "Copiar enlace" })).toBeTruthy();
+    // El QR va encima del enlace.
+    expect(screen.getByTestId("continuous-qr").compareDocumentPosition(screen.getByTestId("room-join-url")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

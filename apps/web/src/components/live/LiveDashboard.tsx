@@ -11,9 +11,10 @@ import { WinnerScreen } from "@/components/results/WinnerScreen";
 import { Backdrop } from "@/components/ui/backdrop";
 import { api, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import type { Aggregates, AuditResult, ElectionStatus as ElectionPhase, Option } from "@quorum/contracts";
+import type { Aggregates, ElectionStatus as ElectionPhase, Option } from "@quorum/contracts";
 import { defaultLayout } from "@/lib/client/fixtures";
 import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
+import { useAuditResult } from "@/lib/client/useAuditResult";
 import { PageHeader } from "@/components/ui/page-header";
 import { Alert } from "@/components/ui/alert";
 
@@ -30,8 +31,6 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
   const [layout, setLayout] = useState<LiveLayout | null>(null);
   const [data, setData] = useState<Aggregates | null>(null);
   const [phase, setPhase] = useState<ElectionPhase | null>(null);
-  const [audit, setAudit] = useState<AuditResult | null>(null);
-  const auditFor = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const timer = useRef<number | null>(null);
@@ -43,16 +42,6 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
       setPhase(t.status);
       setError(null);
       setUpdatedAt(Date.now());
-      // Al cierre: el veredicto viene del verificador real (método, versión y huella), nunca de un booleano local.
-      if (hasAuditPackage(t.status) && auditFor.current !== t.status) {
-        auditFor.current = t.status;
-        try {
-          const a = await apiV1.getAudit(electionId);
-          setAudit(a.auditResult);
-        } catch {
-          setAudit(null);
-        }
-      }
     } catch (e) {
       setError(describeError(e));
     }
@@ -103,6 +92,8 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
 
   const extraTiles = layout?.tiles.filter((t) => t.type === "donut" || t.type === "text") ?? [];
   const cols = extraTiles.length >= 2 ? "md:grid-cols-2" : "md:grid-cols-1";
+  // Al cierre: el veredicto viene del verificador real (método, versión y huella), nunca de un booleano local.
+  const audit = useAuditResult(electionId, data?.status ?? null);
   const byId = new Map(options.map((o) => [o.id, o]));
   const withPhotos = data ? data.options.map((o) => ({ ...o, subtitle: byId.get(o.id)?.subtitle, image: byId.get(o.id)?.image })) : [];
   const breakdown = data ? data.totalVotes >= MIN_VOTES_FOR_BREAKDOWN && withPhotos.length > 0 && withPhotos.every((o) => o.count !== null) : false;

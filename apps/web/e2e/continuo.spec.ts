@@ -97,6 +97,12 @@ test.describe("modo continuo (mocks)", () => {
     await card.getByTestId("continuous-close").click();
     await card.getByTestId("continuous-confirm").click();
     await expect.poll(() => mock.phase).toBe("auditable");
+    // Panel cerrado: la misma carta del ganador que /live (aquí «sin desglose»: el mock continuo publica count: null) y sin «verificado» (GET /audit → 404).
+    const win = page.getByTestId("winner-screen");
+    await expect(win).toBeVisible({ timeout: 8000 });
+    await expect(win).toHaveAttribute("data-outcome", "hidden");
+    await expect(win.getByTestId("winner-verdict")).toContainText("pendiente de comprobar");
+    await expect(page.getByTestId("live-breakdown")).toHaveAttribute("data-headline-only", "true");
   });
 
 });

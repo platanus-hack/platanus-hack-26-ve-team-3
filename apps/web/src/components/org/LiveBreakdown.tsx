@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Eye } from "lucide-react";
+import { Clock, Eye, TriangleAlert } from "lucide-react";
 import { MIN_VOTES_FOR_BREAKDOWN, type Aggregates, type Option } from "@quorum/contracts";
 import { formatInt, formatPercent } from "@/lib/client/format";
 import { cn } from "@/lib/client/cn";
@@ -27,7 +27,11 @@ const joinEs = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, 
  * sin foto, la inicial), porcentaje en aqua `#004466`; nunca naranja para datos. Con `count: null` (menos de 5 votos)
  * no hay desglose: barras fantasma y «N de 5 votos · se publica desde 5».
  */
-export function LiveBreakdown({ tally, options, final = false, className }: { tally: Aggregates | null; options?: Option[]; final?: boolean; className?: string }) {
+/**
+ * `headlineOnly`: solo la línea «Ganó X por N votos» (o empate / sin desglose) con la píldora y la tabla accesible, sin las
+ * tarjetas: para el panel cerrado, donde la carta del ganador (`WinnerScreen`) ya trae el ranking con fotos.
+ */
+export function LiveBreakdown({ tally, options, final = false, headlineOnly = false, className }: { tally: Aggregates | null; options?: Option[]; final?: boolean; headlineOnly?: boolean; className?: string }) {
   const card = "flex flex-col gap-4 rounded-[1.5rem] bg-card p-[1.125rem] shadow-[0_0_0_1px_rgb(17_17_34/0.05),0_1px_3px_rgb(17_17_34/0.05),0_22px_44px_-26px_rgb(0_68_102/0.32)] lg:p-6";
   if (!tally) {
     return (
@@ -43,8 +47,15 @@ export function LiveBreakdown({ tally, options, final = false, className }: { ta
   const hidden = tally.options.length === 0 || tally.options.some((o) => o.count === null);
   const rows: Row[] = tally.options.map((o) => ({ id: o.id, label: o.label, count: o.count ?? 0 })).sort((a, b) => b.count - a.count);
   const byId = new Map((options ?? []).map((o) => [o.id, o]));
-  const lead = hidden ? null : leaderOf(rows);
-  const pill = (
+  // `failed` (el verificador rechazó el paquete): se publican las cifras con el error, sin «Ganó» ni ganador.
+  const failed = final && tally.status === "failed";
+  const lead = hidden || failed ? null : leaderOf(rows);
+  const pill = failed ? (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-danger-soft px-2.5 py-1 text-[0.75rem] font-semibold text-danger-strong">
+      <TriangleAlert className="size-3.5" aria-hidden="true" />
+      Fallo detectado: no hay ganador
+    </span>
+  ) : (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-muted px-2.5 py-1 text-[0.75rem] font-semibold text-muted-foreground">
       <Clock className="size-3.5" aria-hidden="true" />
       {final ? "Se confirma con el verificador" : "Preliminar · se confirma al cerrar"}
@@ -52,7 +63,7 @@ export function LiveBreakdown({ tally, options, final = false, className }: { ta
   );
 
   return (
-    <section data-testid="live-breakdown" aria-labelledby="live-breakdown-title" className={cn(card, className)}>
+    <section data-testid="live-breakdown" data-headline-only={headlineOnly || undefined} aria-labelledby="live-breakdown-title" className={cn(card, headlineOnly && "gap-2", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <h2 id="live-breakdown-title" className="inline-flex flex-wrap items-center gap-2 text-small font-semibold text-muted-foreground" data-testid="live-leader" aria-live="polite">
           {hidden || !lead ? (
@@ -70,7 +81,33 @@ export function LiveBreakdown({ tally, options, final = false, className }: { ta
         {pill}
       </div>
 
-      {hidden ? (
+      {headlineOnly ? (
+        hidden ? (
+          <p className="text-small text-muted-foreground">
+            {formatInt(Math.min(total, MIN_VOTES_FOR_BREAKDOWN))} de {MIN_VOTES_FOR_BREAKDOWN} votos · se publica desde {MIN_VOTES_FOR_BREAKDOWN}, para que nadie deduzca qué votó cada quien.
+          </p>
+        ) : (
+          <table className="sr-only">
+            <caption>Votos por opción, de mayor a menor</caption>
+            <thead>
+              <tr>
+                <th scope="col">Opción</th>
+                <th scope="col">Votos</th>
+                <th scope="col">Porcentaje</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <th scope="row">{r.label}</th>
+                  <td>{formatInt(r.count)}</td>
+                  <td>{formatPercent(total ? r.count / total : 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      ) : hidden ? (
         <div className="relative">
           <ul aria-hidden="true" className="flex flex-col gap-3 opacity-40">
             {tally.options.map((o) => (
