@@ -19,8 +19,10 @@ test.describe("sala abierta · /j/[roomCode]", () => {
 
     await page.goto(`/j/${CODE.toLowerCase()}`);
     await expect(page.getByRole("heading", { name: E2E.title })).toBeVisible();
-    await expect(page.getByTestId("room-seats")).toContainText("26 de 60 lugares");
-    await expect(page.getByText(/La entrada cierra en \d+:\d{2}/)).toBeVisible();
+    // Sin contador de lugares: solo el título y "La entrada cierra en …" (gris, pequeño).
+    await expect(page.getByTestId("room-closes-in")).toHaveText(/^La entrada cierra en \d+:\d{2}$/);
+    expect(await page.locator("main").textContent()).not.toMatch(/lugares/);
+    await expect(page.getByText("Cómo usamos tu cámara")).toBeVisible();
     // Precarga de lo pesado mientras escribe el alias: service worker + Cache Storage (localhost es contexto seguro).
     await expect(page.locator("html")).toHaveAttribute("data-heavy-prefetch", "service-worker", { timeout: 20_000 });
     const cached = await page.evaluate(async () => (await (await caches.open("quorum-heavy-v2")).keys()).map((r) => new URL(r.url).pathname));
@@ -48,7 +50,8 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     expect(JSON.parse(stored!).inviteToken).toBe(E2E.token);
 
     // Ya aceptó en /j: no se repite el consentimiento; el paso 2 (rostro) arranca solo y la vinculación también.
-    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("waiting-enrolled")).toContainText("Ya estás inscrito");
     expect(mock.commitment).toMatch(/^\d+$/);
 
     await page.goto(`/j/${CODE}`);
@@ -56,7 +59,7 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     await page.getByTestId("room-resume").getByRole("button", { name: "Continuar" }).click();
     await page.waitForURL(`**/v/${E2E.token}`);
     expect(mock.joins).toHaveLength(1);
-    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible();
   });
 
   test("sala llena → modo observador (ver en vivo, verificar, sorteo)", async ({ page }) => {

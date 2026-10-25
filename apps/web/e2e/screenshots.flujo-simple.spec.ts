@@ -82,7 +82,7 @@ test("vinculando → listo → boleta → enviando → comprobante", async ({ pa
   await expect(page.getByTestId("linking")).toBeVisible();
   await page.waitForTimeout(300);
   await shot(page, "07-vinculando");
-  await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 30_000 });
   await shot(page, "08-listo");
   mock.phase = "open";
   await page.getByRole("radio", { name: /3$/ }).click({ timeout: 15_000 });

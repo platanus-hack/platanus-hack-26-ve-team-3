@@ -13,7 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/client/cn";
 import { voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { countdownText, formatStartTime, spokenCountdown, timed, useCountdown, useServerClock } from "@/lib/client/clock";
+import { countdownText, spokenCountdown, timed, useCountdown, useServerClock } from "@/lib/client/clock";
 import { formatDate } from "@/lib/client/format";
 import { clearPendingFace, savePendingFace } from "@/lib/client/identityVault";
 import { linkThisPhone, type LinkProgress, type LinkResult } from "@/lib/client/linkPhone";
@@ -27,7 +27,7 @@ import { SuccessMark } from "@/components/ui/success-mark";
 import { rememberVoterLink } from "@/lib/client/myElections";
 import { readLocal, type Local } from "@/lib/client/voterAccess";
 import { Glass } from "@/components/ui/glass";
-import { NextSteps } from "@/components/ui/next-steps";
+import { WaitingPulse } from "./WaitingPulse";
 
 type ReceiptV1 = z.infer<typeof Receipt>;
 
@@ -230,7 +230,7 @@ export function VoterFlow({ token }: { token: string }) {
           <HumanPreloader />
           <h1 className="text-title font-bold leading-tight">{title}</h1>
           {invite.voter.displayName ? <p className="text-muted-foreground">Hola, {invite.voter.displayName}.</p> : null}
-          <Consent />
+          <Consent compact />
           <Button size="lg" full className="min-h-14 text-title" onClick={() => setView("face")}>
             Continuar
           </Button>
@@ -293,28 +293,22 @@ export function VoterFlow({ token }: { token: string }) {
       );
     }
 
-    case "waiting":
+    case "waiting": {
+      // Hora programada mientras siga vigente; si pasó más de un minuto sin abrir, se dice que la abrirá el organizador.
+      const scheduled = startsAt && (left === null || left > -LATE_MS) ? startsAt : null;
       return (
         <VoterShell className="items-center text-center">
-          <SuccessMark small />
-          <div>
-            <h1 className="text-display font-bold tracking-tight">¡Listo! Ya estás inscrito.</h1>
-            <p className="mt-2 line-clamp-2 text-body text-muted-foreground">{title}</p>
-          </div>
-          <WaitingCountdown startsAt={startsAt} left={left} />
+          <p className="flex items-center gap-2 text-heading font-semibold" data-testid="waiting-enrolled">
+            <SuccessMark className="size-8 [&>svg]:size-5" /> Ya estás inscrito
+          </p>
+          <p className="line-clamp-2 text-body text-muted-foreground">{title}</p>
+          <WaitingPulse mode="phased" startsAt={scheduled}>
+            <WaitingCountdown startsAt={startsAt} left={left} />
+          </WaitingPulse>
           <p className="text-body text-muted-foreground">Deja esta página abierta: la boleta aparecerá aquí sola.</p>
-          <Glass className="w-full p-5">
-            <p className="q-eyebrow mb-4 text-left">Qué sigue</p>
-            <NextSteps
-              steps={[
-                { label: "Te inscribiste", hint: "Este teléfono quedó listo para votar.", state: "done" },
-                { label: "El organizador abre la votación", state: "current" },
-                { label: "Votas en dos toques", hint: "Recibes un comprobante sin tu opción.", state: "todo" },
-              ]}
-            />
-          </Glass>
         </VoterShell>
       );
+    }
 
     case "ballot":
       return (
@@ -397,9 +391,10 @@ export function VoterFlow({ token }: { token: string }) {
 }
 
 /**
- * Debajo de "¡Listo!": "La votación empieza en 04:32" (en vivo), "Abriendo la votación…" al llegar a 0, o
- * "Esperando que el organizador abra la votación…" si no hay hora programada (o si pasó un minuto y no abrió).
- * El número no se anuncia cada segundo: el lector de pantalla oye los minutos que faltan.
+ * Dentro de la espera animada (WaitingPulse): "La votación empieza en 04:32" (en vivo), "Abriendo la votación…" al
+ * llegar a 0, o "Esperando que el organizador abra la votación…" si no hay hora programada (o si pasó un minuto y no
+ * abrió). La hora programada la dice el WaitingPulse ("Empieza a las …"). El número no se anuncia cada segundo: el
+ * lector de pantalla oye los minutos que faltan.
  */
 function WaitingCountdown({ startsAt, left }: { startsAt: string | null; left: number | null }) {
   const state = !startsAt || left === null ? "manual" : left > 0 ? "counting" : left > -LATE_MS ? "opening" : "manual";
@@ -411,7 +406,6 @@ function WaitingCountdown({ startsAt, left }: { startsAt: string | null; left: n
           <p className="q-num text-[clamp(3.5rem,18vw,5.5rem)] font-semibold leading-none" role="timer" aria-hidden="true" data-testid="countdown-value">
             {countdownText(left)}
           </p>
-          <p className="text-base text-muted-foreground">a las {formatStartTime(startsAt!)}</p>
           <p className="sr-only" role="status" aria-live="polite">
             La votación empieza en {spokenCountdown(left)}
           </p>

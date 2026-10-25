@@ -49,7 +49,9 @@ test("votante: inscripción en ≤ 2 toques (+ nombre + cámara) y voto en ≤ 2
   await page.keyboard.type("Vecina del 4B"); // escribir
   await page.getByRole("button", { name: "Continuar" }).click(); // toque 2
   // Paso 2: la cámara arranca sola (aquí, rostro simulado de E2E sin botón) y la vinculación corre en segundo plano.
-  await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("waiting-enrolled")).toContainText("Ya estás inscrito");
+  await expect(page.getByTestId("waiting-pulse-detail")).toHaveText("El organizador la abrirá");
   const registrationTaps = await taps(page);
   expect(registrationTaps).toBeLessThanOrEqual(2);
   await expectPlainLanguage(page);
@@ -60,6 +62,7 @@ test("votante: inscripción en ≤ 2 toques (+ nombre + cámara) y voto en ≤ 2
   mock.votingStartsAt = new Date(Date.now() + 9_000).toISOString();
   await expect(page.getByTestId("countdown-value")).toHaveText(/^00:0\d$/, { timeout: 10_000 });
   await expect(page.getByTestId("voting-countdown")).toContainText("La votación empieza en");
+  await expect(page.getByTestId("waiting-pulse-detail")).toHaveText(/^Empieza a las \d{1,2}:\d{2}/);
   await expectPlainLanguage(page);
 
   /* ---------- Voto ---------- */
@@ -116,9 +119,12 @@ test("modo continuo (al instante): QR → comprobante en ≤ 4 toques (+ nombre 
   const registrationTaps = await taps(page);
   expect(registrationTaps).toBeLessThanOrEqual(2);
 
-  // Aviso de K: frase completa, sin jerga, con el número que falta a la vista y la razón en lenguaje simple.
+  // Aviso de K dentro de la espera animada: cuántas faltan, la frase completa y la razón en lenguaje simple (sin prometer anonimato).
+  await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible();
+  await expect(page.getByTestId("waiting-pulse-detail")).toHaveText("Falta 1 persona para habilitar el voto (ahora 4 de 5)");
   await expect(page.getByTestId("anonymity-gate-text")).toHaveText("Tu voto se habilita cuando haya 5 personas inscritas (ahora 4)");
-  await expect(page.getByTestId("anonymity-gate")).toContainText("Así nadie puede saber qué votaste. Deja esta página abierta: la boleta aparecerá aquí sola.");
+  await expect(page.getByTestId("anonymity-gate")).toContainText("Deja esta página abierta: la boleta aparecerá aquí sola.");
+  expect(await page.getByTestId("anonymity-gate").textContent()).not.toMatch(/anónim|secreto|nadie puede saber/i);
   await expectPlainLanguage(page);
   mock.groupSize = 5;
   const options = page.getByRole("radio");

@@ -53,7 +53,7 @@ test("gemelos con credenciales distintas: el segundo queda en revisión → el o
     await p.goto(`/j/${room.roomCode}`);
     await p.getByRole("button", { name: "Escanear mi credencial" }).click();
     await p.waitForURL(/\/v\/[^/]+$/, { timeout: 30_000 });
-    if (i === 0) await expect(p.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
+    if (i === 0) await expect(p.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 60_000 });
     else {
       // 2) Segunda persona, mismo rostro, credencial propia → revisión (no rechazo).
       await expect(p.getByRole("heading", { name: "Tu caso necesita una revisión rápida." })).toBeVisible({ timeout: 60_000 });
@@ -79,7 +79,7 @@ test("gemelos con credenciales distintas: el segundo queda en revisión → el o
   await expect(card.getByRole("heading", { name: "Casos por revisar (0)" })).toBeVisible();
 
   // 4) El teléfono de la segunda persona sigue solo: vinculación → ¡Listo!
-  await expect(voters[1].p.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
+  await expect(voters[1].p.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 60_000 });
   await expect(org.getByTestId("open-readiness")).toHaveText("2 de 2 listos", { timeout: 15_000 });
 
   // 5) Abrir desde el panel (sin avisos: todos listos y sin casos) y votar desde los dos teléfonos.

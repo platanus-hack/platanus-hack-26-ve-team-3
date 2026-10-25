@@ -21,7 +21,8 @@ test.describe("fase 2 · votante", () => {
 
     // Paso 2: el rostro simulado (sólo E2E) pasa SOLO, sin botón visible; la vinculación corre en segundo plano.
     await expect(page.getByTestId("e2e-fake-face")).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("waiting-enrolled")).toContainText("Ya estás inscrito");
     await expect(page.getByText(/Continuar sin/)).toHaveCount(0); // B3: no hay ruta sin rostro
     expect(mock.wallet?.kind).toBe("eoa-demo");
     expect(mock.wallet?.bindingSignature).toMatch(/^0x[0-9a-f]{130}$/);

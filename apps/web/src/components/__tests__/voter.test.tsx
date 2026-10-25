@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CONSENT_DETAILS, CONSENT_SHORT } from "@/components/voter/Consent";
+import { CONSENT_DETAILS, CONSENT_LINK_LABEL, CONSENT_SHORT } from "@/components/voter/Consent";
 import { VoterFlow } from "@/components/voter/VoterFlow";
+import { WAITING_TITLE } from "@/components/voter/WaitingPulse";
 import { memoryKeyStore, openIdentity, peekIdentity, savePendingFace, setDeviceKeyStore } from "@/lib/client/identityVault";
 
 vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
@@ -51,13 +52,19 @@ afterEach(() => {
 });
 
 describe("VoterFlow · inscripción", () => {
-  it("paso 1 de 2: una sola pantalla con título, consentimiento corto + 'Más detalles' y un solo botón Continuar; sin jerga técnica", async () => {
+  it("paso 1 de 2: una sola pantalla con título, un solo enlace 'Cómo usamos tu cámara' (plegado) y un solo botón Continuar; sin jerga técnica", async () => {
     mockFetch(() => ({ status: 200, body: invite("registration") }));
     const { container } = render(<VoterFlow token="tok" />);
     expect(await screen.findByRole("heading", { level: 1, name: /pintamos el pasillo/ })).toBeTruthy();
     expect(screen.getByTestId("step-indicator").textContent).toContain("Paso 1 de 2");
-    expect(screen.getByTestId("voter-consent").textContent).toContain(CONSENT_SHORT);
-    expect(screen.getByText("Más detalles")).toBeTruthy();
+    // Compacto: el párrafo largo ya no está a la vista; vive dentro del enlace desplegable junto con los detalles.
+    expect(screen.getByText(CONSENT_LINK_LABEL)).toBeTruthy();
+    expect(screen.queryByText("Más detalles")).toBeNull();
+    const consent = screen.getByTestId("voter-consent");
+    expect(consent.textContent).toContain(CONSENT_SHORT);
+    expect(consent.textContent).toContain("Al tocar Continuar, aceptas.");
+    expect(screen.getByText(/Usamos tu cámara para comprobar/).closest("details")).toBeTruthy();
+    expect((screen.getByTestId("consent-link") as HTMLDetailsElement).open).toBe(false);
     const details = screen.getByTestId("consent-details").textContent ?? "";
     expect(details).toContain("descriptor facial");
     expect(details).toContain("se borra al abrir la votación");
@@ -80,9 +87,13 @@ describe("VoterFlow · inscripción", () => {
     });
     const { container } = render(<VoterFlow token="tok" />);
     expect(await screen.findByText("Preparando este teléfono…")).toBeTruthy();
-    expect(await screen.findByText("¡Listo! Ya estás inscrito.", undefined, { timeout: 15_000 })).toBeTruthy();
+    expect(await screen.findByText("Ya estás inscrito", undefined, { timeout: 15_000 })).toBeTruthy();
+    // Espera animada protagonista: título + dato honesto. Sin hora programada: lo dice, sin cuenta regresiva.
+    expect(screen.getByRole("heading", { level: 1, name: WAITING_TITLE })).toBeTruthy();
+    expect(screen.getByTestId("waiting-pulse").dataset.mode).toBe("phased");
+    expect(screen.getByTestId("waiting-pulse-detail").textContent).toBe("El organizador la abrirá");
     expect(screen.getByText(/Deja esta página abierta: la boleta aparecerá aquí sola/)).toBeTruthy();
-    // Sin hora programada: lo dice, sin cuenta regresiva.
+    expect(screen.queryByText("Qué sigue")).toBeNull();
     expect(screen.getByTestId("voting-countdown").textContent).toContain("Esperando que el organizador abra la votación…");
     const linkBody = calls.find((c) => c.url.endsWith("/wallet"))!.body as { kind: string; bindingSignature: string; walletAddress: string };
     wallet = linkBody.walletAddress;
@@ -161,9 +172,12 @@ describe("VoterFlow · espera con cuenta regresiva", () => {
     const serverNow = Date.now() + 3_600_000; // el teléfono va una hora atrasado
     mockFetch(() => ({ status: 200, body: invite("registration", registered, { serverNow: new Date(serverNow).toISOString(), votingStartsAt: new Date(serverNow + 272_500).toISOString() }) }));
     const { container } = render(<VoterFlow token="tok" />);
-    expect(await screen.findByText("¡Listo! Ya estás inscrito.")).toBeTruthy();
+    expect(await screen.findByText("Ya estás inscrito")).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId("countdown-value").textContent).toMatch(/^04:3[23]$/));
     expect(screen.getByTestId("voting-countdown").textContent).toContain("La votación empieza en");
+    // La espera animada dice la hora programada (con fases) y el reloj corre dentro.
+    expect(screen.getByTestId("waiting-pulse-detail").textContent).toMatch(/^Empieza a las \d{1,2}:\d{2}/);
+    expect(screen.getByTestId("waiting-pulse").contains(screen.getByTestId("voting-countdown"))).toBe(true);
     expect(screen.getByTestId("voting-countdown").dataset.state).toBe("counting");
     expect(mainText(container)).not.toMatch(FORBIDDEN);
   });
@@ -183,7 +197,7 @@ describe("VoterFlow · espera con cuenta regresiva", () => {
     const startsAt = new Date(serverNow + 1_200).toISOString();
     mockFetch(() => ({ status: 200, body: invite(phase, registered, { serverNow: new Date().toISOString(), votingStartsAt: startsAt }) }));
     render(<VoterFlow token="tok" />);
-    expect(await screen.findByText("¡Listo! Ya estás inscrito.")).toBeTruthy();
+    expect(await screen.findByText("Ya estás inscrito")).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId("voting-countdown").dataset.state).toBe("opening"), { timeout: 4_000 });
     expect(screen.getByTestId("waiting-status").textContent).toContain("Abriendo la votación…");
     phase = "open";
@@ -216,7 +230,8 @@ describe("VoterFlow · revisión manual (D-21)", () => {
     await waitFor(() => expect(calls.some((c) => c.url.endsWith("/api/face/review"))).toBe(true));
     expect(calls.find((c) => c.url.endsWith("/api/face/review"))!.body).toEqual({ voterId: "v1", inviteToken: "tok" });
     decision = "approved";
-    expect(await screen.findByText("¡Listo! Ya estás inscrito.", undefined, { timeout: 20_000 })).toBeTruthy();
+    expect(await screen.findByText("Ya estás inscrito", undefined, { timeout: 20_000 })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: WAITING_TITLE })).toBeTruthy();
     const linkBody = calls.find((c) => c.url.endsWith("/wallet"))!.body as { bindingSignature: string };
     expect(linkBody.bindingSignature).toMatch(/^0x[0-9a-f]{130}$/);
     // Diagnóstico de la vinculación: etapas en orden, sin token, voterId ni dirección.

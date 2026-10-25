@@ -412,3 +412,57 @@ dialog.q-sheet::backdrop {
   text-wrap: pretty;
   field-sizing: content;
 }
+
+/* ---------- Espera animada (voter/WaitingPulse): ondas concéntricas que pulsan desde el icono central ---------- */
+.q-pulse .q-wave {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  opacity: 0;
+  transform: scale(0.5);
+  animation: q-wave 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  will-change: transform, opacity;
+}
+.q-pulse .q-wave:nth-child(2) {
+  animation-delay: 0.8s;
+}
+.q-pulse .q-wave:nth-child(3) {
+  animation-delay: 1.6s;
+}
+@keyframes q-wave {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+/* Sin movimiento: tres anillos fijos y tenues, mismo significado. */
+@media (prefers-reduced-motion: reduce) {
+  .q-pulse .q-wave {
+    animation: none;
+    transform: scale(0.72);
+    opacity: 0.14;
+  }
+  .q-pulse .q-wave:nth-child(2) {
+    transform: scale(0.94);
+    opacity: 0.09;
+  }
+  .q-pulse .q-wave:nth-child(3) {
+    transform: scale(1.15);
+    opacity: 0.05;
+  }
+}
+
+/* ---------- Resultados: tarjetas ordenadas (RankedCards) ---------- */
+
+/* El deslizamiento al reordenar lo pone el componente (FLIP sobre `transform`); aquí solo el respeto al movimiento reducido. */
+@media (prefers-reduced-motion: reduce) {
+  .q-ranked-card {
+    transition: none !important;
+    transform: none !important;
+  }
+}

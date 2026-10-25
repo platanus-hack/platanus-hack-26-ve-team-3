@@ -32,7 +32,7 @@ test("votante: sin hora → cuenta regresiva → abriendo → boleta → comprob
   await mock.install(page);
   await page.goto(`/v/${E2E.token}`);
   await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("voting-countdown")).toContainText("Esperando que el organizador abra la votación…");
   await shot(page, "01-sin-hora");
 

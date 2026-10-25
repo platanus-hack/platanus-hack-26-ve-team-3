@@ -64,7 +64,11 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
     await expect(scanBtn).toBeVisible();
     const tReady = Date.now();
     await expect(page.getByTestId("step-indicator")).toContainText("Paso 1 de 2");
-    await expect(page.getByText(/Al tocar Escanear mi credencial, aceptas/)).toBeVisible();
+    // Consentimiento compacto: un solo enlace a la vista; la aceptación y los detalles, plegados.
+    await expect(page.getByText("Cómo usamos tu cámara")).toBeVisible();
+    await expect(page.getByText(/Al tocar Escanear mi credencial, aceptas/)).toBeHidden();
+    expect(await page.locator("main").textContent()).toMatch(/Al tocar Escanear mi credencial, aceptas/);
+    await expect(page.getByText("o escribe tu usuario")).toHaveCount(0);
     expect(await page.locator("main").innerText()).not.toMatch(FORBIDDEN_ON_BADGE_PAGE);
     expect(await page.locator("main").textContent()).not.toMatch(FORBIDDEN_ON_BADGE_PAGE);
     await shot(page, "01-inicio");
@@ -77,7 +81,8 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
     await page.waitForURL(`**/v/${E2E.token}`, { timeout: 30_000 });
     const tJoined = Date.now();
     expect(mock.badgeJoins).toEqual(["jgalvis414"]);
-    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("waiting-enrolled")).toContainText("Ya estás inscrito");
     const tDone = Date.now();
     // Espera con cuenta regresiva (inicio programado) y sin jerga (lista completa de voter-taps).
     await expect(page.getByTestId("voting-countdown")).toContainText("La votación empieza en");
@@ -133,20 +138,45 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
     expect(mock.badgeJoins).toEqual(["beto-hack"]);
   });
 
-  test("sin cámara: 'o escribe tu usuario' → desconocida (404) → corregir → entra", async ({ page }) => {
+  test("cámara negada: pide permitirla y 'Escanear otra vez' (sin usuario tecleado) → desconocida (404) → corregir → entra", async ({ page }) => {
     const mock = badgeMock();
     await mock.install(page);
+    await fakeCamera(page, await qrDataUrl(`${PREFIX}nadie-aqui`));
+    // Primero el permiso se niega (NotAllowedError); luego el votante lo permite y vuelve a escanear.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __cameraDenied: boolean };
+      w.__cameraDenied = true;
+      const md = navigator.mediaDevices;
+      const real = md.getUserMedia.bind(md);
+      Object.defineProperty(navigator, "mediaDevices", {
+        value: {
+          enumerateDevices: async () => [],
+          getUserMedia: async (c: MediaStreamConstraints) => {
+            if (w.__cameraDenied) throw Object.assign(new Error("denied"), { name: "NotAllowedError" });
+            return real(c);
+          },
+        },
+        configurable: true,
+      });
+    });
     await page.goto(`/j/${CODE}`);
-    await page.getByRole("button", { name: "o escribe tu usuario" }).click();
-    await page.getByLabel("o escribe tu usuario").fill("nadie-aqui");
-    await shot(page, "04-escribir-usuario");
-    await page.getByRole("button", { name: "Entrar" }).click();
-    await expect(page.getByText("No encontramos esta credencial en el evento.")).toBeVisible();
+    await page.getByRole("button", { name: "Escanear mi credencial" }).click();
+    await expect(page.getByTestId("badge-notice")).toContainText(/Permite el acceso a la cámara/);
+    await expect(page.getByTestId("badge-notice")).toContainText("Escanear otra vez");
+    await expect(page.getByRole("button", { name: "Escanear otra vez" })).toBeVisible();
+    await expect(page.getByText("o escribe tu usuario")).toHaveCount(0);
+    await expect(page.getByRole("textbox")).toHaveCount(0);
+    await shot(page, "04-camara-negada");
+    expect(mock.badgeJoins).toEqual([]);
+
+    await page.evaluate(() => ((window as unknown as { __cameraDenied: boolean }).__cameraDenied = false));
+    await page.getByRole("button", { name: "Escanear otra vez" }).click();
+    await expect(page.getByText("No encontramos esta credencial en el evento.")).toBeVisible({ timeout: 15_000 });
     await shot(page, "05-desconocida");
-    await page.getByLabel("o escribe tu usuario").fill("@jgalvis414");
-    await page.getByRole("button", { name: "Entrar" }).click();
-    await page.waitForURL(`**/v/${E2E.token}`);
-    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
+    await page.evaluate(async (u) => (window as unknown as { __setQr: (x: string) => void }).__setQr(u), await qrDataUrl(`${PREFIX}jgalvis414`));
+    await page.getByRole("button", { name: "Escanear otra vez" }).click();
+    await page.waitForURL(`**/v/${E2E.token}`, { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 60_000 });
     await shot(page, "06-listo");
     expect(mock.badgeJoins).toEqual(["jgalvis414"]);
   });

@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 /**
  * D-19 — escáner de la credencial: decodificación de una imagen QR generada (jsqr), selección BarcodeDetector/jsqr,
- * flujo /j en modo credencial (cámara simulada), alternativa "o escribe tu usuario", errores y selector del organizador.
+ * flujo /j en modo credencial (cámara simulada), cámara negada (sin alternativa tecleada), errores y selector del organizador.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import QRCode from "qrcode";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BADGE_CONSENT_EXTRA } from "@/components/room/BadgeJoin";
+import { BADGE_CONSENT_EXTRA, CAMERA_COPY } from "@/components/room/BadgeJoin";
 import { RoomJoin } from "@/components/room/RoomJoin";
+import { CONSENT_LINK_LABEL } from "@/components/voter/Consent";
 import { DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, parseAllowlist } from "@/components/org/EligibilityPicker";
 import { badgeUrlFromTyped, classifyBadgeError, createQrDetector, decodeQrRgba } from "@/lib/client/badge";
 import { ApiClientError } from "@/lib/client/api";
@@ -129,8 +130,13 @@ describe("/j en modo credencial", () => {
     expect(screen.getByTestId("step-indicator").textContent).toContain("Paso 1 de 2");
     expect(screen.getByRole("button", { name: "Escanear mi credencial" })).toBeTruthy();
     expect(screen.queryByLabelText("Tu nombre o apodo")).toBeNull();
+    // Un solo enlace, plegado; la frase de aceptación y los detalles viven dentro.
+    expect(screen.getByText(CONSENT_LINK_LABEL)).toBeTruthy();
     expect(screen.getByTestId("voter-consent").textContent).toContain("Al tocar Escanear mi credencial, aceptas.");
+    expect(screen.getByText(/Al tocar Escanear mi credencial/).closest("details")).toBeTruthy();
     expect(screen.getByTestId("consent-details").textContent).toContain(BADGE_CONSENT_EXTRA[0]);
+    expect(screen.queryByText("o escribe tu usuario")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
     expect(document.body.textContent).not.toMatch(/wallet|blockchain|semaphore|hmac/i);
   });
 
@@ -164,29 +170,32 @@ describe("/j en modo credencial", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("sin permiso de cámara → aparece 'o escribe tu usuario'; credencial desconocida → 404 claro", async () => {
-    const calls = mockFetch((url) => (url.endsWith("/join-badge") ? { status: 404, body: { code: "badge_unknown", error: "No encontramos esta credencial en el evento." } } : { status: 200, body: info }));
+  it("sin permiso de cámara → pide permitir la cámara y 'Escanear otra vez'; no hay usuario tecleado", async () => {
+    const calls = mockFetch(() => ({ status: 200, body: info }));
     fakeCamera([], { deny: true });
     render(<RoomJoin roomCode="ABC234" />);
     fireEvent.click(await screen.findByRole("button", { name: "Escanear mi credencial" }));
-    expect(await screen.findByText(/Permite el acceso a la cámara/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("o escribe tu usuario"), { target: { value: "@nadie" } });
-    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
-    expect(await screen.findByText("No encontramos esta credencial en el evento.")).toBeTruthy();
-    expect(JSON.parse(String(calls.find((c) => c.url.endsWith("/join-badge"))?.init?.body))).toEqual({ badgeUrl: "https://hack.platan.us/26-ve/id/nadie" });
+    expect((await screen.findByTestId("badge-notice")).textContent).toBe(CAMERA_COPY.denied);
+    expect(CAMERA_COPY.denied).toMatch(/Permite el acceso a la cámara/);
+    expect(CAMERA_COPY.denied).toMatch(/Escanear otra vez/);
+    expect(screen.getByRole("button", { name: "Escanear otra vez" })).toBeTruthy();
+    expect(screen.queryByText("o escribe tu usuario")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Entrar" })).toBeNull();
+    expect(screen.queryByTestId("badge-scanner")).toBeNull();
+    expect(calls.some((c) => c.url.endsWith("/join-badge"))).toBe(false);
+    expect(push).not.toHaveBeenCalled();
   });
 
-  it("escribir el usuario sin cámara: entra y va a /v/<token>; usuario inválido no llama al servidor", async () => {
-    const calls = mockFetch((url) => (url.endsWith("/join-badge") ? { status: 201, body: joined } : { status: 200, body: info }));
+  it("credencial desconocida (404) → mensaje claro y 'Escanear otra vez'", async () => {
+    const calls = mockFetch((url) => (url.endsWith("/join-badge") ? { status: 404, body: { code: "badge_unknown", error: "No encontramos esta credencial en el evento." } } : { status: 200, body: info }));
+    fakeCamera(["https://hack.platan.us/26-ve/id/nadie"]);
     render(<RoomJoin roomCode="ABC234" />);
-    fireEvent.click(await screen.findByRole("button", { name: "o escribe tu usuario" }));
-    fireEvent.change(screen.getByLabelText("o escribe tu usuario"), { target: { value: "no vale!" } });
-    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
-    expect(await screen.findByText(/Escribe tu usuario tal como aparece/)).toBeTruthy();
-    expect(calls.some((c) => c.url.endsWith("/join-badge"))).toBe(false);
-    fireEvent.change(screen.getByLabelText("o escribe tu usuario"), { target: { value: "jgalvis414" } });
-    fireEvent.click(screen.getByRole("button", { name: "Entrar" }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/v/tok-badge"));
+    fireEvent.click(await screen.findByRole("button", { name: "Escanear mi credencial" }));
+    expect(await screen.findByText("No encontramos esta credencial en el evento.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Escanear otra vez" })).toBeTruthy();
+    expect(JSON.parse(String(calls.find((c) => c.url.endsWith("/join-badge"))?.init?.body))).toEqual({ badgeUrl: "https://hack.platan.us/26-ve/id/nadie" });
+    expect(push).not.toHaveBeenCalled();
   });
 });
 

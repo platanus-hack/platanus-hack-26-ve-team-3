@@ -119,7 +119,7 @@ test("peso por teléfono: inscripción (Human real) + voto (Groth16) en un Pixel
 
   // 2) Completar la inscripción (la cámara falsa no tiene rostro) y votar con prueba real.
   await page.evaluate(() => (window as unknown as { __quorumFakeFace: () => Promise<void> }).__quorumFakeFace());
-  await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 30_000 });
   expect((await request.post(`/api/elections/${id}/open`, { headers: auth })).status()).toBe(200);
   // La página en espera pasa sola a la boleta (polling), sin volver a la wallet.
   await page.getByRole("radio", { name: /Sí$/ }).click({ timeout: 20_000 });

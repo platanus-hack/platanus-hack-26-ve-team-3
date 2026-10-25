@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { qrPath } from "@/components/room/QrCode";
 import { ROOM_CONSENT_EXTRA, RoomJoin } from "@/components/room/RoomJoin";
-import { CONSENT_DETAILS, CONSENT_SHORT } from "@/components/voter/Consent";
+import { CONSENT_DETAILS, CONSENT_LINK_LABEL, CONSENT_SHORT } from "@/components/voter/Consent";
 import { RoomCard } from "@/components/room/RoomCard";
 import { ApiClientError } from "@/lib/client/api";
 import { formatDate } from "@/lib/client/format";
@@ -85,14 +85,19 @@ describe("errores del join y estado de la sala", () => {
 });
 
 describe("RoomJoin (/j/[roomCode])", () => {
-  it("paso 1 de 2 en una pantalla: título, X de N lugares, nombre o apodo, consentimiento corto + Más detalles, un botón", async () => {
+  it("paso 1 de 2 en una pantalla: título, 'La entrada cierra en …', nombre o apodo, un enlace 'Cómo usamos tu cámara' plegado, un botón; sin contador de lugares", async () => {
     mockFetch(() => ({ status: 200, body: info() }));
     render(<RoomJoin roomCode="abc234" />);
     expect(await screen.findByText("Asamblea ficticia (fixture)")).toBeTruthy();
     expect(screen.getByTestId("step-indicator").textContent).toContain("Paso 1 de 2");
-    expect(screen.getByTestId("room-seats").textContent).toContain("3 de 60 lugares");
+    expect(screen.getByTestId("room-closes-in").textContent).toMatch(/^La entrada cierra en \d+:\d{2}$/);
+    expect(screen.queryByTestId("room-seats")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/lugares/);
     expect(screen.getByLabelText("Tu nombre o apodo")).toBeTruthy();
+    expect(screen.getByText(CONSENT_LINK_LABEL)).toBeTruthy();
+    expect(screen.queryByText("Más detalles")).toBeNull();
     expect(screen.getByTestId("voter-consent").textContent).toContain(CONSENT_SHORT);
+    expect(screen.getByText(/Usamos tu cámara para comprobar/).closest("details")).toBeTruthy();
     const consent = screen.getByTestId("consent-details").textContent ?? "";
     expect(consent).toContain("se borra al abrir la votación");
     expect(consent).toContain("no revela cuál inscrito emitió cada boleta");

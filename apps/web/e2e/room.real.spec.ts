@@ -68,7 +68,7 @@ test("sala real: 2 entran por /j y llegan a /v/<token>; la sala llena ofrece mod
     expect(stored.inviteToken).toBe(token);
     // /v/<token> (invitación real, fase inscripción): ya aceptó en /j → paso 2 directo (rostro simulado sólo en E2E) y
     // vinculación en segundo plano contra el servidor real (FaceBinding verificado + commitment).
-    await expect(p.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
+    await expect(p.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 60_000 });
     await ctx.close();
   }
 

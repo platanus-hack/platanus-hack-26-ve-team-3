@@ -11,6 +11,7 @@ import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
 import { openIdentity, saveReceipt } from "@/lib/client/identityVault";
 import { legacyUnlock } from "@/lib/client/linkPhone";
+import { optionInitial } from "@/lib/client/optionImage";
 import type { Option } from "@/lib/client/types";
 import { proveBallot } from "@/lib/client/zk";
 
@@ -25,7 +26,9 @@ function explain(e: unknown): { message: string; alreadyVoted: boolean } {
 }
 
 /**
- * La boleta: una sola pantalla. Tocar una opción la marca y aparece abajo un único botón "Votar: <opción>"
+ * La boleta: una sola pantalla. Cada opción es una tarjeta con avatar redondo (foto `image` si existe, si no la inicial),
+ * nombre en negrita y `subtitle` gris debajo; sin foto ni subtítulo (Sí/No, 1 a 5) se ve igual. Nunca muestra porcentajes
+ * ni resultados. Tocar una opción la marca y aparece abajo un único botón "Votar: <opción>"
  * (esa es la confirmación). Al votar, el navegador abre la inscripción guardada (clave del dispositivo, sin interacción),
  * genera la prueba Semaphore con /zk y envía `POST /vote { proof }`. "Ya voté" va después en otra petición.
  * Sin registro on-chain del voto (threat model C2).
@@ -111,15 +114,36 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
               aria-checked={selected}
               tabIndex={selected || (choice === null && i === 0) ? 0 : -1}
               onClick={() => pick(i)}
+              data-testid="ballot-option"
               className={cn(
-                "flex min-h-14 w-full items-center gap-3 rounded-md border-2 px-4 text-left text-heading font-semibold transition-[background-color,border-color,box-shadow] duration-150 disabled:opacity-60",
+                "flex min-h-14 w-full items-center gap-3 rounded-md border-2 px-3 py-1.5 text-left text-heading transition-[background-color,border-color,box-shadow] duration-150 disabled:opacity-60",
                 selected ? "border-primary bg-primary text-primary-foreground shadow-primary" : "border-border bg-card shadow-card hover:border-primary/40",
               )}
             >
+              {/* Avatar de 44 px: la foto de la opción si la hay; si no, su inicial. Decorativo (el nombre va al lado). */}
+              <span
+                className={cn("grid size-11 shrink-0 place-items-center overflow-hidden rounded-full text-heading font-bold", selected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary-soft text-primary-soft-foreground")}
+                aria-hidden="true"
+                data-testid="option-avatar"
+              >
+                {opt.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- data URI recortado y comprimido en el teléfono del organizador; no hay nada que optimizar.
+                  <img src={opt.image} alt="" width={44} height={44} className="size-full object-cover" draggable={false} />
+                ) : (
+                  optionInitial(opt.label)
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold leading-tight">{opt.label}</span>
+                {opt.subtitle ? (
+                  <span className={cn("block text-small leading-snug", selected ? "text-primary-foreground/85" : "text-muted-foreground")} data-testid="option-subtitle">
+                    {opt.subtitle}
+                  </span>
+                ) : null}
+              </span>
               <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full border-2", selected ? "border-primary-foreground" : "border-subtle")} aria-hidden="true">
                 {selected ? <Check className="size-4" strokeWidth={3} /> : null}
               </span>
-              <span className="min-w-0 flex-1">{opt.label}</span>
             </button>
           );
         })}
