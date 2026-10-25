@@ -18,13 +18,17 @@ export type ElectionStatus = z.infer<typeof ElectionStatus>;
  */
 export const VotingMode = z.enum(["continuous", "phased"]);
 export type VotingMode = z.infer<typeof VotingMode>;
-/** K por defecto: no se aceptan votos mientras el grupo tenga menos miembros. */
-export const DEFAULT_MIN_ANONYMITY_SET = 5;
+/** K por defecto (D-24): no se aceptan votos mientras el grupo tenga menos miembros. Con 2 la privacidad es mínima: se declara. */
+export const DEFAULT_MIN_ANONYMITY_SET = 2;
 export const MinAnonymitySet = z.number().int().min(2).max(100);
 
 export const Protocol = z.enum(["semaphore-ledger", "davinci", "helios", "integrity-demo"]);
 
-export const Option = z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(120) });
+/** Foto de una opción: data URI JPEG/WebP/PNG ya recortada y comprimida en el teléfono (≤ 192 px, ≤ 40 KB). */
+export const OptionImage = z.string().regex(/^data:image\/(jpeg|webp|png);base64,[A-Za-z0-9+/=]+$/).max(40_000);
+/** Opción de la boleta. `subtitle` (cargo, equipo) e `image` son presentación; su huella entra en el manifiesto como `imageSha256`. */
+export const Option = z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(120), subtitle: z.string().max(80).optional(), image: OptionImage.optional() });
+export type Option = z.infer<typeof Option>;
 
 /** Proyecto postulado al sorteo verificable (D-12). `amount` es informativo (moneda ficticia de la demo). */
 export const Candidate = z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(160), amount: z.number().nonnegative().optional() });
@@ -331,8 +335,8 @@ export const Receipt = z.object({
   onchainStatus: z.enum(["verificado", "no verificable", "fallo detectado"]).optional(),
 });
 
-/** Agregados públicos: nunca votos individuales. Con menos de 5 votos no se desglosa por opción. */
-export const MIN_VOTES_FOR_BREAKDOWN = 5;
+/** Agregados públicos: nunca votos individuales. Con menos de MIN_VOTES_FOR_BREAKDOWN votos no se desglosa por opción (D-24: 2). */
+export const MIN_VOTES_FOR_BREAKDOWN = 2;
 
 export const Aggregates = z.object({
   electionId: z.string(), turnout: z.number().min(0).max(1), totalVotes: z.number().int().min(0), eligible: z.number().int().min(0),

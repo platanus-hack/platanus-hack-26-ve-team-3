@@ -11,7 +11,8 @@ export type ElectionManifest = {
   electionId: string;
   title: string;
   kind: "yes-no" | "multiple" | "ranking" | "budget";
-  options: { id: string; label: string }[];
+  /** `subtitle` e `imageSha256` (sha256 hex 0x de la data URI de la foto) fijan la presentación de cada opción: cambiar la foto después invalida el manifiesto. */
+  options: { id: string; label: string; subtitle?: string; imageSha256?: Hex32 }[];
   startsAt: string;
   endsAt: string;
   protocol: "semaphore-ledger";

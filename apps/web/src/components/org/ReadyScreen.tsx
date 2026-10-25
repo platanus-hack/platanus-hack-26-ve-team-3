@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Check, ChevronDown, Clock, Copy, DoorOpen, KeyRound, MessageCircle, MonitorUp, Smartphone, Users } from "lucide-react";
+import { Check, ChevronDown, Clock, Copy, DoorOpen, KeyRound, MessageCircle, Smartphone, Users } from "lucide-react";
 import type { Election } from "@quorum/contracts";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ErrorState, LoadingState } from "@/components/states";
 import { QrCode } from "@/components/room/QrCode";
-import { openProjector } from "@/components/room/RoomCard";
 import { remaining, useNow } from "@/components/room/useNow";
 import { useRoomStatus } from "@/components/room/useRoomStatus";
 import { orgMessage } from "@/lib/client/api";
@@ -215,10 +214,7 @@ export function ReadyScreen({ electionId }: { electionId: string }) {
                   </Button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="secondary" onClick={() => openProjector(electionId)} data-testid="ready-project">
-                  <MonitorUp aria-hidden="true" /> Proyectar
-                </Button>
+              <div className="grid grid-cols-1 gap-2">
                 <a href={whatsappHref(election.title, room!.joinUrl!)} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "secondary" })} data-testid="ready-whatsapp">
                   <MessageCircle aria-hidden="true" /> WhatsApp
                 </a>

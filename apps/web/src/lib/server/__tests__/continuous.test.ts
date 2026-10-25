@@ -46,7 +46,7 @@ type Org = { id: string; auth: Record<string, string> };
 
 /** Votación nueva SIN votingMode (el predeterminado es continuo), publicada: queda `open` de inmediato. */
 async function setupContinuous(extra: Record<string, unknown> = {}): Promise<Org> {
-  const { votingMode: _phased, ...base } = sampleElection(extra);
+  const { votingMode: _phased, ...base } = sampleElection({ minAnonymitySet: 5, ...extra });
   void _phased;
   const created = await call(createElection, { body: base });
   expect(created.status).toBe(201);

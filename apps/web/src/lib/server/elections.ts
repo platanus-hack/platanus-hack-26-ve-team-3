@@ -4,7 +4,7 @@
  * Sin PII en nada que salga hacia afuera.
  */
 import { Aggregates, DEFAULT_MIN_ANONYMITY_SET, Election, Voter, VoterSummary, type CreateElectionInput } from "@quorum/contracts";
-import { ballotEntries, createContinuousLedger, DEFAULT_ROOT_WINDOW, manifestHash, MERKLE_TREE_DEPTH, type AnchorPolicy, type DrawRule, type ElectionManifest, type EnrollmentPolicy } from "@quorum/protocol-adapter";
+import { ballotEntries, createContinuousLedger, DEFAULT_ROOT_WINDOW, manifestHash, MERKLE_TREE_DEPTH, sha256Utf8, type AnchorPolicy, type DrawRule, type ElectionManifest, type EnrollmentPolicy } from "@quorum/protocol-adapter";
 import { getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
@@ -145,7 +145,7 @@ export function manifestOf(e: Election): ElectionManifest {
     electionId: e.id,
     title: e.title,
     kind: e.kind,
-    options: e.options.map((o) => ({ id: o.id, label: o.label })),
+    options: e.options.map((o) => ({ id: o.id, label: o.label, ...(o.subtitle ? { subtitle: o.subtitle } : {}), ...(o.image ? { imageSha256: sha256Utf8(o.image) } : {}) })),
     startsAt: e.startsAt,
     endsAt: e.endsAt,
     protocol: "semaphore-ledger",
@@ -284,7 +284,7 @@ export async function listVoterSummaries(electionId: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Agregados (solo totales; con < 5 votos no se desglosa; en vivo, por lotes de 5)
+// Agregados (solo totales; con < MIN_VOTES_FOR_BREAKDOWN votos no se desglosa; en vivo, por lotes de ese tamaño)
 // ---------------------------------------------------------------------------
 export async function computeAggregates(e: Election): Promise<Aggregates> {
   const engine = await (await getStore()).getEngine(e.id);

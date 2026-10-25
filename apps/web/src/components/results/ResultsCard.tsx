@@ -22,6 +22,12 @@ type Props = {
   className?: string;
   ariaLabel?: string;
   closesAt?: string;
+  /** Oculta la lista por opción (barras) cuando otra pieza de la página ya la muestra, p. ej. las tarjetas con foto de /live. La tabla accesible se conserva. */
+  compact?: boolean;
+  /** Contenido que va DENTRO de la misma carta, debajo de los totales (p. ej. las tarjetas por opción con foto): así todo se mueve junto. */
+  children?: React.ReactNode;
+  /** `false` oculta «Va ganando / Más votada» (en /live los números van en las tarjetas). */
+  showLeader?: boolean;
 };
 
 function useCountdown(closesAt: string | undefined) {
@@ -38,7 +44,7 @@ function useCountdown(closesAt: string | undefined) {
   return ms > 0 ? formatCountdown(ms) : null;
 }
 
-export function ResultsCard({ options, totalVotes, eligible, turnout, live, statusLabel, title, className, ariaLabel, closesAt }: Props) {
+export function ResultsCard({ options, totalVotes, eligible, turnout, live, statusLabel, title, className, ariaLabel, closesAt, compact = false, children, showLeader = true }: Props) {
   const left = useCountdown(live ? closesAt : undefined);
   const hidden = options.some((o) => o.count === null);
   const ranked = options
@@ -70,26 +76,46 @@ export function ResultsCard({ options, totalVotes, eligible, turnout, live, stat
           <dt className="q-eyebrow">Participación</dt>
           <dd className="q-num mt-1 text-[2.75rem] font-semibold leading-none md:text-[3.5rem]">{formatPercent(turnout)}</dd>
           <dd className="q-num mt-1 text-small text-muted-foreground">
-            {formatInt(totalVotes)} de {formatInt(eligible)} votos
+            {formatInt(totalVotes)} de {formatInt(eligible)} personas esperadas
           </dd>
         </div>
-        {leader ? (
+        {leader && showLeader ? (
           <div className="min-w-0">
             <dt className="q-eyebrow">{live ? "Va ganando" : "Más votada"}</dt>
             <dd className="mt-1 flex flex-col">
-              <span className="q-num text-[2rem] font-semibold leading-none md:text-[2.5rem]">{formatPercent(share(leader.votes))}</span>
-              <span className="mt-1 inline-flex min-w-0 items-center gap-1.5 text-body font-medium">
-                <Trophy aria-hidden="true" className="size-4 shrink-0 text-primary-ink" />
-                <span className="truncate">{leader.label}</span>
-              </span>
+              {live ? (
+                <>
+                  {/* En vivo: el nombre manda y el porcentaje va pequeño, para que no se lea como un resultado final. */}
+                  <span className="inline-flex min-w-0 items-center gap-1.5 text-heading font-bold leading-tight">
+                    <Trophy aria-hidden="true" className="size-5 shrink-0 text-primary-ink" />
+                    <span className="line-clamp-2 break-words">{leader.label}</span>
+                  </span>
+                  <span className="q-num mt-1 text-small text-muted-foreground">{formatPercent(share(leader.votes))} de los votos · preliminar</span>
+                </>
+              ) : (
+                <>
+                  <span className="q-num text-[2rem] font-semibold leading-none md:text-[2.5rem]">{formatPercent(share(leader.votes))}</span>
+                  <span className="mt-1 inline-flex min-w-0 items-center gap-1.5 text-body font-medium">
+                    <Trophy aria-hidden="true" className="size-4 shrink-0 text-primary-ink" />
+                    <span className="truncate">{leader.label}</span>
+                  </span>
+                </>
+              )}
             </dd>
           </div>
         ) : null}
       </dl>
 
+      {children ? (
+        <div className="mt-6 flex flex-col gap-3 border-t border-border pt-5" data-testid="results-children">
+          <p className="q-eyebrow">Por opción · {live ? "preliminar, se confirma al cerrar" : "se confirma con el verificador"}</p>
+          {children}
+        </div>
+      ) : null}
+
       {hidden ? (
         <div className="mt-6 rounded-md bg-muted p-4">
-          <p className="text-body font-semibold">{missing > 0 ? `Faltan ${missing} ${missing === 1 ? "voto" : "votos"} para ver el desglose` : "El desglose se publica por lotes de votos"}</p>
+          <p className="text-body font-semibold">{missing > 0 ? (missing === 1 ? "Falta 1 voto para ver el desglose" : `Faltan ${missing} votos para ver el desglose`) : "El desglose se publica por lotes de votos"}</p>
           <div aria-hidden="true" className="mt-3 h-2 overflow-hidden rounded-full bg-card">
             <div className="q-grow h-full rounded-full bg-accent" style={{ width: `${(Math.min(totalVotes, MIN_VOTES_FOR_BREAKDOWN) / MIN_VOTES_FOR_BREAKDOWN) * 100}%` }} />
           </div>
@@ -97,14 +123,14 @@ export function ResultsCard({ options, totalVotes, eligible, turnout, live, stat
         </div>
       ) : (
         <>
-          <div aria-hidden="true" className="mt-6 flex h-3 gap-0.5 overflow-hidden rounded-full bg-muted">
+          <div aria-hidden="true" className="mt-6 flex h-3 gap-0.5 overflow-hidden rounded-full bg-muted" hidden={Boolean(children)}>
             {ranked
               .filter((o) => o.votes > 0)
               .map((o, i) => (
                 <span key={o.id} className="q-grow h-full" style={{ flexGrow: o.votes, background: o.color, animationDelay: `${i * 80}ms` }} />
               ))}
           </div>
-          <ul className="mt-6 flex flex-col gap-4 border-t border-border pt-5" aria-hidden="true">
+          <ul className="mt-6 flex flex-col gap-4 border-t border-border pt-5" aria-hidden="true" hidden={compact}>
             {ranked.map((o, i) => (
               <li key={o.id}>
                 <ProgressRow

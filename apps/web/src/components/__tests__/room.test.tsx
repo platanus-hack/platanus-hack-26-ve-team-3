@@ -3,12 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { qrPath } from "@/components/room/QrCode";
 import { ROOM_CONSENT_EXTRA, RoomJoin } from "@/components/room/RoomJoin";
-import { CONSENT_DETAILS, CONSENT_SHORT } from "@/components/voter/Consent";
+import { CONSENT_DETAILS, CONSENT_LINK_LABEL, CONSENT_SHORT } from "@/components/voter/Consent";
 import { RoomCard } from "@/components/room/RoomCard";
 import { ApiClientError } from "@/lib/client/api";
 import { formatDate } from "@/lib/client/format";
 import { saveOrgToken } from "@/lib/client/orgStore";
-import { auditTriState, checkTriState, leadingOption, takeTokenFromHash } from "@/lib/client/projector";
 import { basescanTxUrl, classifyJoinError, invitePathFrom, loadRoomJoin, roomGate, roomJoinForToken, validateAlias } from "@/lib/client/room";
 
 const push = vi.fn();
@@ -86,14 +85,19 @@ describe("errores del join y estado de la sala", () => {
 });
 
 describe("RoomJoin (/j/[roomCode])", () => {
-  it("paso 1 de 2 en una pantalla: título, X de N lugares, nombre o apodo, consentimiento corto + Más detalles, un botón", async () => {
+  it("paso 1 de 2 en una pantalla: título, 'La entrada cierra en …', nombre o apodo, un enlace 'Cómo usamos tu cámara' plegado, un botón; sin contador de lugares", async () => {
     mockFetch(() => ({ status: 200, body: info() }));
     render(<RoomJoin roomCode="abc234" />);
     expect(await screen.findByText("Asamblea ficticia (fixture)")).toBeTruthy();
     expect(screen.getByTestId("step-indicator").textContent).toContain("Paso 1 de 2");
-    expect(screen.getByTestId("room-seats").textContent).toContain("3 de 60 lugares");
+    expect(screen.getByTestId("room-closes-in").textContent).toMatch(/^La entrada cierra en \d+:\d{2}$/);
+    expect(screen.queryByTestId("room-seats")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/lugares/);
     expect(screen.getByLabelText("Tu nombre o apodo")).toBeTruthy();
+    expect(screen.getByText(CONSENT_LINK_LABEL)).toBeTruthy();
+    expect(screen.queryByText("Más detalles")).toBeNull();
     expect(screen.getByTestId("voter-consent").textContent).toContain(CONSENT_SHORT);
+    expect(screen.getByText(/Usamos tu cámara para comprobar/).closest("details")).toBeTruthy();
     const consent = screen.getByTestId("consent-details").textContent ?? "";
     expect(consent).toContain("se borra al abrir la votación");
     expect(consent).toContain("no revela cuál inscrito emitió cada boleta");
@@ -206,31 +210,7 @@ describe("RoomCard (panel del organizador)", () => {
   });
 });
 
-describe("proyector: lógica pura", () => {
-  it("check.status de tres estados, con respaldo en passed/reason", () => {
-    expect(checkTriState({ name: "a", status: "pass" })).toBe("verificado");
-    expect(checkTriState({ name: "a", status: "fail", passed: true })).toBe("fallo detectado");
-    expect(checkTriState({ name: "a", status: "not-evaluated", passed: true })).toBe("no verificable");
-    expect(checkTriState({ name: "a", passed: true, reason: "no evaluado: sin RPC" })).toBe("no verificable");
-    expect(checkTriState({ name: "a", passed: false })).toBe("fallo detectado");
-  });
-  it("estado global: nunca 'verificado' sin valid del verificador ni con un fallo", () => {
-    expect(auditTriState({ valid: true, checks: [{ name: "a", passed: true }], unsupportedGuarantees: [] })).toEqual({ overall: "verificado", partial: false });
-    expect(auditTriState({ valid: true, checks: [{ name: "a", passed: true }, { name: "b", status: "not-evaluated" }], unsupportedGuarantees: [] })).toEqual({ overall: "verificado", partial: true });
-    expect(auditTriState({ valid: true, checks: [], unsupportedGuarantees: [] }).overall).toBe("no verificable");
-    expect(auditTriState({ valid: false, checks: [{ name: "a", passed: false }], unsupportedGuarantees: [] }).overall).toBe("fallo detectado");
-  });
-  it("opción líder sólo sin empate", () => {
-    expect(leadingOption([{ id: "a", count: 3 }, { id: "b", count: 1 }])?.id).toBe("a");
-    expect(leadingOption([{ id: "a", count: 2 }, { id: "b", count: 2 }])).toBeNull();
-    expect(leadingOption([{ id: "a", count: null }])).toBeNull();
-  });
-  it("token del organizador por fragmento: se lee y se borra de la URL", () => {
-    const replace = vi.fn();
-    expect(takeTokenFromHash({ hash: "#t=abc%2B1", pathname: "/e/x/proyector", search: "" }, replace)).toBe("abc+1");
-    expect(replace).toHaveBeenCalledWith("/e/x/proyector");
-    expect(takeTokenFromHash({ hash: "", pathname: "/", search: "" }, replace)).toBeNull();
-  });
+describe("QR de la sala", () => {
   it("QR determinista y no vacío", () => {
     const a = qrPath("http://localhost:3000/j/ABC234");
     expect(a.size).toBeGreaterThanOrEqual(21);

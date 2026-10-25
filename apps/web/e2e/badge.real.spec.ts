@@ -56,7 +56,7 @@ test("credencial real: 2 entran escaneando, reusar → rechazo, votan, cierre ve
     await expect(p.getByRole("heading", { name: TITLE })).toBeVisible();
     await p.getByRole("button", { name: "Escanear mi credencial" }).click();
     await p.waitForURL(/\/v\/[^/]+$/, { timeout: 30_000 });
-    await expect(p.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 60_000 });
+    await expect(p.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 60_000 });
     await expect(p.getByTestId("voting-countdown")).toContainText(/La votación empieza en|Esperando que el organizador abra la votación/);
     expect(await p.locator("main").innerText()).not.toMatch(/\bwallet|\bfirma|EIP-?712|FaceBinding|Semaphore|credencial|nullifier|commitment|on-?chain|blockchain|Detalles técnicos/i);
     console.log(`[credencial-real] ${user.slice(-1)}: /j → ¡Listo! ${Date.now() - t0} ms`);

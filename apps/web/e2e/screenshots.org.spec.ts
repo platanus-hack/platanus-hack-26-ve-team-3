@@ -129,16 +129,16 @@ test("panel: Más abierto con casos 360", async ({ page }) => {
   await shot(page, "panel-mas-casos", 360);
 });
 
-test("panel: votación con menos de 5 votos 360", async ({ page }) => {
+test("panel: votación con menos de 2 votos 360", async ({ page }) => {
   await at(page, 360, "open", (m) => {
     m.endsAt = new Date(Date.now() + 97 * 60_000).toISOString();
     m.votingStartsAt = new Date(Date.now() - 23 * 60_000).toISOString();
   });
   await page.route(`**/api/elections/${E2E.electionId}/tally`, (r) =>
-    r.fulfill({ contentType: "application/json", body: JSON.stringify({ electionId: E2E.electionId, turnout: 3 / 9, totalVotes: 3, eligible: 9, leadingShare: null, closesAt: "2026-10-24T22:00:00.000Z", status: "open", options: E2E.options.map((o) => ({ ...o, count: null })) }) }),
+    r.fulfill({ contentType: "application/json", body: JSON.stringify({ electionId: E2E.electionId, turnout: 1 / 9, totalVotes: 1, eligible: 9, leadingShare: null, closesAt: "2026-10-24T22:00:00.000Z", status: "open", options: E2E.options.map((o) => ({ ...o, count: null })) }) }),
   );
   await withToken(page);
   await page.goto(`/org/${E2E.electionId}`);
-  await expect(page.getByTestId("live-breakdown")).toContainText("3 de 5 votos");
+  await expect(page.getByTestId("live-breakdown")).toContainText("1 de 2 votos");
   await shot(page, "panel-votacion-pocos", 360);
 });

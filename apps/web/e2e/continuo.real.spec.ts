@@ -123,17 +123,11 @@ test("modo continuo real: 6 entran por la sala, K=5, votan mientras otros entran
   await expect(sixth.p.getByRole("radio")).toHaveCount(2, { timeout: 15_000 });
   for (const [i, opt] of [[2, "Charla A"], [3, "Charla A"], [4, "Charla B"], [5, "Charla A"]] as const) await vote(people[i], opt);
 
-  // Panel y proyector en vivo (360)
+  // Panel en vivo (360)
   await expect(card.getByTestId("live-enrolled")).toHaveText("6", { timeout: 15_000 });
   await expect(card.getByTestId("live-voted")).toHaveText("6", { timeout: 15_000 });
   await card.scrollIntoViewIfNeeded();
   await shot(org, "continuo-panel-360");
-  const projCtx = await phone(browser);
-  const proj = await projCtx.newPage();
-  await proj.goto(`/e/${id}/proyector#t=${encodeURIComponent(organizerToken)}`);
-  await expect(proj.getByTestId("projector-live-counts")).toHaveText(/6\s*inscritos · 6\s*votaron/, { timeout: 15_000 });
-  await expect(proj.getByTestId("qr")).toHaveAttribute("data-qr-value", `${baseURL}/j/${code}`);
-  await shot(proj, "continuo-proyector-360");
 
   // ---------- Doble voto: la misma prueba otra vez → 409 already_voted ----------
   expect(bodies).toHaveLength(1);
@@ -198,5 +192,4 @@ test("modo continuo real: 6 entran por la sala, K=5, votan mientras otros entran
 
   for (const v of people) await v.ctx.close();
   await orgCtx.close();
-  await projCtx.close();
 });

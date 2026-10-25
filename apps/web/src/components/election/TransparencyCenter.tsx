@@ -15,7 +15,7 @@ import { FIXTURE_PACKAGE_ID, FIXTURE_PACKAGE_URL } from "@/lib/client/fixtures";
 import { formatDateTime, kindLabel } from "@/lib/client/format";
 import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
 import { basescanTxUrl } from "@/lib/client/room";
-import type { Aggregates as AggregatesV1, AuditResponse as StoredAudit, Election as ElectionV1 } from "@quorum/contracts";
+import { MIN_VOTES_FOR_BREAKDOWN, type Aggregates as AggregatesV1, type AuditResponse as StoredAudit, type Election as ElectionV1 } from "@quorum/contracts";
 import { AnonymityCard } from "./AnonymityCard";
 import { MyVoteCheck } from "./MyVoteCheck";
 import { PhaseTimeline } from "./PhaseTimeline";
@@ -43,7 +43,7 @@ async function loadFixture(): Promise<Fixture> {
       leadingShare: null,
       closesAt: m.endsAt,
       status: "auditable",
-      options: m.options.map((o, i) => ({ id: o.id, label: o.label, count: pkg.tally.total < 5 ? null : (pkg.tally.counts[i] ?? 0) })),
+      options: m.options.map((o, i) => ({ id: o.id, label: o.label, count: pkg.tally.total < MIN_VOTES_FOR_BREAKDOWN ? null : (pkg.tally.counts[i] ?? 0) })),
     },
   };
 }

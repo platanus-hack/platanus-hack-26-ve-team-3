@@ -38,7 +38,7 @@ export type LedgerEntry = BallotEntry | MemberAddedEntry;
  * de los contratos de Semaphore v4), y el grupo en esa raíz tiene al menos `minAnonymitySet` miembros.
  */
 export type EnrollmentPolicy = { mode: "continuous"; minAnonymitySet: number; rootWindow: number };
-export const DEFAULT_MIN_ANONYMITY_SET = 5;
+export const DEFAULT_MIN_ANONYMITY_SET = 2;
 export const DEFAULT_ROOT_WINDOW = 32;
 /** Raíz del grupo vacío en Semaphore v4 (LeanIMT sin hojas). */
 export const EMPTY_GROUP_ROOT = "0";

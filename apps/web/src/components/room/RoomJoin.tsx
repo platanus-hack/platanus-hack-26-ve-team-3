@@ -7,14 +7,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { RoomPublicInfo } from "@quorum/contracts";
 import { ErrorState, LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Consent } from "@/components/voter/Consent";
 import { StepIndicator } from "@/components/voter/VoterUi";
 import { ApiClientError, voterMessage } from "@/lib/client/api";
-import { formatInt } from "@/lib/client/format";
 import {
   classifyJoinError,
   forgetRoomJoin,
@@ -45,8 +43,9 @@ export const ROOM_CONSENT_EXTRA = ["Entras con un nombre o apodo. No pedimos tu 
 
 /**
  * `/j/<roomCode>`: entrada a la sala abierta desde el QR del proyector. Móvil primero (360 px).
- * Paso 1 de 2 de la inscripción en UNA pantalla: título, "Tu nombre o apodo" (misma validación que el backend), una línea
- * de consentimiento con "Más detalles" y "Continuar" (tocarlo es aceptar). Al unirse guarda el token en este teléfono y
+ * Paso 1 de 2 de la inscripción en UNA pantalla: título, "La entrada cierra en …" (gris, pequeño), "Tu nombre o apodo"
+ * (misma validación que el backend), el enlace "Cómo usamos tu cámara" y "Continuar" (tocarlo es aceptar). Sin contador
+ * de lugares. Al unirse guarda el token en este teléfono y
  * va a `/v/<token>`, que abre directo la cámara (paso 2). Sala llena / cerrada / expirada / votación abierta → observador.
  */
 export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
@@ -196,18 +195,18 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
 
   const gate = joinError?.kind === "full" ? "full" : joinError?.kind === "closed" && roomGate(info, now ?? undefined) === "open" ? "manual" : roomGate(info, now ?? undefined);
   const left = remaining(info.expiresAt, now);
-  const seats = info.maxSeats !== null ? `${formatInt(info.seatsTaken)} de ${formatInt(info.maxSeats)} lugares` : `${formatInt(info.seatsTaken)} lugares ocupados`;
 
   return (
     <VoterShell>
       {gate === "open" ? <StepIndicator current={1} /> : null}
       {gate === "open" ? <HumanPreloader /> : null}
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col gap-1">
         <h1 className="text-title font-bold leading-tight tracking-tight">{info.title}</h1>
-        <p className="flex flex-wrap items-center gap-2 text-body" aria-live="polite" data-testid="room-seats">
-          <Badge tone={gate === "open" ? "success" : "warning"}>{seats}</Badge>
-          {gate === "open" && left ? <span className="text-small text-muted-foreground">La entrada cierra en {left}</span> : null}
-        </p>
+        {gate === "open" && left ? (
+          <p className="text-small text-muted-foreground" aria-live="polite" data-testid="room-closes-in">
+            La entrada cierra en {left}
+          </p>
+        ) : null}
       </header>
 
       {gate !== "open" ? (
@@ -252,7 +251,7 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
               </p>
             )}
           </div>
-          <Consent extra={ROOM_CONSENT_EXTRA} />
+          <Consent compact extra={ROOM_CONSENT_EXTRA} />
           {joinError && joinError.kind !== "full" && joinError.kind !== "closed" ? (
             <Alert tone={joinError.kind === "rate" ? "warning" : "danger"} title={joinError.kind === "rate" ? "Espera un momento" : "No se pudo entrar"}>
               {joinError.message}

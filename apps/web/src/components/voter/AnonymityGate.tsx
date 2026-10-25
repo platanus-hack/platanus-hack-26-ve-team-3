@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users } from "lucide-react";
 import { apiV1 } from "@/lib/client/apiV1";
+import { WaitingPulse } from "./WaitingPulse";
 
 const POLL_MS = 3000;
 
@@ -13,8 +13,8 @@ export function anonymityGateText(k: number, size: number): string {
 
 /**
  * D-22, modo continuo: no se aceptan votos mientras el grupo tenga menos de K personas inscritas (privacidad: con muy
- * pocas, se sabría quién votó qué). Muestra el aviso y consulta cada 3 s; la boleta aparece sola al alcanzar K.
- * Sin K (modo con fases) o ya alcanzado: muestra la boleta directamente.
+ * pocas, se sabría quién votó qué). Muestra la espera animada con el aviso y consulta cada 3 s; la boleta aparece sola
+ * al alcanzar K. Sin K (modo con fases) o ya alcanzado: muestra la boleta directamente.
  */
 export function AnonymityGate({ electionId, minAnonymitySet, children }: { electionId: string; minAnonymitySet: number | null | undefined; children: React.ReactNode }) {
   const k = minAnonymitySet ?? 0;
@@ -43,20 +43,15 @@ export function AnonymityGate({ electionId, minAnonymitySet, children }: { elect
 
   if (ready) return <>{children}</>;
   return (
-    <div className="flex w-full flex-col items-center gap-3 rounded-lg border border-border bg-card px-4 py-5 text-center" data-testid="anonymity-gate">
-      <Users className="size-12 text-primary" aria-hidden="true" strokeWidth={1.75} />
-      {size === null ? (
-        <p role="status" aria-live="polite" className="flex items-center gap-2 text-heading text-muted-foreground">
-          <span className="q-spinner" aria-hidden="true" /> Preparando tu boleta…
-        </p>
-      ) : (
-        <>
-          <p role="status" aria-live="polite" className="text-title font-bold leading-tight" data-testid="anonymity-gate-text">
-            {anonymityGateText(k, size)}
-          </p>
-          <p className="text-body text-muted-foreground">Así nadie puede saber qué votaste. Deja esta página abierta: la boleta aparecerá aquí sola.</p>
-        </>
-      )}
+    <div className="flex w-full flex-col items-center gap-3 py-2 text-center" data-testid="anonymity-gate">
+      <WaitingPulse mode="continuous" k={k} size={size}>
+        {size !== null ? (
+          <div className="flex flex-col gap-2 text-body text-muted-foreground">
+            <p data-testid="anonymity-gate-text" className="sr-only">{anonymityGateText(k, size)}</p>
+            <p>Con muy pocas personas se podría deducir quién votó qué. Deja esta página abierta: la boleta aparecerá aquí sola.</p>
+          </div>
+        ) : null}
+      </WaitingPulse>
     </div>
   );
 }

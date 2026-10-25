@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, DoorOpen, MonitorUp, Square } from "lucide-react";
+import { Copy, DoorOpen, Square } from "lucide-react";
 import { DEFAULT_MIN_ANONYMITY_SET, type Election, type RoomStatus } from "@quorum/contracts";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stat, StatGrid } from "@/components/ui/stat";
-import { openProjector } from "@/components/room/RoomCard";
 import { describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { copyText } from "@/lib/client/download";
@@ -166,12 +165,6 @@ export function ContinuousCard({ election, hasToken, onChanged }: { election: El
             ) : null}
           </div>
         )}
-
-        {phase === "open" ? (
-          <Button variant="secondary" onClick={() => openProjector(electionId)} data-testid="room-project" className="w-fit">
-            <MonitorUp aria-hidden="true" /> Proyectar
-          </Button>
-        ) : null}
 
         {error ? (
           <Alert tone="danger" title="La acción falló">

@@ -53,7 +53,7 @@ test("inicio programado real: cuenta regresiva en los teléfonos y la boleta apa
     await page.goto(`/j/${roomCode}`);
     await page.getByLabel("Tu nombre o apodo").fill(alias);
     await page.getByRole("button", { name: "Continuar" }).click();
-    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 90_000 });
     await expect(page.getByTestId("voting-countdown")).toContainText("Esperando que el organizador abra la votación…");
     phones.push({ page, close: () => ctx.close() });
   }

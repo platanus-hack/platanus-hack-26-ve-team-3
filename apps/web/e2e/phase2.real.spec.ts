@@ -44,7 +44,7 @@ async function register(v: Voter) {
   await expect(page.getByRole("heading", { name: TITLE })).toBeVisible();
   await expect(page.getByTestId("step-indicator")).toContainText("Paso 1 de 2");
   await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 30_000 });
   // Wallet real de @quorum/wallet en modo eoa-demo (sin NEXT_PUBLIC_ZERODEV_PROJECT_ID). Para la persona no hay jerga:
   // la etiqueta "demo" de la vinculación vive en /e/[id] (centro de transparencia), no en el flujo del votante.
   await expect(page.getByTestId("tech-details")).toHaveCount(0);
@@ -114,7 +114,7 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   await voters[0].context.close();
   voters[0] = await persistentVoter(VOTERS[0], links[0], profileDir);
   await voters[0].page.goto(voters[0].link);
-  await expect(voters[0].page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible();
+  await expect(voters[0].page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible();
 
   // ---------- Organizador: congelar padrón y abrir ----------
   await org.reload();

@@ -44,7 +44,7 @@ test.describe("votante · caso en revisión", () => {
     await expect(page.getByRole("heading", { name: "Tu caso necesita una revisión rápida." })).toBeVisible({ timeout: 30_000 });
     // El organizador aprueba → la página sigue sola: vinculación → ¡Listo!
     mock.review = "approved";
-    await expect(page.getByRole("heading", { name: "¡Listo! Ya estás inscrito." })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 30_000 });
     expect(mock.wallet?.bindingSignature).toMatch(/^0x[0-9a-f]+$/);
     expect(mock.commitment).toMatch(/^\d+$/);
   });
