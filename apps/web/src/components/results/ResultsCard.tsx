@@ -26,6 +26,8 @@ type Props = {
   compact?: boolean;
   /** Contenido que va DENTRO de la misma carta, debajo de los totales (p. ej. las tarjetas por opción con foto): así todo se mueve junto. */
   children?: React.ReactNode;
+  /** `false` oculta «Va ganando / Más votada» (en /live los números van en las tarjetas). */
+  showLeader?: boolean;
 };
 
 function useCountdown(closesAt: string | undefined) {
@@ -42,7 +44,7 @@ function useCountdown(closesAt: string | undefined) {
   return ms > 0 ? formatCountdown(ms) : null;
 }
 
-export function ResultsCard({ options, totalVotes, eligible, turnout, live, statusLabel, title, className, ariaLabel, closesAt, compact = false, children }: Props) {
+export function ResultsCard({ options, totalVotes, eligible, turnout, live, statusLabel, title, className, ariaLabel, closesAt, compact = false, children, showLeader = true }: Props) {
   const left = useCountdown(live ? closesAt : undefined);
   const hidden = options.some((o) => o.count === null);
   const ranked = options
@@ -74,10 +76,10 @@ export function ResultsCard({ options, totalVotes, eligible, turnout, live, stat
           <dt className="q-eyebrow">Participación</dt>
           <dd className="q-num mt-1 text-[2.75rem] font-semibold leading-none md:text-[3.5rem]">{formatPercent(turnout)}</dd>
           <dd className="q-num mt-1 text-small text-muted-foreground">
-            {formatInt(totalVotes)} de {formatInt(eligible)} votos
+            {formatInt(totalVotes)} de {formatInt(eligible)} personas esperadas
           </dd>
         </div>
-        {leader ? (
+        {leader && showLeader ? (
           <div className="min-w-0">
             <dt className="q-eyebrow">{live ? "Va ganando" : "Más votada"}</dt>
             <dd className="mt-1 flex flex-col">
@@ -113,7 +115,7 @@ export function ResultsCard({ options, totalVotes, eligible, turnout, live, stat
 
       {hidden ? (
         <div className="mt-6 rounded-md bg-muted p-4">
-          <p className="text-body font-semibold">{missing > 0 ? `Faltan ${missing} ${missing === 1 ? "voto" : "votos"} para ver el desglose` : "El desglose se publica por lotes de votos"}</p>
+          <p className="text-body font-semibold">{missing > 0 ? (missing === 1 ? "Falta 1 voto para ver el desglose" : `Faltan ${missing} votos para ver el desglose`) : "El desglose se publica por lotes de votos"}</p>
           <div aria-hidden="true" className="mt-3 h-2 overflow-hidden rounded-full bg-card">
             <div className="q-grow h-full rounded-full bg-accent" style={{ width: `${(Math.min(totalVotes, MIN_VOTES_FOR_BREAKDOWN) / MIN_VOTES_FOR_BREAKDOWN) * 100}%` }} />
           </div>

@@ -156,8 +156,13 @@ export function RankedCards({ options, totalVotes, size = "md", tone = "light", 
                   — {formatInt(o.count)} {o.count === 1 ? "voto" : "votos"}
                 </span>
               </div>
-              <span className={cn("q-num shrink-0 font-bold leading-none", lg ? "text-[2rem] md:text-[2.5rem]" : "text-[1.5rem]", dark ? (lead ? "text-[#ff8e72]" : "text-white") : "text-primary-ink")}>
-                {formatPercent(pct)}
+              <span className="flex shrink-0 flex-col items-end">
+                <span className={cn("q-num font-bold leading-none", lg ? "text-[2rem] md:text-[2.5rem]" : "text-[1.5rem]", dark ? (lead ? "text-[#ff8e72]" : "text-white") : "text-primary-ink")}>
+                  {formatPercent(pct)}
+                </span>
+                <span className={cn("q-num mt-1 text-small leading-none", dark ? "text-[#b9bac4]" : "text-muted-foreground")} data-testid="ranked-count">
+                  {formatInt(o.count)} {o.count === 1 ? "voto" : "votos"}
+                </span>
               </span>
             </div>
             <span aria-hidden="true" className={cn("block h-1.5 overflow-hidden rounded-full", dark ? "bg-white/[0.12]" : "bg-[#edf1f4]")}>

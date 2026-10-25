@@ -129,7 +129,7 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
 
         {data && closed ? <WinnerScreen electionId={electionId} status={data.status} options={withPhotos} totalVotes={data.totalVotes} audit={audit} /> : null}
         {data && phase !== "registration" ? (
-          <ResultsCard options={data.options} totalVotes={data.totalVotes} eligible={data.eligible} turnout={data.turnout} live={data.status === "open"} statusLabel={phaseLabel[data.status]} closesAt={data.closesAt} compact={closed || breakdown}>
+          <ResultsCard options={data.options} totalVotes={data.totalVotes} eligible={data.eligible} turnout={data.turnout} live={data.status === "open"} statusLabel={phaseLabel[data.status]} closesAt={data.closesAt} compact={closed || breakdown} showLeader={false}>
             {/* Una sola carta: «En vivo», participación y «va ganando» arriba; debajo, en la misma carta, las tarjetas con foto que se reordenan. */}
             {!closed && breakdown ? <RankedCards ariaHidden options={withPhotos.map((o) => ({ ...o, count: o.count ?? 0 }))} totalVotes={data.totalVotes} size="lg" /> : null}
           </ResultsCard>
