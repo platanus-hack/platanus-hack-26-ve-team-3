@@ -45,7 +45,7 @@ Código en `packages/protocol-adapter` (servidor y navegador) y `apps/verifier` 
 | `POST /api/audit/verify` | `valid:false` + `verifier-not-integrated` | `import { verifyPackage } from "@quorum/verifier"`; `return verifyPackage(body.package, { anchorRpcUrl: process.env.BASE_SEPOLIA_RPC, inputArtifactDigest: "sha256:" + sha256(bodyBytes) })`. Devuelve el `AuditResult` íntegro: la UI muestra `checks[].reason` y `unsupportedGuarantees`, nunca solo `valid`. |
 
 ### Manifiesto canónico (`ElectionManifest` del adaptador)
-`{ electionId, title, kind, options:[{id,label}], startsAt, endsAt, protocol:"semaphore-ledger", merkleTreeDepth:10, label:"fixture"|"simulación"|"real" }` → `manifestHash = manifestHash(manifest)` (SHA-256 del JSON canónico; la misma función vive en el verificador). Cualquier cambio posterior ⇒ `manifest_hash` falla.
+`{ electionId, title, kind, options:[{id,label,subtitle?,imageSha256?}], startsAt, endsAt, protocol:"semaphore-ledger", merkleTreeDepth:10, label:"fixture"|"simulación"|"real" }` → `manifestHash = manifestHash(manifest)` (SHA-256 del JSON canónico; la misma función vive en el verificador). Cualquier cambio posterior ⇒ `manifest_hash` falla. Las opciones pueden llevar `subtitle` (≤ 80) e `image` (data URI JPEG/WebP/PNG ≤ 40 000 caracteres, recortada y comprimida en el teléfono a 192 px); al manifiesto entra la **huella** `imageSha256 = sha256(data URI)`, nunca la foto: cambiar una foto después de publicar invalida el manifiesto.
 
 ### Navegador del votante (`/v/[token]`)
 1. `const id = createVoterIdentity()` → guardar `id.privateKey` en `localStorage` (clave por `electionId`); enviar solo `id.commitment` a `/credential`.

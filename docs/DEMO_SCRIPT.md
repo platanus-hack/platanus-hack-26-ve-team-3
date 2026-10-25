@@ -1,5 +1,8 @@
 # Guion de demo — Quórum, modo "sala abierta" (3 minutos)
 
+> **Nota (D-23, 2026-10-24 noche):** el **proyector** (`/e/<id>/proyector`) fue retirado. Donde este guion dice «proyector», la pantalla grande muestra `/e/<id>/live` (tarjetas con foto en vivo y pantalla del ganador al cierre verificado) o el panel del organizador. Las opciones ahora llevan foto y subtítulo.
+
+
 **Lema:** Trust the proof, not the organizer.
 **Dinámica:** **todo el público vota desde su propio teléfono** (jurado y asistentes). El organizador proyecta un QR (`/j/<roomCode>`), la sala tiene tope de lugares (~60) y expira a los 15 min. Cada persona entra con un alias libre, hace la prueba de vida con deduplicación facial, se le crea una smart wallet sin gas y vota. El proyector muestra en vivo los inscritos, la participación y, con 5 votos o más, el desglose por opción.
 **Base:** Contrato v1 (`docs/API_CONTRACT.md`), motor `semaphore-ledger` (`docs/ADR-001-voting-engine.md`), D-09..D-12 (`docs/DECISIONS.md`) y decisiones del coordinador del 2026-10-24:

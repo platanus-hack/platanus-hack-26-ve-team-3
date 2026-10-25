@@ -33,6 +33,18 @@ describe("crypto y manifiesto", () => {
     expect(manifestHash(manifestOf({ ...withDraw, candidates: [{ id: "p2", label: "P1" }] }))).not.toBe(manifestHash(manifestOf(withDraw)));
   });
 
+  it("foto y subtítulo de una opción: el manifiesto lleva subtitle e imageSha256 (nunca la foto); cambiar la foto cambia manifestHash", () => {
+    const img = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==";
+    const base = Election.parse({ ...sampleElection(), id: "el_f", status: "draft", protocol: "semaphore-ledger", manifestHash: null, eligibilityIssuerId: "i", organizerId: "o" });
+    const e = { ...base, options: [{ id: "a", label: "Ana", subtitle: "Equipo Trust", image: img }, { id: "b", label: "Beto" }] };
+    const m = manifestOf(e);
+    expect(m.options[0]).toEqual({ id: "a", label: "Ana", subtitle: "Equipo Trust", imageSha256: `0x${sha256Hex(img)}` });
+    expect(m.options[1]).toEqual({ id: "b", label: "Beto" });
+    expect(JSON.stringify(m)).not.toContain("base64");
+    const other = { ...e, options: [{ ...e.options[0], image: img.replace("Kp//2Q==", "Kq//2Q==") }, e.options[1]] };
+    expect(manifestHash(manifestOf(other))).not.toBe(manifestHash(m));
+  });
+
   it("AES-256-GCM sella y abre; clave incorrecta falla", () => {
     const k = keyFromSecret("secreto-dev");
     const blob = seal(k, "[0.1,0.2]");
