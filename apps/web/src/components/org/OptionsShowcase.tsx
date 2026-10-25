@@ -22,7 +22,7 @@ export function OptionsShowcase({ title, options, className }: { title: string; 
         {options.map((o, i) => (
           <li key={o.id} className="flex min-w-0 flex-col items-center gap-3 text-center" data-testid="panel-option">
             <span className="q-float block" style={{ animationDelay: `${(i % 5) * 0.35}s` }}>
-              <OptionAvatar label={o.label} image={o.image} className={cn("size-28 border-4 border-card shadow-[0_18px_36px_-16px_rgb(0_68_102/0.45)] sm:size-32", many ? "lg:size-36" : "lg:size-44")} />
+              <OptionAvatar label={o.label} image={o.image} className={cn("size-28 border-4 border-card text-[2.5rem] shadow-[0_18px_36px_-16px_rgb(0_68_102/0.45)] sm:size-32 sm:text-[2.75rem]", many ? "lg:size-36 lg:text-[3rem]" : "lg:size-44 lg:text-[3.5rem]")} />
             </span>
             <span className="flex min-w-0 flex-col">
               <span className="line-clamp-2 break-words font-display text-[1.125rem] font-bold leading-tight sm:text-[1.25rem] lg:text-[1.5rem]">{o.label}</span>
