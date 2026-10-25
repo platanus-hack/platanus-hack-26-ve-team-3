@@ -51,7 +51,9 @@ test.describe("fase 2 · votante", () => {
     await expect(receipt).toContainText("Código de tu comprobante");
     await expect(page.getByTestId("receipt-time")).toBeVisible();
     await expect(page.getByRole("link", { name: "Ver resultados" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Comprobar mi voto" })).toBeVisible();
+    // Mientras la votación sigue abierta: espera «Esperando a que cierre la votación» y ningún enlace para comprobar.
+    await expect(page.getByTestId("waiting-pulse")).toHaveAttribute("data-mode", "closing");
+    await expect(page.getByRole("link", { name: "Comprobar mi voto" })).toBeHidden();
     await expect(page.getByTestId("tech-details")).toHaveCount(0);
     // El voto va sólo con la prueba (sin onchain ni datos del votante) y "ya voté" en otra petición.
     expect(Object.keys(mock.voteBodies[0] as object)).toEqual(["proof"]);
@@ -59,6 +61,10 @@ test.describe("fase 2 · votante", () => {
     await expect.poll(() => mock.votedMarked).toBe(true);
     await expect(receipt).not.toContainText("opción elegida");
 
+    // Cierra la votación: la página lo nota sola (consulta la fase) y aparecen «Ver el resultado» y «Comprobar mi voto».
+    mock.phase = "auditable";
+    await expect(page.getByRole("link", { name: "Comprobar mi voto" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("link", { name: "Ver el resultado" })).toBeVisible();
     // "Comprobar mi voto": consulta por nullifier sin pedir otro toque.
     await page.getByRole("link", { name: "Comprobar mi voto" }).click();
     await expect(page.getByLabel("Código del comprobante")).toHaveValue(nullifier!);
