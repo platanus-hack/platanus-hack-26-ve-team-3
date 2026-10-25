@@ -64,19 +64,21 @@ test.describe("votante · caso en revisión", () => {
 });
 
 test.describe("organizador · casos por revisar", () => {
-  test("tarjeta 'Casos por revisar (1)', aviso junto a abrir, 'X de Y listos', aprobar con confirmación", async ({ page }) => {
+  test("insignia '⚠ 1 por revisar' abre «Más › Casos por revisar (1)», 'X de Y listos', aviso al abrir, aprobar con confirmación", async ({ page }) => {
     const mock = new MockV1("registration");
     badgeElection(mock);
     mock.review = "pending";
     await mock.install(page);
     await page.addInitScript(([id, t]) => sessionStorage.setItem(`quorum.orgToken.${id}`, t), [E2E.electionId, E2E.orgToken] as const);
     await page.goto(`/org/${E2E.electionId}`);
+    // "X de Y listos" (mock: 3 de 9) y la insignia ámbar con el número de casos.
+    await expect(page.getByTestId("open-readiness")).toHaveText("3 de 9 listos");
+    await expect(page.getByTestId("reviews-badge")).toHaveText("1 por revisar");
+    await page.getByTestId("reviews-badge").click();
     const card = page.getByTestId("reviews-card");
     await expect(card.getByRole("heading", { name: "Casos por revisar (1)" })).toBeVisible();
     await expect(card.getByTestId("review-item")).toContainText("Participante");
     await expect(card).not.toContainText(/similitud|%|v-ana/);
-    // Aviso junto a los dos botones de abrir: casos pendientes y "X de Y listos" (mock: 3 de 9).
-    await expect(page.getByTestId("open-readiness")).toContainText("3 de 9 listos · Hay 1 caso por revisar");
     await shot(page, "revision-02-panel-caso");
 
     // Confirmar la apertura avisa ANTES: el caso se rechaza solo y hay personas a medio inscribir.
@@ -93,6 +95,7 @@ test.describe("organizador · casos por revisar", () => {
     await expect(card.getByTestId("reviews-decided")).toContainText("1 aprobados, 0 rechazados");
     expect(mock.reviewDecisions).toEqual([{ decision: "approve" }]);
     await expect(page.getByTestId("open-readiness")).toHaveText("3 de 9 listos");
+    await expect(page.getByTestId("reviews-badge")).toHaveCount(0);
   });
 
   test("rechazar con confirmación", async ({ page }) => {
@@ -102,6 +105,7 @@ test.describe("organizador · casos por revisar", () => {
     await mock.install(page);
     await page.addInitScript(([id, t]) => sessionStorage.setItem(`quorum.orgToken.${id}`, t), [E2E.electionId, E2E.orgToken] as const);
     await page.goto(`/org/${E2E.electionId}`);
+    await page.getByTestId("reviews-badge").click();
     const card = page.getByTestId("reviews-card");
     await card.getByTestId("review-reject").click();
     await expect(card).toContainText("Esta persona no podrá votar. ¿Rechazar?");

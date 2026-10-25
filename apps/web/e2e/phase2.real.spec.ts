@@ -62,31 +62,35 @@ async function vote(v: Voter, option: string) {
 }
 
 test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simple: Continuar → rostro → teléfono vinculado) → votar con prueba → doble voto rechazado → cerrar → verificar → mi voto está → sorteo recomputado", async ({ browser, page: org, request }) => {
-  // ---------- Organizador: crear la votación con el asistente ----------
+  // ---------- Organizador: crear la votación en una pantalla (la boleta) ----------
   await org.goto("/org/new");
-  await org.getByLabel("Título de la votación").fill(TITLE);
-  await org.locator("#opt-0").fill("1");
-  await org.locator("#opt-1").fill("2");
-  // D-22: el modo al instante es el predeterminado; este flujo prueba el modo con fases.
-  await org.getByRole("radio", { name: /Con hora de inicio/ }).check();
-  await org.getByText("Más ajustes").click();
+  await org.getByLabel("Pregunta de la votación").fill(TITLE);
+  await org.getByLabel("Opción A", { exact: true }).fill("1");
+  await org.getByLabel("Opción B", { exact: true }).fill("2");
+  // El diseño aprobado crea con fases («Con hora de inicio»); proyectos e invitados van en «Avanzado».
+  await org.getByTestId("advanced-segment").click();
+  const adv = org.getByTestId("advanced-sheet");
+  await expect(adv.getByTestId("voting-mode-picker").getByRole("radio", { name: /Con hora de inicio/ })).toBeChecked();
+  await adv.getByRole("switch", { name: /Sortear proyectos/ }).check();
   for (const p of PROJECTS) {
-    await org.getByLabel("Proyecto").fill(p);
-    await org.getByRole("button", { name: /agregar proyecto/i }).click();
+    await adv.getByLabel("Proyecto", { exact: true }).fill(p);
+    await adv.getByRole("button", { name: /agregar proyecto/i }).click();
   }
-  await org.getByRole("button", { name: "Continuar" }).click();
-  await org.getByText(/Invitar por enlace/).click();
-  await org.getByLabel("Pegar lista (una por línea: Nombre, +58412…)").fill(VOTERS.join("\n"));
-  await expect(org.getByText(`${VOTERS.length} participantes listos.`)).toBeVisible();
-  await org.getByRole("button", { name: "Continuar" }).click();
-  await org.getByRole("button", { name: /publicar/i }).click();
+  await adv.getByText("Invitar por enlace").click();
+  await adv.getByLabel("Pegar lista (una por línea: Nombre, +58412…)").fill(VOTERS.join("\n"));
+  await expect(adv.getByText(`${VOTERS.length} invitados listos.`)).toBeVisible();
+  await adv.getByRole("button", { name: "Listo" }).click();
+  await org.getByTestId("publish").click();
 
-  // Panel: el organizerToken se muestra UNA vez; lo guardamos.
-  await expect(org).toHaveURL(/\/org\/(?!new$)[^/]+$/, { timeout: 30_000 });
-  const electionId = decodeURIComponent(new URL(org.url()).pathname.split("/").pop()!);
+  // «¡Listo! Comparte»: el organizerToken se muestra UNA vez (plegado); lo guardamos.
+  await expect(org).toHaveURL(/\/org\/[^/]+\/listo$/, { timeout: 60_000 });
+  const electionId = decodeURIComponent(new URL(org.url()).pathname.split("/")[2]);
   const organizerToken = (await org.getByTestId("org-token").textContent())!.trim();
   expect(organizerToken.length).toBeGreaterThanOrEqual(32);
   expect((await (await request.get(`/api/elections/${encodeURIComponent(electionId)}`)).json()).status).toBe("registration");
+  await expect(org.getByTestId("room-code")).toHaveText(/^[A-HJ-KM-NP-Z2-9]{6}$/); // publicar también abre la sala
+  await org.getByTestId("ready-go-panel").click();
+  await expect(org).toHaveURL(/\/org\/[^/]+$/);
   await expect(org.getByTestId("candidates-list").first()).toContainText(PROJECTS[0]);
 
   // Sin token, las acciones del organizador se rechazan (C4).

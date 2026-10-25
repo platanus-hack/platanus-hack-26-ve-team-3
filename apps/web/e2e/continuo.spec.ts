@@ -45,23 +45,23 @@ test.describe("modo continuo (mocks)", () => {
     expect(mock.voteBodies).toHaveLength(1);
   });
 
-  test("organizador: el asistente propone «Al instante» y lo envía al crear", async ({ page }) => {
+  test("organizador: «Al instante» se elige en «Avanzado» (el diseño aprobado propone «Con hora de inicio») y se envía al crear", async ({ page }) => {
     const mock = continuousMock("draft");
     await mock.install(page);
     await page.goto("/org/new");
+    await page.getByTestId("advanced-segment").click();
     const picker = page.getByTestId("voting-mode-picker");
+    await expect(picker.getByRole("radio", { name: /Con hora de inicio/ })).toBeChecked();
+    await picker.locator("label", { hasText: "Al instante" }).click();
     await expect(picker.getByRole("radio", { name: /Al instante/ })).toBeChecked();
-    await expect(picker).toContainText("Recomendado para eventos");
-    await expect(picker.getByRole("radio", { name: /Con hora de inicio/ })).not.toBeChecked();
-    await page.getByLabel("Título de la votación").fill("Evento ficticio: ¿qué charla repetimos?");
-    await page.locator("#opt-0").fill("Charla A");
-    await page.locator("#opt-1").fill("Charla B");
-    await page.getByRole("button", { name: "Continuar" }).click();
-    await page.getByRole("button", { name: "Continuar" }).click();
-    await expect(page.getByTestId("review-voting-mode")).toContainText("Al instante");
-    await page.getByRole("button", { name: /publicar/i }).click();
-    await expect.poll(() => mock.createBodies.length).toBe(1);
+    await page.getByTestId("advanced-sheet").getByRole("button", { name: "Listo" }).click();
+    await page.getByLabel("Pregunta de la votación").fill("Evento ficticio: ¿qué charla repetimos?");
+    await page.getByLabel("Opción A", { exact: true }).fill("Charla A");
+    await page.getByLabel("Opción B", { exact: true }).fill("Charla B");
+    await page.getByTestId("publish").click();
+    await page.waitForURL(`**/org/${E2E.electionId}/listo`);
     expect((mock.createBodies[0] as { votingMode: string }).votingMode).toBe("continuous");
+    await expect(page.getByTestId("ready-state")).toHaveText(/Votación abierta/);
   });
 
   test("organizador: el panel en modo continuo solo tiene Abrir (inscripción + votación) y Cerrar, con contadores en vivo", async ({ page }) => {

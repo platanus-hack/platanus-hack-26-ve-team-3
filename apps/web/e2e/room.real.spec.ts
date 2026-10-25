@@ -1,4 +1,5 @@
 import { expect, test, type Browser } from "@playwright/test";
+import { openMore } from "./helpers/org";
 
 /**
  * Sala abierta contra el SERVIDOR REAL (`next start`, DATA_DIR temporal, sin claves on-chain). Sin mocks.
@@ -35,14 +36,16 @@ test("sala real: 2 entran por /j y llegan a /v/<token>; la sala llena ofrece mod
   // Panel del organizador: tarjeta "Sala abierta".
   await page.addInitScript(([eid, t]) => sessionStorage.setItem(`quorum.orgToken.${eid}`, t), [id, organizerToken] as const);
   await page.goto(`/org/${id}`);
+  await openMore(page, "room");
   const card = page.getByTestId("room-card");
   await expect(card.getByTestId("room-state")).toHaveText("Sin abrir");
   await card.getByLabel("Tope de personas").fill("2");
   await card.getByLabel("Minutos abierta").fill("10");
   await card.getByTestId("room-open").click();
-  const code = (await card.getByTestId("room-code").textContent())!.trim();
-  expect(code).toMatch(/^[A-HJ-KM-NP-Z2-9]{6}$/);
-  await expect(card.getByTestId("room-join-url")).toHaveText(`${baseURL}/j/${code}`);
+  // Código, QR y enlace: en la cabina del panel.
+  await expect(page.getByTestId("room-code")).toHaveText(/^[A-HJ-KM-NP-Z2-9]{6}$/);
+  const code = (await page.getByTestId("room-code").textContent())!.trim();
+  await expect(page.getByTestId("room-join-url")).toHaveText(`${baseURL}/j/${code}`);
 
   // El GET público NO revela joinUrl ni roomCode.
   const pub = (await (await request.get(`/api/elections/${id}/room`)).json()) as Record<string, unknown>;

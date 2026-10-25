@@ -1,6 +1,7 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { E2E, MockV1, type Phase } from "./mocks/v1";
+import { openMore } from "./helpers/org";
 
 /**
  * Capturas de la fase 2 a 360 / 768 / 1440 px con datos FIXTURE (mocks del contrato v1).
@@ -78,19 +79,21 @@ for (const w of WIDTHS) {
       await at(page, w, "registration");
       await page.addInitScript(([id, t]) => sessionStorage.setItem(`quorum.orgToken.${id}`, t), [E2E.electionId, E2E.orgToken]);
       await page.goto(`/org/${E2E.electionId}`);
-      await expect(page.getByTestId("org-token")).toBeVisible();
+      await expect(page.getByTestId("org-token")).toBeVisible(); // primera visita: «Más › Token» se abre solo
+      await openMore(page, "voters");
       await expect(page.getByTestId("voters-list")).toBeVisible();
       await shot(page, "14-organizador-panel", w);
     });
 
-    test(`wizard con sorteo ${w}`, async ({ page }) => {
+    test(`crear con sorteo ${w}`, async ({ page }) => {
       await at(page, w, "draft");
       await page.goto("/org/new");
-      await page.getByLabel("Título de la votación").fill(E2E.title);
-      for (let i = 0; i < 2; i++) await page.getByPlaceholder(`Opción ${i + 1}`).fill(String(i + 1));
-      await page.getByText("Más ajustes").click();
+      await page.getByLabel("Pregunta de la votación").fill(E2E.title);
+      await page.getByRole("button", { name: "1 a 5" }).click();
+      await page.getByTestId("advanced-segment").click();
+      await page.getByRole("switch", { name: /Sortear proyectos/ }).check();
       for (const c of E2E.candidates.slice(0, 3)) {
-        await page.getByLabel("Proyecto").fill(c.label);
+        await page.getByLabel("Proyecto", { exact: true }).fill(c.label);
         await page.getByLabel("Monto (opcional)").fill(String(c.amount));
         await page.getByRole("button", { name: /agregar proyecto/i }).click();
       }
