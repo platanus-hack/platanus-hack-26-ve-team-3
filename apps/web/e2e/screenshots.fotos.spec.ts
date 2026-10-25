@@ -129,7 +129,7 @@ test("espera animada y boleta con fotos (modo continuo)", async ({ page }) => {
   await shot(page, "boleta-elegida-360");
 });
 
-test("panel del organizador: «Por opción» con tarjetas", async ({ page }) => {
+test("panel del organizador en votación: título y fotos grandes de las opciones (sin resultados)", async ({ page }) => {
   const imgs = await photos(page);
   const mock = new MockV1("open");
   mock.continuous = true;
@@ -140,10 +140,11 @@ test("panel del organizador: «Por opción» con tarjetas", async ({ page }) => 
   await mock.install(page);
   await page.addInitScript(([id, t]) => sessionStorage.setItem(`quorum.orgToken.${id}`, t), [E2E.electionId, E2E.orgToken] as const);
   await page.goto(`/org/${E2E.electionId}`);
-  await expect(page.getByTestId("live-breakdown")).toContainText(NAMES[1]!);
-  await shot(page, "panel-por-opcion-360", true);
+  await expect(page.getByTestId("panel-options")).toContainText(NAMES[1]!);
+  await expect(page.getByTestId("live-breakdown")).toHaveCount(0);
+  await shot(page, "panel-votacion-fotos-360", true);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await shot(page, "panel-por-opcion-1440");
+  await shot(page, "panel-votacion-fotos-1440");
 });
 
 test("en vivo: tarjetas, ganador, empate y fallo detectado", async ({ page }) => {

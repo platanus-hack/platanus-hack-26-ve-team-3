@@ -13,7 +13,7 @@ export type ReceiptView = { inclusionId: string; nullifier: string; state: "pend
 /**
  * Comprobante del votante como ticket térmico que "sale impreso" de una ranura. Muestra estado, hora y el código del
  * comprobante (por debajo, el nullifier de la boleta), que "Comprobar mi voto" usa en la página de transparencia.
- * "Ver resultados" lleva a los porcentajes en vivo. NUNCA muestra la opción elegida.
+ * Después de votar solo se puede comprobar el voto (sin «en vivo»: los resultados se ven al cerrar). NUNCA muestra la opción elegida.
  */
 export function VoteReceiptCard({ electionId, receipt, votedAt, title }: { electionId: string; receipt: ReceiptView | null; votedAt?: string | null; title?: string }) {
   const [copied, setCopied] = useState<"ok" | "fail" | null>(null);
@@ -73,12 +73,9 @@ export function VoteReceiptCard({ electionId, receipt, votedAt, title }: { elect
       </div>
 
       <nav className="q-after-print flex w-full flex-col gap-2" aria-label="Después de votar">
-        <Link href={`/e/${id}/live`} className={buttonVariants({ size: "lg", full: true })}>
-          Ver resultados
-        </Link>
         {receipt ? (
           <>
-            <Link href={`/e/${id}?comprobar=1#mi-voto`} className={buttonVariants({ variant: "ghost", full: true })}>
+            <Link href={`/e/${id}?comprobar=1#mi-voto`} className={buttonVariants({ size: "lg", full: true })}>
               Comprobar mi voto
             </Link>
             <Button variant="link" className="self-center" onClick={copy}>

@@ -27,12 +27,13 @@ import { formatInt } from "@/lib/client/format";
 import { appendVoters, consumeTokenReveal, loadOrgToken, loadVoters, rememberElection, saveOrgToken, type StoredVoter } from "@/lib/client/orgStore";
 import { roomApi } from "@/lib/client/room";
 import { useAuditResult } from "@/lib/client/useAuditResult";
-import { hasAuditPackage, nextOrganizerAction, type OrganizerAction } from "@/lib/client/phases";
+import { hasAuditPackage, hasDraw, nextOrganizerAction, type OrganizerAction } from "@/lib/client/phases";
 import { openWarnings, readinessLine, type Readiness } from "@/lib/client/reviews";
 import { CandidatesList } from "./CandidatesEditor";
 import { ContinuousCard } from "./ContinuousCard";
 import { PUBLISH_ROOM } from "./ElectionComposer";
 import { LiveBreakdown } from "./LiveBreakdown";
+import { OptionsShowcase } from "./OptionsShowcase";
 import { TimeBoard, TurnoutCard } from "./VotingBoard";
 import { ReviewsCard } from "./ReviewsCard";
 
@@ -295,6 +296,8 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const liveUrl = typeof window === "undefined" ? `/e/${encodeURIComponent(electionId)}/live` : `${window.location.origin}/e/${encodeURIComponent(electionId)}/live`;
   const shareUrl = phase === "registration" ? (roomOpen ? status!.joinUrl! : null) : liveUrl;
   const candidatesCount = election.candidates?.length ?? 0;
+  // Sorteo (D-12) solo con candidatos: sin ellos no hay botón «Hacer el sorteo» ni paso «Sorteo».
+  const draw = hasDraw(election);
   // Carta del ganador: las opciones del tally cruzadas por `id` con las de la elección (foto y subtítulo), igual que /live.
   const optionById = new Map(election.options.map((o) => [o.id, o]));
   const closedOptions = tally ? tally.options.map((o) => ({ ...o, subtitle: optionById.get(o.id)?.subtitle, image: optionById.get(o.id)?.image })) : [];
@@ -355,7 +358,8 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       {/* ---------- Cabina según la fase ---------- */}
       {continuous && (phase === "draft" || phase === "open") ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-6">
-          {phase === "open" ? <LiveBreakdown tally={tally} options={election.options} /> : null}
+          {/* Mientras se vota, la cabina NO muestra resultados (cada quien los ve en su teléfono): título y fotos de las opciones. */}
+          {phase === "open" ? <OptionsShowcase title={election.title} options={election.options} /> : null}
           <ContinuousCard election={election} hasToken={Boolean(token)} onChanged={(e) => (e ? (setElection(e), reload()) : reload())} />
         </div>
       ) : phase === "draft" ? (
@@ -445,7 +449,8 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           <div className="lg:col-start-2 lg:row-start-1">
             <TimeBoard openedAt={election.votingStartsAt ?? election.startsAt} endsAt={election.endsAt} offset={clock.offset} />
           </div>
-          <LiveBreakdown tally={tally} options={election.options} className="lg:col-start-1 lg:row-span-3 lg:row-start-1" />
+          {/* Sin resultados en la cabina mientras se vota (se ven en cada teléfono): título y fotos de las opciones. */}
+          <OptionsShowcase title={election.title} options={election.options} className="lg:col-start-1 lg:row-span-3 lg:row-start-1" />
           <div className="lg:col-start-2 lg:row-start-2">
             <TurnoutCard tally={tally} />
           </div>
@@ -460,10 +465,13 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-6">
-          {/* Carta del ganador a lo ancho (la misma de /live). Debajo, solo la línea «Ganó X por N votos» (sin repetir el ranking) y la columna de participación y acciones. */}
-          {tally ? <WinnerScreen electionId={electionId} status={phase} options={closedOptions} totalVotes={tally.totalVotes} audit={audit} className="lg:col-span-2" /> : null}
-          <LiveBreakdown tally={tally} options={election.options} final headlineOnly className="lg:col-start-1" />
-          <div className="flex flex-col gap-4 lg:col-start-2">
+          {/* Izquierda: la carta del ganador (la misma de /live) y debajo solo la línea «Ganó X por N votos» (sin repetir el ranking).
+              Derecha, al lado en escritorio: participación, sorteo (solo con candidatos), exportar y verificar. En móvil todo apila en ese orden. */}
+          <div className="flex min-w-0 flex-col gap-4" data-testid="closed-main">
+            {tally ? <WinnerScreen electionId={electionId} status={phase} options={closedOptions} totalVotes={tally.totalVotes} audit={audit} className="lg:px-8 lg:py-10" /> : null}
+            <LiveBreakdown tally={tally} options={election.options} final headlineOnly />
+          </div>
+          <div className="flex flex-col gap-4" data-testid="closed-aside">
             <TurnoutCard tally={tally} />
             {action ? (
               <>
@@ -472,7 +480,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
               </>
             ) : (
               <p className="text-small text-muted-foreground">
-                {phase === "auditable" && candidatesCount === 0
+                {phase === "auditable" && !draw
                   ? "Votación cerrada. El resultado se puede verificar."
                   : phase === "drawn"
                     ? "Sorteo realizado."

@@ -117,27 +117,8 @@ export function AuditChecklist({ result, onDownload, runtime, title = "Resultado
           </>
         )}
 
-        <Disclosure
-          title={
-            <h3 id="unsupported-h" className="text-body font-bold">
-              Propiedades no evaluadas ({result.unsupportedGuarantees.length})
-            </h3>
-          }
-        >
-          {result.unsupportedGuarantees.length === 0 ? (
-            <p className="text-small text-muted-foreground">Sin propiedades pendientes.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {result.unsupportedGuarantees.map((g) => (
-                <li key={g} className="flex flex-col gap-1 py-1 sm:flex-row sm:items-start sm:gap-2">
-                  <StatusPill status="no verificable" className="w-fit shrink-0" />
-                  <span className="text-small text-muted-foreground">{g}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Disclosure>
-
+        {/* Las propiedades que el verificador declara no evaluadas (`unsupportedGuarantees`) no se listan en la UI (decisión de
+            producto): siguen íntegras en el JSON descargable y en el paquete. Nunca se pintan como «verificado». */}
         <Disclosure title="Detalles técnicos" bodyClassName="flex flex-col gap-3">
           <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>

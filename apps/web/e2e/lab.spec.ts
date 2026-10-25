@@ -135,7 +135,7 @@ test.describe("compartir alteración → el público la verifica en su teléfono
 });
 
 test.describe("/audit · auditor independiente", () => {
-  test("paquete íntegro por id: método, versión, hash de entrada y garantías no evaluadas", async ({ page }) => {
+  test("paquete íntegro por id: método, versión, hash de entrada; sin «Propiedades no evaluadas» en la UI", async ({ page }) => {
     const mock = new MockV1("auditable");
     await mock.install(page);
     await page.goto(`/audit?id=${E2E.electionId}`);
@@ -144,7 +144,9 @@ test.describe("/audit · auditor independiente", () => {
     await expect(page.getByTestId("verdict-banner")).toHaveAttribute("data-status", "verificado", { timeout: 30_000 });
     await expect(page.getByText("semaphore-ledger").first()).toBeVisible();
     await expect(page.getByTestId("input-artifact-digest")).toHaveAttribute("title", await page.getByTestId("input-sha256").innerText());
-    await expect(page.getByText("Propiedades no evaluadas")).toBeVisible();
+    // Las propiedades no evaluadas (unsupportedGuarantees) siguen en el JSON del verificador, pero no se listan en la UI.
+    await expect(page.getByText("Propiedades no evaluadas")).toHaveCount(0);
+    await expect(page.getByTestId("checks-summary")).toContainText("sin evaluar");
   });
 
   test("JSON pegado: sin forma de paquete ⇒ no verificable (no es evidencia de manipulación); paquete con campo extra ⇒ fallo; JSON ilegible ⇒ no verificable; nunca verde", async ({ page }) => {

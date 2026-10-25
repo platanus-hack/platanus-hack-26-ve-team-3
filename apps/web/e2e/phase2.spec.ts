@@ -47,10 +47,11 @@ test.describe("fase 2 · votante", () => {
     await expect(page.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible();
     const nullifier = (await page.getByTestId("receipt-inclusion-id").textContent())?.trim();
     expect(nullifier).toBe(mock.nullifier);
-    // Comprobante simple: hora, "Código de tu comprobante", "Comprobar mi voto" y "Ver resultados"; sin detalles técnicos.
+    // Comprobante simple: hora, "Código de tu comprobante" y "Comprobar mi voto" (sin «Ver resultados»: nada de en vivo para el votante); sin detalles técnicos.
     await expect(receipt).toContainText("Código de tu comprobante");
     await expect(page.getByTestId("receipt-time")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Ver resultados" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Ver resultados" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Comprobar mi voto" })).toBeVisible();
     await expect(page.getByTestId("tech-details")).toHaveCount(0);
     // El voto va sólo con la prueba (sin onchain ni datos del votante) y "ya voté" en otra petición.
     expect(Object.keys(mock.voteBodies[0] as object)).toEqual(["proof"]);
@@ -127,6 +128,8 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     expect(order).toEqual([...order].sort((a, b) => a - b));
     await expect(page.getByTestId("more-details")).toHaveJSProperty("open", false);
     await expect(page.getByTestId("my-vote-disclosure")).toHaveJSProperty("open", false);
+    // «Propiedades no evaluadas» no se muestra en ningún sitio de Transparencia (ni en «Más detalles»).
+    await expect(page.getByText("Propiedades no evaluadas")).toHaveCount(0);
     // Altura a 360 px con todo plegado (antes del rediseño: 2788 px). La carta del ganador (results/WinnerScreen) ocupa ~1000 px por sí sola.
     const viewport = page.viewportSize();
     await page.setViewportSize({ width: 360, height: 740 });
@@ -136,11 +139,14 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     await page.getByTestId("more-details").locator(":scope > summary").click();
     await expect(page.getByTestId("input-artifact-digest")).toHaveAttribute("title", /^sha256:[0-9a-f]{64}$/);
     await expect(page.getByTestId("verifier-version")).toContainText("quorum-verifier");
+    await expect(page.getByText("Propiedades no evaluadas")).toHaveCount(0);
+    await expect(page.getByText("Qué garantiza y qué no")).toBeVisible();
 
     await page.getByTestId("my-vote-disclosure").locator("summary").click();
     await page.getByLabel("Código del comprobante").fill(E2E.fixtureNullifier);
     await page.getByRole("button", { name: "Comprobar" }).click();
-    await expect(page.getByTestId("my-vote-result")).toContainText("paquete que verificaste");
+    await expect(page.getByTestId("my-vote-summary")).toContainText("Tu boleta está en el paquete que verificaste · posición #");
+    await expect(page.getByTestId("my-vote-details")).toHaveJSProperty("open", false);
   });
 
   test("Comprobar mi voto con sello: pasos animados, hash y posición de la boleta, enlace a la transacción en Basescan", async ({ page }) => {
@@ -161,15 +167,27 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     await expect(steps).toContainText("Comparando con el sello en Base Sepolia");
     const result = page.getByTestId("my-vote-result");
     await expect(result).toContainText("incluido");
-    await expect(result).toContainText("registro publicado (posición #0)");
+    // (a) Una frase resumen arriba; (c) «Detalles técnicos» plegado por defecto con código, hash y posición en el DOM.
+    await expect(page.getByTestId("my-vote-summary")).toHaveText("Tu boleta está en el registro publicado · posición #0");
+    const details = page.getByTestId("my-vote-details");
+    await expect(details).toHaveJSProperty("open", false);
+    await expect(details.locator("summary")).toContainText("Detalles técnicos");
+    await expect(page.getByTestId("my-vote-hash")).toBeHidden();
+    await details.locator("summary").click();
+    await expect(details).toHaveJSProperty("open", true);
     await expect(page.getByTestId("my-vote-hash")).toHaveText(E2E.fixtureBallotHash);
     await expect(page.getByTestId("my-vote-index")).toHaveText("#0");
     await expect(page.getByTestId("my-vote-code")).toHaveText(E2E.fixtureNullifier);
+    // (b) Fila del sello: «Sellado en Base Sepolia» + «Ver en Basescan» con el hash abreviado.
     const link = page.getByTestId("my-vote-anchor-link");
     await expect(link).toHaveAttribute("href", `https://sepolia.basescan.org/tx/${mock.anchorTx}`);
     await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toContainText("Ver en Basescan");
+    await expect(link).toContainText("0xabab…abab");
+    await expect(page.getByTestId("my-vote-anchor")).toContainText("Sellado en Base Sepolia");
     // Sin «Verificar ahora», el sello está publicado pero el teléfono no lo evaluó: nunca «coincide».
     await expect(page.getByTestId("my-vote-anchor")).toContainText("no evaluado por tu teléfono");
+    await expect(page.getByTestId("my-vote-anchor")).not.toContainText(/^(?!.*no coincide).*coincide/);
     await expect(result).not.toContainText(/voto está en la blockchain|anónim|identidad verificada/i);
     await expect(steps.locator("[data-step-state=done]")).toHaveCount(3);
     // Mientras tanto la verificación arrancó sola: tarjeta compacta con el mismo enlace al sello.
@@ -284,7 +302,11 @@ test.describe("fase 2 · organizador", () => {
       await page.getByTestId("phase-action").filter({ hasText: label }).click();
       await page.getByRole("button", { name: new RegExp(`^Sí, ${label}`, "i") }).click();
       await expect(page.getByTestId("org-phase-pill")).toHaveText(next);
-      if (next === "Votación en curso") await expect(page.getByTestId("live-breakdown")).toContainText("Preliminar");
+      // Mientras se vota, la cabina no muestra resultados (se ven en cada teléfono): muestra la escena de la landing.
+      if (next === "Votación en curso") {
+        await expect(page.getByTestId("panel-options")).toBeVisible();
+        await expect(page.getByTestId("live-breakdown")).toHaveCount(0);
+      }
     }
     expect(mock.authSeen.every((h) => h === `Bearer ${E2E.orgToken}`)).toBe(true);
     await expect(page.getByTestId("voters-list")).toContainText("Vecino Bruno (ficticio)");

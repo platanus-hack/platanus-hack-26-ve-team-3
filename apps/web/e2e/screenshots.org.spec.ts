@@ -94,7 +94,7 @@ for (const w of WIDTHS) {
       });
       await withToken(page);
       await page.goto(`/org/${E2E.electionId}`);
-      await expect(page.getByTestId("live-breakdown")).toContainText("Preliminar");
+      await expect(page.getByTestId("panel-options")).toBeVisible(); // sin resultados en la cabina mientras se vota
       await expect(page.getByTestId("org-turnout")).toContainText("7");
       await shot(page, "panel-votacion", w);
     });
@@ -139,6 +139,7 @@ test("panel: votación con menos de 2 votos 360", async ({ page }) => {
   );
   await withToken(page);
   await page.goto(`/org/${E2E.electionId}`);
-  await expect(page.getByTestId("live-breakdown")).toContainText("1 de 2 votos");
+  await expect(page.getByTestId("panel-options")).toBeVisible();
+  await expect(page.getByTestId("live-breakdown")).toHaveCount(0);
   await shot(page, "panel-votacion-pocos", 360);
 });

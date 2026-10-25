@@ -30,13 +30,16 @@ const REDUCED = "(prefers-reduced-motion: reduce)";
 const COMPACT = "(max-width: 1023px)";
 
 function useMedia(query: string, fallback: boolean) {
+  // Sin `matchMedia` (jsdom, navegadores muy viejos): el valor de respaldo y sin suscripción.
+  const can = typeof window !== "undefined" && typeof window.matchMedia === "function";
   return useSyncExternalStore(
     (on) => {
+      if (!can) return () => {};
       const mq = window.matchMedia(query);
       mq.addEventListener("change", on);
       return () => mq.removeEventListener("change", on);
     },
-    () => window.matchMedia(query).matches,
+    () => (can ? window.matchMedia(query).matches : fallback),
     () => fallback,
   );
 }
@@ -90,16 +93,24 @@ function useLoopClock(enabled: boolean) {
       cancelAnimationFrame(raf);
       raf = 0;
     };
-    const io = new IntersectionObserver(([e]) => {
-      inView = e.isIntersecting;
-      if (inView) start();
-      else stop();
-    });
-    io.observe(el);
+    // Sin IntersectionObserver (jsdom): se asume en pantalla.
+    const io =
+      typeof IntersectionObserver === "function"
+        ? new IntersectionObserver(([e]) => {
+            inView = e.isIntersecting;
+            if (inView) start();
+            else stop();
+          })
+        : null;
+    if (io) io.observe(el);
+    else {
+      inView = true;
+      start();
+    }
     const onVisibility = () => (document.hidden ? stop() : start());
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      io.disconnect();
+      io?.disconnect();
       stop();
       document.removeEventListener("visibilitychange", onVisibility);
     };
@@ -122,6 +133,7 @@ function useFit(w: number, h: number) {
     if (!el) return;
     const measure = () => setS(Math.min(w > 400 ? 1.18 : 1, el.clientWidth / w, el.clientHeight / h));
     measure();
+    if (typeof ResizeObserver !== "function") return; // jsdom: una sola medida
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();

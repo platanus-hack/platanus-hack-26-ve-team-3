@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, Copy, ExternalLink, Search } from "lucide-react";
+import { Check, CheckCircle2, CircleHelp, Copy, ExternalLink, Search, Stamp, XCircle } from "lucide-react";
 import { StatusPill, type HonestStatus } from "@/components/StatusPill";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Field, Input } from "@/components/ui/input";
 import { ApiClientError, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { copyText } from "@/lib/client/download";
+import { cn } from "@/lib/client/cn";
 import { shortHash } from "@/lib/client/format";
 import { loadReceipt } from "@/lib/client/identityVault";
 import { findNullifier, normalizeNullifier, type AnchorCheck } from "@/lib/client/onchain";
@@ -31,7 +33,7 @@ export function judgeInclusion(args: { found: { idx?: number } | null; source: I
   const { found, source, fromReceipt } = args;
   const where = SOURCE_LABEL[source];
   if (found) {
-    const pos = typeof found.idx === "number" && found.idx >= 0 ? ` (posición #${found.idx})` : "";
+    const pos = typeof found.idx === "number" && found.idx >= 0 ? ` · posición #${found.idx}` : "";
     return source === "paquete verificado"
       ? { status: "incluido", title: `Tu boleta está en el paquete que verificaste${pos}`, body: "Tu código aparece en el registro que tu teléfono acaba de comprobar." }
       : { status: "incluido", title: `Tu boleta está en ${where}${pos}`, body: "Al cierre, toca «Verificar ahora» y compruébalo de nuevo sin depender del servidor." };
@@ -195,37 +197,46 @@ export function MyVoteCheck({ electionId, verified, anchor = null, frame = "card
   );
 }
 
-/* ---------- Resultado: estado honesto + código, hash, posición y sello ---------- */
+/* ---------- Resultado: estado + UNA frase, fila del sello y «Detalles técnicos» plegados ---------- */
 
+/**
+ * Tarjeta de resultado en tres capas para no abrumar: (a) pill de estado y una sola frase («Tu boleta está en … ·
+ * posición #N», o el fallo/no encontrado con su explicación); (b) fila compacta del sello en Base Sepolia con enlace a
+ * Basescan; (c) «Detalles técnicos» plegado: código del comprobante, hash de la boleta y posición, con Copiar.
+ */
 function ResultCard({ result, anchor, anchorUrl, anchorCheck }: { result: Result; anchor: AnchorInfo | null; anchorUrl: string | null; anchorCheck: AnchorCheck | null }) {
   const { outcome, found, nullifier } = result;
+  const included = outcome.status === "incluido";
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border p-3" data-testid="my-vote-result" data-status={outcome.status}>
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill status={outcome.status} />
-          <span className="font-semibold">{outcome.title}</span>
+          <span className="font-semibold" data-testid="my-vote-summary">{outcome.title}</span>
         </div>
-        <p className="text-small text-muted-foreground">{outcome.body}</p>
+        {included ? null : <p className="text-small text-muted-foreground">{outcome.body}</p>}
       </div>
 
-      <dl className="flex flex-col gap-2">
-        <MonoRow label="Código del comprobante" value={nullifier} testId="my-vote-code" />
-        {found ? (
-          <>
-            <MonoRow
-              label="Hash de tu boleta en el registro"
-              value={found.hash ?? null}
-              note={found.hashFromReceipt ? "según el comprobante de este teléfono" : undefined}
-              empty="El registro aún no publica el hash; se verá al cierre."
-              testId="my-vote-hash"
-            />
-            <MonoRow label="Posición" value={typeof found.idx === "number" && found.idx >= 0 ? `#${found.idx}` : null} empty="Sin posición publicada" testId="my-vote-index" copy={false} />
-          </>
-        ) : null}
-      </dl>
+      <SealRow anchor={anchor} anchorUrl={anchorUrl} anchorCheck={anchorCheck} />
 
-      <AnchorBlock anchor={anchor} anchorUrl={anchorUrl} anchorCheck={anchorCheck} included={outcome.status === "incluido"} />
+      <Disclosure title="Detalles técnicos" testId="my-vote-details" bodyClassName="flex flex-col gap-3">
+        <dl className="flex flex-col gap-2">
+          <MonoRow label="Código del comprobante" value={nullifier} testId="my-vote-code" />
+          {found ? (
+            <>
+              <MonoRow
+                label="Hash de tu boleta en el registro"
+                value={found.hash ?? null}
+                note={found.hashFromReceipt ? "según el comprobante de este teléfono" : undefined}
+                empty="El registro aún no publica el hash; se verá al cierre."
+                testId="my-vote-hash"
+              />
+              <MonoRow label="Posición en el registro" value={typeof found.idx === "number" && found.idx >= 0 ? `#${found.idx}` : null} empty="Sin posición publicada" testId="my-vote-index" copy={false} />
+            </>
+          ) : null}
+        </dl>
+        {included ? <p className="text-small text-muted-foreground">{outcome.body}</p> : null}
+      </Disclosure>
     </div>
   );
 }
@@ -267,41 +278,50 @@ function MonoRow({ label, value, note, empty, testId, copy = true }: { label: st
   );
 }
 
+/** Texto corto del estado del sello según lo que dijo el verificador del navegador sobre `anchor_matches`. */
+const SEAL_STATE: Record<AnchorCheck, { icon: React.ReactNode; text: string; cls: string }> = {
+  verificado: { icon: <CheckCircle2 aria-hidden="true" />, text: "coincide · comprobado por tu teléfono", cls: "text-success-strong" },
+  "fallo detectado": { icon: <XCircle aria-hidden="true" />, text: "no coincide con lo que verificó tu teléfono", cls: "text-danger-strong" },
+  "no verificable": { icon: <CircleHelp aria-hidden="true" />, text: "no evaluado por tu teléfono", cls: "text-muted-foreground" },
+};
+
 /**
- * Sello del registro. Lo único on-chain es el `finalHash` del registro, anclado al cerrar (D-13); la boleta NO va a la
- * cadena. «Coincide» sólo cuando el verificador del navegador evaluó `anchor_matches` como verificado.
+ * Fila compacta del sello. Lo único on-chain es el `finalHash` del registro, anclado al cerrar (D-13); la boleta NO va a
+ * la cadena. «Coincide» sólo cuando el verificador del navegador evaluó `anchor_matches` como verificado.
+ * A 360 px: texto a la izquierda y «Ver en Basescan» debajo; desde `sm`, una sola fila con el enlace a la derecha.
  */
-function AnchorBlock({ anchor, anchorUrl, anchorCheck, included }: { anchor: AnchorInfo | null; anchorUrl: string | null; anchorCheck: AnchorCheck | null; included: boolean }) {
+function SealRow({ anchor, anchorUrl, anchorCheck }: { anchor: AnchorInfo | null; anchorUrl: string | null; anchorCheck: AnchorCheck | null }) {
   if (!anchor) {
     return (
-      <p className="text-small text-muted-foreground" data-testid="my-vote-anchor">
-        <span className="font-semibold text-foreground">Sello:</span> el sello se publica al cerrar la votación.
+      <p className="flex items-center gap-2 text-small text-muted-foreground" data-testid="my-vote-anchor">
+        <Stamp className="size-4 shrink-0" aria-hidden="true" />
+        <span>
+          <span className="font-semibold text-foreground">Sello:</span> se publica al cerrar la votación.
+        </span>
       </p>
     );
   }
-  const line =
-    anchorCheck === "verificado"
-      ? "Tu teléfono comprobó que el sello coincide con el registro."
-      : anchorCheck === "fallo detectado"
-        ? "El sello publicado no coincide con el registro que verificó tu teléfono."
-        : "Sello publicado · no evaluado por tu teléfono (toca «Verificar ahora»).";
+  const st = SEAL_STATE[anchorCheck ?? "no verificable"];
   return (
-    <div className="flex flex-col gap-1.5 text-small" data-testid="my-vote-anchor" data-anchor-check={anchorCheck ?? "no verificable"}>
-      <p>
-        <span className="font-semibold">Sello:</span> {included ? "el registro donde está tu boleta" : "el registro"} quedó sellado en Base Sepolia.
+    <div className="flex flex-col gap-1 text-small sm:flex-row sm:items-center sm:justify-between sm:gap-3" data-testid="my-vote-anchor" data-anchor-check={anchorCheck ?? "no verificable"}>
+      <p className="flex min-w-0 items-start gap-2">
+        <Stamp className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span>
+          <span className="font-semibold">Sellado en Base Sepolia</span>{" "}
+          <span className={cn("inline-flex items-center gap-1 align-bottom [&_svg]:size-4 [&_svg]:shrink-0", st.cls)}>
+            {st.icon}
+            {st.text}
+          </span>
+        </span>
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        {anchorCheck === "fallo detectado" ? <StatusPill status="fallo detectado" size="sm" /> : null}
-        <span className="text-muted-foreground">{line}</span>
-      </div>
       {anchorUrl ? (
-        <a href={anchorUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-tap w-fit items-center gap-2 font-semibold underline underline-offset-4" data-testid="my-vote-anchor-link">
-          <ExternalLink className="size-4" aria-hidden="true" />
-          Ver transacción en Basescan <span className="q-mono font-normal">{shortHash(anchor.txHash, 10, 6)}</span>
+        <a href={anchorUrl} target="_blank" rel="noreferrer" title={anchor.txHash} className="inline-flex min-h-tap w-fit shrink-0 items-center gap-1.5 pl-6 font-semibold underline underline-offset-4 sm:pl-0" data-testid="my-vote-anchor-link">
+          Ver en Basescan <ExternalLink className="size-4" aria-hidden="true" />
+          <span className="q-mono text-[0.75rem] font-normal">{shortHash(anchor.txHash, 6, 4)}</span>
         </a>
       ) : (
-        <span className="q-mono break-all" data-testid="my-vote-anchor-tx">
-          Transacción {anchor.txHash} (cadena {anchor.chainId})
+        <span className="q-mono shrink-0 pl-6 text-[0.75rem] sm:pl-0" title={anchor.txHash} data-testid="my-vote-anchor-tx">
+          {shortHash(anchor.txHash, 6, 4)} · cadena {anchor.chainId}
         </span>
       )}
     </div>

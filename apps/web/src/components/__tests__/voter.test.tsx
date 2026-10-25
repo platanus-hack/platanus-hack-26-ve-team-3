@@ -132,7 +132,8 @@ describe("VoterFlow · otras fases", () => {
     mockFetch(() => ({ status: 200, body: invite("auditable") }));
     render(<VoterFlow token="tok" />);
     expect(await screen.findByText("La votación terminó")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Ver resultados" }).getAttribute("href")).toBe("/e/e1/live");
+    expect(screen.getByRole("link", { name: "Ver el resultado" }).getAttribute("href")).toBe("/e/e1");
+    expect(screen.getByRole("link", { name: "Comprobar mi voto" }).getAttribute("href")).toBe("/e/e1?comprobar=1#mi-voto");
   });
 
   it("ya votó (otro navegador, sólo votedAt) → 'Ya votaste' con la fecha, sin boleta", async () => {

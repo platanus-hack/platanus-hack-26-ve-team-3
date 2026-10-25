@@ -15,7 +15,7 @@ import { cn } from "@/lib/client/cn";
 import { downloadJson } from "@/lib/client/download";
 import { FIXTURE_PACKAGE_ID, FIXTURE_PACKAGE_URL } from "@/lib/client/fixtures";
 import { formatDateTime, kindLabel, shortHash } from "@/lib/client/format";
-import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
+import { hasAuditPackage, hasDraw, phaseLabel } from "@/lib/client/phases";
 import { basescanTxUrl } from "@/lib/client/room";
 import type { BrowserVerification } from "@/lib/client/zk";
 import { MIN_VOTES_FOR_BREAKDOWN, type Aggregates as AggregatesV1, type AuditResponse as StoredAudit, type Election as ElectionV1 } from "@quorum/contracts";
@@ -26,7 +26,6 @@ import { normalizeDigest, VerifyNowPanel, type PackageSource, type VerifiedPacka
 import { ActionBar, PageHeader } from "@/components/ui/page-header";
 import { CheckList } from "@/components/ui/check-list";
 import { ResultsCard } from "@/components/results/ResultsCard";
-import { RankedCards } from "@/components/results/RankedCards";
 import { WinnerScreen } from "@/components/results/WinnerScreen";
 import { Disclosure } from "@/components/ui/disclosure";
 
@@ -139,7 +138,6 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
   const auditSource = browserResult ? "tu teléfono" : serverAudit?.auditResult ? "el servidor" : null;
   const byId = new Map(election.options.map((o) => [o.id, o]));
   const withPhotos = tally ? tally.options.map((o) => ({ ...o, subtitle: byId.get(o.id)?.subtitle, image: byId.get(o.id)?.image })) : [];
-  const breakdown = tally ? tally.totalVotes >= MIN_VOTES_FOR_BREAKDOWN && withPhotos.length > 0 && withPhotos.every((o) => o.count !== null) : false;
   const digestMatchesServer = browserResult && serverAudit?.packageDigest ? normalizeDigest(serverAudit.packageDigest) === normalizeDigest(browserResult.inputArtifactDigest) : null;
   const anchorUrl = election.anchor?.txHash ? basescanTxUrl(election.anchor.chainId, election.anchor.txHash) : null;
 
@@ -147,7 +145,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
     <div className="q-fade-in q-container flex flex-col gap-5 py-6 md:py-10">
       <PageHeader title={election.title} description={election.description || undefined}>
         {isFixture ? <Badge tone="warning" className="self-start">Datos de ejemplo: el servidor no respondió</Badge> : null}
-        <PhaseTimeline phase={election.status} continuous={election.votingMode === "continuous"} />
+        <PhaseTimeline phase={election.status} continuous={election.votingMode === "continuous"} hasDraw={hasDraw(election)} />
         <ActionBar>
           <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={cn(buttonVariants({ variant: "soft" }))}>
             En vivo
@@ -179,11 +177,12 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
         </div>
       ) : null}
 
-      {/* 2b. Abierta: una sola carta de resultados en vivo (la misma que /live). */}
-      {!closed && tally && election.status !== "draft" ? (
-        <ResultsCard options={tally.options} totalVotes={tally.totalVotes} eligible={tally.eligible} turnout={tally.turnout} live={tally.status === "open"} statusLabel={phaseLabel[tally.status]} closesAt={tally.closesAt} compact={breakdown} showLeader={false}>
-          {breakdown ? <RankedCards ariaHidden options={withPhotos.map((o) => ({ ...o, count: o.count ?? 0 }))} totalVotes={tally.totalVotes} size="lg" /> : null}
-        </ResultsCard>
+      {/* 2b. Abierta: sin resultados en vivo para el votante (se publican al cerrar; la cabina tampoco los muestra). */}
+      {!closed && election.status !== "draft" ? (
+        <div className="rounded-xl border border-border bg-card p-5" data-testid="results-at-close">
+          <p className="text-heading font-semibold">Los resultados se publican al cerrar la votación.</p>
+          <p className="mt-1 text-small text-muted-foreground">Mientras tanto, aquí puedes comprobar que tu boleta está en el registro.</p>
+        </div>
       ) : null}
       {!closed ? (
         <p className="text-small text-muted-foreground" data-testid="verify-later">
