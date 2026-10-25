@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ApiClientError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
-import { myElections, type MyElection } from "@/lib/client/myElections";
+import { forgetElections, myElections, type MyElection } from "@/lib/client/myElections";
 import { loadOrgToken } from "@/lib/client/orgStore";
 import { ownsInvite, readLocal } from "@/lib/client/voterAccess";
 import { phaseLabel } from "@/lib/client/phases";
@@ -100,6 +100,7 @@ export function MyElections({ demoHref }: { demoHref: string }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [offline, setOffline] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,9 +170,35 @@ export function MyElections({ demoHref }: { demoHref: string }) {
 
       {past.length > 0 ? (
         <section aria-labelledby="anteriores" className="flex flex-col gap-3">
-          <h2 id="anteriores" className="q-eyebrow">
-            Anteriores
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="anteriores" className="q-eyebrow">
+              Anteriores
+            </h2>
+            {confirmClear ? (
+              <span className="flex items-center gap-2 text-small">
+                <span className="text-muted-foreground">¿Quitar {past.length} de esta lista?</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    forgetElections(past);
+                    setRows((rs) => (rs ?? []).filter((r) => ACTIVE.has(r.status) && !r.voted));
+                    setConfirmClear(false);
+                  }}
+                >
+                  Sí, quitar
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmClear(false)}>
+                  Cancelar
+                </Button>
+              </span>
+            ) : (
+              <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmClear(true)}>
+                Limpiar
+              </Button>
+            )}
+          </div>
           <ul className="flex flex-col gap-3">
             {past.map((r) => (
               <ElectionRow key={`${r.role}:${r.electionId}`} row={r} />

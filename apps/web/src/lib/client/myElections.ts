@@ -1,4 +1,4 @@
-import { recentElections } from "./orgStore";
+import { forgetRecentElection, recentElections } from "./orgStore";
 
 export type MyElection = { electionId: string; title: string; role: "voter" | "organizer"; href: string };
 
@@ -41,4 +41,31 @@ export function myElections(): MyElection[] {
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * Quita votaciones de «Mis votaciones» en este teléfono. Solo borra los enlaces guardados (`quorum.mine.*`,
+ * `quorum.room.*` y la lista reciente del organizador): no toca la credencial del votante, el recibo ni nada
+ * en el servidor. Si la persona vuelve a abrir su enlace, la votación reaparece.
+ */
+export function forgetElections(entries: Pick<MyElection, "electionId" | "role">[]) {
+  const voterIds = new Set(entries.filter((e) => e.role === "voter").map((e) => e.electionId));
+  for (const e of entries) if (e.role === "organizer") forgetRecentElection(e.electionId);
+  if (voterIds.size === 0) return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !(k.startsWith(VOTER_PREFIX) || k.startsWith(ROOM_PREFIX))) continue;
+      try {
+        const v = JSON.parse(localStorage.getItem(k) ?? "null") as { electionId?: string } | null;
+        if (v && typeof v.electionId === "string" && voterIds.has(v.electionId)) keys.push(k);
+      } catch {
+        /* entrada ajena: se deja */
+      }
+    }
+    for (const k of keys) localStorage.removeItem(k);
+  } catch {
+    return;
+  }
 }

@@ -51,3 +51,7 @@
 - Predeterminado en votaciones nuevas: se inscriben y votan en el mismo momento. Publicar = abrir; la sala sigue abierta mientras se vota; `member_added` encadenado en el ledger; boleta válida con raíz histórica de las últimas 32 y ≥ K=5 miembros; cerrar = sala + votación. «Con hora de inicio» (fases) sigue disponible y sus paquetes verifican igual.
 - Verde: typecheck, lint, 483 tests, build, 86 Playwright con mocks, 7 E2E reales (incluye `continuo.real`). Evidencia en `docs/TEST_RESULTS.md`. Sin merge ni deploy (pendiente de aprobación).
 - Pendiente: probar con teléfonos reales en el evento; decidir si K=5 es el valor para mañana.
+
+## 2026-10-25 — limpiar «Mis votaciones» (`feat/limpiar-lista`, ≈07:50 VET)
+- La lista de «Mis votaciones» vive solo en el navegador (localStorage); no hay listado ni borrado en el servidor. Nuevo botón «Limpiar» en «Anteriores» (con confirmación) que quita esas votaciones de la lista del teléfono sin tocar credenciales, recibos ni datos del servidor.
+- Verde en el worktree: vitest web 344 tests (36 archivos), typecheck, lint. Sin merge (pendiente de aprobación).
