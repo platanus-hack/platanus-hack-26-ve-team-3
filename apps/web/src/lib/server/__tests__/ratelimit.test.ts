@@ -84,12 +84,12 @@ describe("topes del votante: por credencial, con la IP como freno alto", () => {
     expect(tryHit(() => rateLimitBy("test:lockout", "vt_victim", "tok_real", VOTER_STEP_LIMIT))).toBe(0);
   });
 
-  it("credenciales del evento: solo los intentos fallidos cuentan para el tope estricto", () => {
+  it("credenciales del evento: solo los intentos fallidos cuentan, también en paralelo", () => {
     vi.stubEnv("QUORUM_RATELIMIT", "on");
     const r = req("198.51.100.11");
-    for (let i = 0; i < 50; i++) failureLimit(r, "test:badge-fail", 10);
-    for (let i = 0; i < 10; i++) failureLimit(r, "test:badge-fail", 10)();
-    expect(tryHit(() => failureLimit(r, "test:badge-fail", 10))).toBe(1);
+    for (let i = 0; i < 50; i++) failureLimit(r, "test:badge-fail", 10).ok();
+    const inFlight = Array.from({ length: 15 }, () => tryHit(() => failureLimit(r, "test:badge-fail", 10)));
+    expect(inFlight.filter(Boolean)).toHaveLength(5);
   });
 
   it("una sola IP abusando sigue frenada por el tope alto", () => {

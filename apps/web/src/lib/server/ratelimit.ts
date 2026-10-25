@@ -47,20 +47,18 @@ export function rateLimitBy(scope: string, voterId: string, inviteToken: string,
 }
 
 /**
- * Tope de intentos FALLIDOS por IP (p. ej. credenciales del evento que no existen o ya se usaron). Comprueba antes de
- * procesar y devuelve `fail()` para contar solo los rechazos: probar códigos ajenos queda frenado aunque las entradas
- * válidas del wifi del evento tengan un tope alto.
+ * Tope de intentos FALLIDOS por IP (credenciales del evento que no existen). Reserva el lugar ANTES de procesar (sin
+ * carrera entre peticiones simultáneas) y lo devuelve con `ok()` si el intento no fue un fallo: probar códigos ajenos
+ * queda frenado aunque las entradas válidas del wifi del evento tengan un tope alto.
  */
-export function failureLimit(req: Request, scope: string, baseLimit: number, windowMs = 60_000): () => void {
+export function failureLimit(req: Request, scope: string, baseLimit: number, windowMs = 60_000): { ok: () => void } {
   const key = `${scope}:${clientKey(req)}`;
-  const limit = Math.floor(baseLimit * rateLimitScale());
-  const b = buckets.get(key);
-  if (process.env.QUORUM_RATELIMIT !== "off" && b && b.resetAt > Date.now() && b.count >= limit) throw new HttpError("forbidden", "Demasiadas solicitudes; intenta en un minuto", 429);
-  return () => {
-    const now = Date.now();
-    const cur = buckets.get(key);
-    if (!cur || cur.resetAt <= now) buckets.set(key, { count: 1, resetAt: now + windowMs });
-    else cur.count += 1;
+  hit(key, Math.floor(baseLimit * rateLimitScale()), windowMs);
+  return {
+    ok: () => {
+      const b = buckets.get(key);
+      if (b && b.count > 0) b.count -= 1;
+    },
   };
 }
 

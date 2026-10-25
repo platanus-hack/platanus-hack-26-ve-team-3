@@ -3,8 +3,7 @@ import { joinWithBadge } from "@/lib/server/badge";
 import { HttpError, json, parseBody, route } from "@/lib/server/errors";
 import { failureLimit, rateLimit, VOTER_IP_LIMIT } from "@/lib/server/ratelimit";
 
-const BADGE_FAIL_LIMIT = 10;
-const BADGE_FAILURES = new Set<string>(["badge_invalid", "badge_unknown", "badge_used"]);
+const BADGE_UNKNOWN_LIMIT = 30;
 
 /** Igual que `join`: todo el evento comparte la IP del wifi; el control real es una credencial = un lugar. */
 function badgeJoinLimitPerMinute(): number {
@@ -21,12 +20,14 @@ function badgeJoinLimitPerMinute(): number {
  */
 export const POST = route<{ roomCode: string }>(async (req, { roomCode }) => {
   rateLimit(req, "room:join-badge", badgeJoinLimitPerMinute());
-  const fail = failureLimit(req, "room:join-badge-fail", BADGE_FAIL_LIMIT);
-  const input = await parseBody(req, JoinBadgeInput);
+  const guard = failureLimit(req, "room:join-badge-unknown", BADGE_UNKNOWN_LIMIT);
   try {
-    return json(JoinRoomResult.parse(await joinWithBadge(roomCode, input)), { status: 201 });
+    const input = await parseBody(req, JoinBadgeInput);
+    const res = json(JoinRoomResult.parse(await joinWithBadge(roomCode, input)), { status: 201 });
+    guard.ok();
+    return res;
   } catch (err) {
-    if (err instanceof HttpError && BADGE_FAILURES.has(err.code)) fail();
+    if (!(err instanceof HttpError && err.code === "badge_unknown")) guard.ok();
     throw err;
   }
 });
