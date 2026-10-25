@@ -7,8 +7,8 @@ import { syncScheduleForVoter } from "@/lib/server/schedule";
 /** POST /api/voters/:id/identity { inviteToken, commitment } → { ok, registeredCount }. Solo el commitment Semaphore; nunca la clave. */
 export const POST = route<{ id: string }>(async (req, { id }) => {
   rateLimit(req, "identity", VOTER_IP_LIMIT);
-  rateLimitBy("identity", id, VOTER_STEP_LIMIT);
   const input = await parseBody(req, IdentityInput);
+  rateLimitBy("identity", id, input.inviteToken, VOTER_STEP_LIMIT);
   await syncScheduleForVoter(id);
   return json(await registerIdentity(id, input), { status: 201 });
 });

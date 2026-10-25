@@ -1,7 +1,10 @@
 import { JoinBadgeInput, JoinRoomResult } from "@quorum/contracts";
 import { joinWithBadge } from "@/lib/server/badge";
-import { json, parseBody, route } from "@/lib/server/errors";
-import { rateLimit, VOTER_IP_LIMIT } from "@/lib/server/ratelimit";
+import { HttpError, json, parseBody, route } from "@/lib/server/errors";
+import { failureLimit, rateLimit, VOTER_IP_LIMIT } from "@/lib/server/ratelimit";
+
+const BADGE_FAIL_LIMIT = 10;
+const BADGE_FAILURES = new Set<string>(["badge_invalid", "badge_unknown", "badge_used"]);
 
 /** Igual que `join`: todo el evento comparte la IP del wifi; el control real es una credencial = un lugar. */
 function badgeJoinLimitPerMinute(): number {
@@ -18,6 +21,12 @@ function badgeJoinLimitPerMinute(): number {
  */
 export const POST = route<{ roomCode: string }>(async (req, { roomCode }) => {
   rateLimit(req, "room:join-badge", badgeJoinLimitPerMinute());
+  const fail = failureLimit(req, "room:join-badge-fail", BADGE_FAIL_LIMIT);
   const input = await parseBody(req, JoinBadgeInput);
-  return json(JoinRoomResult.parse(await joinWithBadge(roomCode, input)), { status: 201 });
+  try {
+    return json(JoinRoomResult.parse(await joinWithBadge(roomCode, input)), { status: 201 });
+  } catch (err) {
+    if (err instanceof HttpError && BADGE_FAILURES.has(err.code)) fail();
+    throw err;
+  }
 });

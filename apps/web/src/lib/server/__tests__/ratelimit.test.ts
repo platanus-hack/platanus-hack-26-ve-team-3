@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { rateLimit, rateLimitBy, rateLimitScale, VOTER_IP_LIMIT, VOTER_STEP_LIMIT } from "../ratelimit";
+import { failureLimit, rateLimit, rateLimitBy, rateLimitScale, VOTER_IP_LIMIT, VOTER_STEP_LIMIT } from "../ratelimit";
 
 const req = (ip: string) => new Request("http://x/api", { headers: { "x-forwarded-for": ip } });
 const hits = (scope: string, ip: string, n: number) => {
@@ -66,7 +66,7 @@ describe("topes del votante: por credencial, con la IP como freno alto", () => {
     let rejected = 0;
     for (let i = 0; i < 150; i++) {
       rejected += tryHit(() => rateLimit(req("198.51.100.9"), "test:voter-ip", VOTER_IP_LIMIT));
-      rejected += tryHit(() => rateLimitBy("test:voter-step", `vt_${i}`, VOTER_STEP_LIMIT));
+      rejected += tryHit(() => rateLimitBy("test:voter-step", `vt_${i}`, `tok_${i}`, VOTER_STEP_LIMIT));
     }
     expect(rejected).toBe(0);
   });
@@ -74,8 +74,22 @@ describe("topes del votante: por credencial, con la IP como freno alto", () => {
   it("una misma credencial pasa el tope aunque cambie de IP", () => {
     vi.stubEnv("QUORUM_RATELIMIT", "on");
     let rejected = 0;
-    for (let i = 0; i < VOTER_STEP_LIMIT + 3; i++) rejected += tryHit(() => rateLimitBy("test:same-voter", "vt_abuse", VOTER_STEP_LIMIT));
+    for (let i = 0; i < VOTER_STEP_LIMIT + 3; i++) rejected += tryHit(() => rateLimitBy("test:same-voter", "vt_abuse", "tok_abuse", VOTER_STEP_LIMIT));
     expect(rejected).toBe(3);
+  });
+
+  it("quien conoce el voterId sin el token no agota el cupo de la persona", () => {
+    vi.stubEnv("QUORUM_RATELIMIT", "on");
+    for (let i = 0; i < VOTER_STEP_LIMIT * 3; i++) tryHit(() => rateLimitBy("test:lockout", "vt_victim", `adivinado_${i % 3}`, VOTER_STEP_LIMIT));
+    expect(tryHit(() => rateLimitBy("test:lockout", "vt_victim", "tok_real", VOTER_STEP_LIMIT))).toBe(0);
+  });
+
+  it("credenciales del evento: solo los intentos fallidos cuentan para el tope estricto", () => {
+    vi.stubEnv("QUORUM_RATELIMIT", "on");
+    const r = req("198.51.100.11");
+    for (let i = 0; i < 50; i++) failureLimit(r, "test:badge-fail", 10);
+    for (let i = 0; i < 10; i++) failureLimit(r, "test:badge-fail", 10)();
+    expect(tryHit(() => failureLimit(r, "test:badge-fail", 10))).toBe(1);
   });
 
   it("una sola IP abusando sigue frenada por el tope alto", () => {

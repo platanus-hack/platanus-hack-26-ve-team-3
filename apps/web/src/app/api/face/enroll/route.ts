@@ -11,7 +11,7 @@ import { syncScheduleForVoter } from "@/lib/server/schedule";
 export const POST = route(async (req) => {
   rateLimit(req, "face:enroll", VOTER_IP_LIMIT);
   const input = await parseBody(req, FaceEnrollInput);
-  rateLimitBy("face:enroll", input.voterId, VOTER_STEP_LIMIT);
+  rateLimitBy("face:enroll", input.voterId, input.inviteToken, VOTER_STEP_LIMIT);
   await syncScheduleForVoter(input.voterId);
   // D-21: crear revisiones manuales tiene su propio tope por IP (3 cada 10 min), además del tope por elección.
   const res = await enrollFace(input, { onNewReview: () => rateLimit(req, "face:review-new", 3, 10 * 60_000) });

@@ -10,8 +10,8 @@ import { syncScheduleForVoter } from "@/lib/server/schedule";
  */
 export const POST = route<{ id: string }>(async (req, { id }) => {
   rateLimit(req, "wallet:link", VOTER_IP_LIMIT);
-  rateLimitBy("wallet:link", id, VOTER_STEP_LIMIT);
   const input = await parseBody(req, LinkWalletInput);
+  rateLimitBy("wallet:link", id, input.inviteToken, VOTER_STEP_LIMIT);
   await syncScheduleForVoter(id);
   return json(await linkWallet(id, input));
 });

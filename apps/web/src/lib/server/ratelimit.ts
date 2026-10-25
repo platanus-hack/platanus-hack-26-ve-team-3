@@ -1,4 +1,5 @@
 /** Rate limit básico en memoria por clave (IP + ruta). Suficiente para la demo; no es distribuido. */
+import { createHash } from "node:crypto";
 import { HttpError } from "./errors";
 
 const buckets = new Map<string, { count: number; resetAt: number }>();
@@ -36,11 +37,31 @@ export function rateLimit(req: Request, scope: string, baseLimit = 30, windowMs 
 }
 
 /**
- * Tope por credencial (voterId) en vez de por IP: en una sala todos salen por el wifi del evento, así que el tope por IP
- * juntaría a todos como una sola persona. Cada paso del votante exige su `inviteToken`; la IP queda como freno alto.
+ * Tope por credencial (voterId + inviteToken) en vez de por IP: en una sala todos salen por el wifi del evento, así que
+ * el tope por IP juntaría a todos como una sola persona. La clave incluye el token: un tercero que conozca el voterId
+ * sin el token cae en otro contador y no puede agotar el de la persona; la IP queda como freno alto.
  */
-export function rateLimitBy(scope: string, id: string, limit: number, windowMs = 60_000): void {
+export function rateLimitBy(scope: string, voterId: string, inviteToken: string, limit: number, windowMs = 60_000): void {
+  const id = createHash("sha256").update(`${voterId}\0${inviteToken}`).digest("hex").slice(0, 32);
   hit(`${scope}:id:${id}`, limit, windowMs);
+}
+
+/**
+ * Tope de intentos FALLIDOS por IP (p. ej. credenciales del evento que no existen o ya se usaron). Comprueba antes de
+ * procesar y devuelve `fail()` para contar solo los rechazos: probar códigos ajenos queda frenado aunque las entradas
+ * válidas del wifi del evento tengan un tope alto.
+ */
+export function failureLimit(req: Request, scope: string, baseLimit: number, windowMs = 60_000): () => void {
+  const key = `${scope}:${clientKey(req)}`;
+  const limit = Math.floor(baseLimit * rateLimitScale());
+  const b = buckets.get(key);
+  if (process.env.QUORUM_RATELIMIT !== "off" && b && b.resetAt > Date.now() && b.count >= limit) throw new HttpError("forbidden", "Demasiadas solicitudes; intenta en un minuto", 429);
+  return () => {
+    const now = Date.now();
+    const cur = buckets.get(key);
+    if (!cur || cur.resetAt <= now) buckets.set(key, { count: 1, resetAt: now + windowMs });
+    else cur.count += 1;
+  };
 }
 
 function hit(key: string, limit: number, windowMs: number): void {

@@ -12,8 +12,8 @@ const Input = z.object({ inviteToken: z.string().min(1) });
  */
 export const POST = route<{ id: string }>(async (req, { id }) => {
   rateLimit(req, "voted", VOTER_IP_LIMIT);
-  rateLimitBy("voted", id, VOTER_STEP_LIMIT);
   const { inviteToken } = await parseBody(req, Input);
+  rateLimitBy("voted", id, inviteToken, VOTER_STEP_LIMIT);
   await syncScheduleForVoter(id);
   return json(await markVoted(id, inviteToken));
 });
