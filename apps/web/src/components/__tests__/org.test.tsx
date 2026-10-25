@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { leaderOf, LiveBreakdown } from "@/components/org/LiveBreakdown";
 import { hmsText } from "@/components/org/VotingBoard";
@@ -181,7 +181,7 @@ describe("panel cabina", () => {
 
 /* ---------- Panel cerrado: la misma carta del ganador que /live, con el veredicto real de GET /audit ---------- */
 
-const closedElection = (status: "auditable" | "failed") => ({
+const closedElection = (status: "auditable" | "failed", candidates: { id: string; label: string; amount: number }[] = []) => ({
   id: "el-1",
   title: "Fixture: ¿qué mejora del espacio financia el fondo simulado?",
   kind: "multiple",
@@ -191,7 +191,7 @@ const closedElection = (status: "auditable" | "failed") => ({
     { id: "o1", label: "Opción 2", subtitle: "Cancha" },
     { id: "o2", label: "Opción 3" },
   ],
-  candidates: [],
+  candidates,
   endsAt: "2026-10-24T22:00:00.000Z",
 });
 const auditFixture = (valid: boolean) => ({
@@ -221,6 +221,52 @@ describe("panel cerrado", () => {
     expect(box.querySelectorAll("[data-testid=ranked-card]").length).toBe(0);
     expect(Array.from(box.querySelectorAll("tbody th")).map((t) => t.textContent)).toEqual(["Opción 2", "Opción 3", "Opción 1"]);
     expect(screen.getByTestId("org-turnout")).toBeTruthy();
+  });
+
+  it("escritorio: la carta del ganador y la línea «Ganó» van en la primera columna; participación, exportar y verificar en la segunda, al lado", async () => {
+    vi.mocked(apiV1.getElection).mockResolvedValue(closedElection("auditable") as never);
+    vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([1, 3, 2], 6), status: "auditable" } as never);
+    vi.mocked(apiV1.getAudit).mockResolvedValue(auditFixture(true) as never);
+    render(<OrgPanel electionId="el-1" />);
+    const win = await screen.findByTestId("winner-screen");
+    const main = screen.getByTestId("closed-main");
+    const aside = screen.getByTestId("closed-aside");
+    expect(main.contains(win)).toBe(true);
+    expect(main.contains(screen.getByTestId("live-breakdown"))).toBe(true);
+    expect(aside.contains(screen.getByTestId("org-turnout"))).toBe(true);
+    expect(within(aside).getByText("Exportar paquete de auditoría")).toBeTruthy();
+    expect(within(aside).getByText("Verificar en el navegador")).toBeTruthy();
+    // Mismo grid de dos columnas en `lg` que el resto de la cabina; la carta ya no cruza las dos columnas.
+    const grid = main.parentElement!;
+    expect(grid.className).toContain("lg:grid-cols-[minmax(0,1fr)_24rem]");
+    expect(Array.from(grid.children)).toEqual([main, aside]);
+    expect(win.className).not.toContain("lg:col-span-2");
+    // Orden en móvil (DOM): carta → línea «Ganó» → columna derecha.
+    expect(win.compareDocumentPosition(screen.getByTestId("live-breakdown")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("live-breakdown").compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("sin candidatos al sorteo: ni «Hacer el sorteo» ni «Sorteo» en ninguna parte del panel", async () => {
+    vi.mocked(apiV1.getElection).mockResolvedValue(closedElection("auditable") as never);
+    vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([1, 3, 2], 6), status: "auditable" } as never);
+    vi.mocked(apiV1.getAudit).mockResolvedValue(auditFixture(true) as never);
+    const { container } = render(<OrgPanel electionId="el-1" />);
+    await screen.findByTestId("winner-screen");
+    expect(screen.queryByTestId("phase-action")).toBeNull();
+    expect(screen.queryByText(/Hacer el sorteo/)).toBeNull();
+    expect(container.textContent).not.toMatch(/\bSorteo\b/i);
+    expect(screen.getByText("Votación cerrada. El resultado se puede verificar.")).toBeTruthy();
+  });
+
+  it("con candidatos al sorteo (D-12) se mantiene «Hacer el sorteo» en la columna derecha", async () => {
+    vi.mocked(apiV1.getElection).mockResolvedValue(closedElection("auditable", [{ id: "p-cancha", label: "Reparación de la cancha", amount: 1500 }]) as never);
+    vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([1, 3, 2], 6), status: "auditable" } as never);
+    vi.mocked(apiV1.getAudit).mockResolvedValue(auditFixture(true) as never);
+    render(<OrgPanel electionId="el-1" />);
+    await screen.findByTestId("winner-screen");
+    const button = screen.getByTestId("phase-action");
+    expect(button.textContent).toContain("Hacer el sorteo");
+    expect(screen.getByTestId("closed-aside").contains(button)).toBe(true);
   });
 
   it("auditable sin respuesta del verificador (404): la carta sale «pendiente de comprobar», nunca «verificado»", async () => {
