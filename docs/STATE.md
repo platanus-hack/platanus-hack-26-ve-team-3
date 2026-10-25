@@ -51,3 +51,7 @@
 - Predeterminado en votaciones nuevas: se inscriben y votan en el mismo momento. Publicar = abrir; la sala sigue abierta mientras se vota; `member_added` encadenado en el ledger; boleta válida con raíz histórica de las últimas 32 y ≥ K=5 miembros; cerrar = sala + votación. «Con hora de inicio» (fases) sigue disponible y sus paquetes verifican igual.
 - Verde: typecheck, lint, 483 tests, build, 86 Playwright con mocks, 7 E2E reales (incluye `continuo.real`). Evidencia en `docs/TEST_RESULTS.md`. Sin merge ni deploy (pendiente de aprobación).
 - Pendiente: probar con teléfonos reales en el evento; decidir si K=5 es el valor para mañana.
+
+## 2026-10-25 — repo del equipo 3 (`feat/repo-equipo`, ≈07:30 VET)
+- El código completo se refleja en `platanus-hack/platanus-hack-26-ve-team-3` (historial fusionado con la plantilla de Platanus). `origin` empuja a los dos repos; Render sigue desplegando desde `josegalvis27/quorum-hackathon`.
+- Llenados: `README.md`, `project-description.md`, `platanus-hack-project.jsonc` (deploy: https://quorum-sefw.onrender.com) y `project-logo.png` (1000×1000, marca Quórum). Comandos del README ejecutados: verificador sobre `valid.json` (verificado) y `tampered_total.json` (`tally_matches` = fallo detectado).
