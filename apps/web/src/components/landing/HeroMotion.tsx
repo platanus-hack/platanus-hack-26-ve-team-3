@@ -336,37 +336,3 @@ function HeroStill() {
     </section>
   );
 }
-
-/* ───────────────────────── Escenario para la cabina ───────────────────────── */
-
-/**
- * La misma composición del hero (titular cinético + escena en loop de 24 s), sin CTAs ni controles, para el panel del
- * organizador mientras se vota: en la pantalla grande no se muestran resultados (cada quien los ve en su teléfono);
- * se muestra esto. Movimiento reducido → titular quieto y el acto A fijo.
- */
-export function HeroStage({ className }: { className?: string }) {
-  const reduced = useMedia(REDUCED, false);
-  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
-  const { ref, t } = useLoopClock(!reduced);
-  const L = layoutFor(true);
-  const { ref: fitRef, s: fitS } = useFit(L.W, L.H);
-  const tt = reduced ? 1.6 : t;
-  return (
-    <section ref={ref} aria-label="Cómo funciona Quórum" data-testid="panel-motion" data-mode={reduced ? "still" : "loop"} className={cn("flex flex-col gap-5 rounded-[1.5rem] bg-card p-5 shadow-[0_0_0_1px_rgb(17_17_34/0.05),0_1px_3px_rgb(17_17_34/0.05),0_22px_44px_-26px_rgb(0_68_102/0.32)] lg:p-7", className)}>
-      <h2 className={cn(TITLE_CLS, "text-[1.75rem] sm:text-[2.25rem] lg:text-[2.75rem]")}>
-        <span className="sr-only">Nadie tiene que creerle a quien cuenta.</span>
-        {reduced ? <StillTitle line={ACTS[0].title} /> : <KineticTitle t={tt} />}
-      </h2>
-      <div ref={fitRef} className="relative h-[20rem] overflow-hidden sm:h-[24rem] lg:h-[28rem]">
-        {mounted && fitS > 0 ? (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ width: L.W * fitS, height: L.H * fitS }}>
-            <div className="origin-top-left" style={{ transform: `scale(${fitS.toFixed(4)})` }}>
-              <Scene t={tt} L={L} />
-            </div>
-          </div>
-        ) : null}
-      </div>
-      <p className="text-[0.6875rem] text-subtle">Datos de ejemplo · los resultados en vivo se ven en cada teléfono</p>
-    </section>
-  );
-}

@@ -358,11 +358,11 @@ export function VoterFlow({ token }: { token: string }) {
         <VoterShell>
           <h1 className="text-title font-bold leading-tight">La votación terminó</h1>
           <p className="text-muted-foreground">{title}</p>
-          <Link href={`/e/${encodeURIComponent(electionId)}/live`} className={buttonVariants({ size: "lg", full: true })}>
-            Ver resultados
+          <Link href={`/e/${encodeURIComponent(electionId)}`} className={buttonVariants({ size: "lg", full: true })}>
+            Ver el resultado
           </Link>
-          <Link href={`/e/${encodeURIComponent(electionId)}`} className={cn(buttonVariants({ variant: "link" }), "self-center")}>
-            Comprobar el resultado
+          <Link href={`/e/${encodeURIComponent(electionId)}?comprobar=1#mi-voto`} className={cn(buttonVariants({ variant: "link" }), "self-center")}>
+            Comprobar mi voto
           </Link>
         </VoterShell>
       );

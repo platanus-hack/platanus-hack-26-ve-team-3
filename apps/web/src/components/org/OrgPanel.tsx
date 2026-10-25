@@ -32,8 +32,8 @@ import { openWarnings, readinessLine, type Readiness } from "@/lib/client/review
 import { CandidatesList } from "./CandidatesEditor";
 import { ContinuousCard } from "./ContinuousCard";
 import { PUBLISH_ROOM } from "./ElectionComposer";
-import { HeroStage } from "@/components/landing/HeroMotion";
 import { LiveBreakdown } from "./LiveBreakdown";
+import { OptionsShowcase } from "./OptionsShowcase";
 import { TimeBoard, TurnoutCard } from "./VotingBoard";
 import { ReviewsCard } from "./ReviewsCard";
 
@@ -358,8 +358,8 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       {/* ---------- Cabina según la fase ---------- */}
       {continuous && (phase === "draft" || phase === "open") ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-6">
-          {/* Mientras se vota, la cabina NO muestra resultados (cada quien los ve en su teléfono): muestra la escena de la landing. */}
-          {phase === "open" ? <HeroStage /> : null}
+          {/* Mientras se vota, la cabina NO muestra resultados (cada quien los ve en su teléfono): título y fotos de las opciones. */}
+          {phase === "open" ? <OptionsShowcase title={election.title} options={election.options} /> : null}
           <ContinuousCard election={election} hasToken={Boolean(token)} onChanged={(e) => (e ? (setElection(e), reload()) : reload())} />
         </div>
       ) : phase === "draft" ? (
@@ -449,8 +449,8 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           <div className="lg:col-start-2 lg:row-start-1">
             <TimeBoard openedAt={election.votingStartsAt ?? election.startsAt} endsAt={election.endsAt} offset={clock.offset} />
           </div>
-          {/* Sin resultados en la cabina mientras se vota (se ven en cada teléfono): escena de la landing. */}
-          <HeroStage className="lg:col-start-1 lg:row-span-3 lg:row-start-1" />
+          {/* Sin resultados en la cabina mientras se vota (se ven en cada teléfono): título y fotos de las opciones. */}
+          <OptionsShowcase title={election.title} options={election.options} className="lg:col-start-1 lg:row-span-3 lg:row-start-1" />
           <div className="lg:col-start-2 lg:row-start-2">
             <TurnoutCard tally={tally} />
           </div>

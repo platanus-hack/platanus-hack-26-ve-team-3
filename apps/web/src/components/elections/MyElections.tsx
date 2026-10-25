@@ -38,7 +38,7 @@ async function validate(m: MyElection): Promise<Row | null> {
 function cta(r: Row): { label: string; href: string; primary: boolean } {
   const id = encodeURIComponent(r.electionId);
   if (r.role === "organizer") return { label: "Administrar", href: r.href, primary: ACTIVE.has(r.status) };
-  if (r.voted) return { label: "Ver resultados", href: `/e/${id}/live`, primary: false };
+  if (r.voted) return { label: "Comprobar mi voto", href: `/e/${id}?comprobar=1#mi-voto`, primary: false };
   if (r.status === "open") return { label: "Votar", href: r.href, primary: true };
   if (r.status === "registration") return { label: "Continuar", href: r.href, primary: true };
   return { label: "Ver resultado", href: `/e/${id}`, primary: false };

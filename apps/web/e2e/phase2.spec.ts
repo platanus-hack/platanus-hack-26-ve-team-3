@@ -47,10 +47,11 @@ test.describe("fase 2 · votante", () => {
     await expect(page.getByRole("heading", { name: "Tu voto fue contado" })).toBeVisible();
     const nullifier = (await page.getByTestId("receipt-inclusion-id").textContent())?.trim();
     expect(nullifier).toBe(mock.nullifier);
-    // Comprobante simple: hora, "Código de tu comprobante", "Comprobar mi voto" y "Ver resultados"; sin detalles técnicos.
+    // Comprobante simple: hora, "Código de tu comprobante" y "Comprobar mi voto" (sin «Ver resultados»: nada de en vivo para el votante); sin detalles técnicos.
     await expect(receipt).toContainText("Código de tu comprobante");
     await expect(page.getByTestId("receipt-time")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Ver resultados" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Ver resultados" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Comprobar mi voto" })).toBeVisible();
     await expect(page.getByTestId("tech-details")).toHaveCount(0);
     // El voto va sólo con la prueba (sin onchain ni datos del votante) y "ya voté" en otra petición.
     expect(Object.keys(mock.voteBodies[0] as object)).toEqual(["proof"]);
@@ -303,7 +304,7 @@ test.describe("fase 2 · organizador", () => {
       await expect(page.getByTestId("org-phase-pill")).toHaveText(next);
       // Mientras se vota, la cabina no muestra resultados (se ven en cada teléfono): muestra la escena de la landing.
       if (next === "Votación en curso") {
-        await expect(page.getByTestId("panel-motion")).toBeVisible();
+        await expect(page.getByTestId("panel-options")).toBeVisible();
         await expect(page.getByTestId("live-breakdown")).toHaveCount(0);
       }
     }
