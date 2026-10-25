@@ -6,7 +6,7 @@
  *     [--out <resultados.json>] [--package-out <paquete.json>] [--no-statics] [--no-xff]
  *
  * Simula una sala de N personas por la API pública (docs/API_CONTRACT.md, v1 + Sala abierta):
- *  1. organizador: crea "Prueba de carga (simulación)", publica, abre sala (maxSeats 80, 15 min);
+ *  1. organizador: crea "Prueba de carga (simulación)", publica, abre sala (maxSeats max(80, N), 15 min);
  *  2. pollers (proyectores/teléfonos) cada 2 s sobre /room, /tally, /voters (conteos) y /e/:id/live durante toda la corrida;
  *  3. estáticos pesados (/models/*, /zk/*) una vez por teléfono, concurrencia C, sin caché;
  *  4. inscripción: join por sala → GET invite → face/enroll (descriptor sintético 1024-d aleatorio, casi ortogonal a los demás)
@@ -26,7 +26,7 @@
  * por la IP de este equipo, como el wifi del evento) y cada uno vota apenas termina de inscribirse, como el cliente real:
  * GET /group hasta K (aviso de K, cada 3 s) → GET /roll → prueba Semaphore en un worker (fuera del hilo que mide) →
  * espera `--proof-delay-ms` (lo que tarda un teléfono, 3000 por defecto) → POST /vote; `stale_root` → nueva prueba
- * con el grupo nuevo (máx. 2 reintentos, como BallotScreen); `anonymity_pending` → espera 3 s y reintenta; 429 → 5 s.
+ * con el grupo nuevo (máx. 5 reintentos, como BallotScreen); `anonymity_pending` → espera 3 s y reintenta; 429 → 5 s.
  * Mientras, `--pollers` proyectores consultan /room + /tally cada 2 s y la elección cada 4 s (como Projector.tsx).
  * Luego cierre (ancla real si el servidor tiene clave), verificador CLI con `--anchor-rpc` y sorteo.
  */
@@ -198,7 +198,7 @@ async function main() {
   const token = created.organizerToken as string;
   log(`elección ${electionId}`);
   must(await call("POST /api/elections/:id/publish", `/api/elections/${electionId}/publish`, { method: "POST", token }), [200, 201], "publicar");
-  const room = must(await call("POST /api/elections/:id/room", `/api/elections/${electionId}/room`, { method: "POST", token, body: JSON.stringify({ maxSeats: 80, expiresInMin: 15 }) }), [200, 201], "abrir sala");
+  const room = must(await call("POST /api/elections/:id/room", `/api/elections/${electionId}/room`, { method: "POST", token, body: JSON.stringify({ maxSeats: Math.max(80, N), expiresInMin: 15 }) }), [200, 201], "abrir sala");
   const roomCode = room.roomCode as string;
   log(`sala ${roomCode} · ${room.joinUrl}`);
 
@@ -423,7 +423,7 @@ async function mainContinuous() {
   if (created.votingMode !== "continuous") throw new Error(`se esperaba votingMode continuous, llegó ${created.votingMode}`);
   const pub = must(await call("POST /api/elections/:id/publish", `/api/elections/${electionId}/publish`, { method: "POST", token }), [200, 201], "publicar");
   const K = Number(pub.minAnonymitySet ?? 5);
-  const room = must(await call("POST /api/elections/:id/room", `/api/elections/${electionId}/room`, { method: "POST", token, body: JSON.stringify({ maxSeats: 80, expiresInMin: 30 }) }), [200, 201], "abrir sala");
+  const room = must(await call("POST /api/elections/:id/room", `/api/elections/${electionId}/room`, { method: "POST", token, body: JSON.stringify({ maxSeats: Math.max(80, N), expiresInMin: 30 }) }), [200, 201], "abrir sala");
   const roomCode = room.roomCode as string;
   log(`elección ${electionId} · estado ${pub.status} · K=${K} · sala ${roomCode}`);
 
@@ -478,7 +478,7 @@ async function mainContinuous() {
         if (Number(g.size) >= K) break;
         await sleep(3_000);
       }
-      // BallotScreen: GET /roll → prueba → enviar; stale_root → otra vuelta (máx. 2 reintentos).
+      // BallotScreen: GET /roll → prueba → enviar; stale_root → otra vuelta (máx. 5 reintentos).
       for (let attempt = 0; ; attempt++) {
         const roll = must(await call("GET /api/elections/:id/roll", `/api/elections/${electionId}/roll`), [200], `roll #${i}`);
         const pr = await prover.run({ privateKey: id.privateKey, commitments: roll.commitments, electionId, option: pattern[i % pattern.length] });
@@ -489,7 +489,7 @@ async function mainContinuous() {
         const code = (v.body as { code?: string } | null)?.code;
         p.voteStatus = v.status;
         if (v.status === 201) { if (sentProofs.length < 5) sentProofs.push(pr.proof); break; }
-        if (code === "stale_root" && attempt < 2) { p.stale += 1; continue; }
+        if (code === "stale_root" && attempt < 5) { p.stale += 1; continue; }
         if (code === "anonymity_pending" && attempt < 20) { p.kWaits += 1; await sleep(3_000); continue; }
         throw new Error(`vote #${i}: HTTP ${v.status} ${v.text.slice(0, 200)}`);
       }

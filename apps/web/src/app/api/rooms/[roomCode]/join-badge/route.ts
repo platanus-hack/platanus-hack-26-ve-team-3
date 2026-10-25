@@ -1,12 +1,12 @@
 import { JoinBadgeInput, JoinRoomResult } from "@quorum/contracts";
 import { joinWithBadge } from "@/lib/server/badge";
 import { json, parseBody, route } from "@/lib/server/errors";
-import { rateLimit } from "@/lib/server/ratelimit";
+import { rateLimit, VOTER_IP_LIMIT } from "@/lib/server/ratelimit";
 
 /** Igual que `join`: todo el evento comparte la IP del wifi; el control real es una credencial = un lugar. */
 function badgeJoinLimitPerMinute(): number {
-  const n = Number(process.env.BADGE_JOIN_RATE_PER_MIN ?? process.env.ROOM_JOIN_RATE_PER_MIN ?? "30");
-  return Number.isFinite(n) && n > 0 ? n : 30;
+  const n = Number(process.env.BADGE_JOIN_RATE_PER_MIN ?? process.env.ROOM_JOIN_RATE_PER_MIN ?? VOTER_IP_LIMIT);
+  return Number.isFinite(n) && n > 0 ? n : VOTER_IP_LIMIT;
 }
 
 /**

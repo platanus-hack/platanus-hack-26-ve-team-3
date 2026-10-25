@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { rateLimit, rateLimitScale } from "../ratelimit";
+import { rateLimit, rateLimitBy, rateLimitScale, VOTER_IP_LIMIT, VOTER_STEP_LIMIT } from "../ratelimit";
 
 const req = (ip: string) => new Request("http://x/api", { headers: { "x-forwarded-for": ip } });
 const hits = (scope: string, ip: string, n: number) => {
@@ -46,5 +46,42 @@ describe("clientKey (anti-spoofing)", () => {
     expect(clientKey(h({ "x-forwarded-for": "6.6.6.6, 2.2.2.2" }))).toBe("2.2.2.2");
     expect(clientKey(h({ "x-real-ip": "3.3.3.3" }))).toBe("3.3.3.3");
     expect(clientKey(h({}))).toBe("local");
+  });
+});
+
+describe("topes del votante: por credencial, con la IP como freno alto", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  const tryHit = (fn: () => void) => {
+    try {
+      fn();
+      return 0;
+    } catch {
+      return 1;
+    }
+  };
+
+  it("150 teléfonos en el mismo wifi, un paso cada uno: ninguno recibe 429", () => {
+    vi.stubEnv("QUORUM_RATELIMIT", "on");
+    let rejected = 0;
+    for (let i = 0; i < 150; i++) {
+      rejected += tryHit(() => rateLimit(req("198.51.100.9"), "test:voter-ip", VOTER_IP_LIMIT));
+      rejected += tryHit(() => rateLimitBy("test:voter-step", `vt_${i}`, VOTER_STEP_LIMIT));
+    }
+    expect(rejected).toBe(0);
+  });
+
+  it("una misma credencial pasa el tope aunque cambie de IP", () => {
+    vi.stubEnv("QUORUM_RATELIMIT", "on");
+    let rejected = 0;
+    for (let i = 0; i < VOTER_STEP_LIMIT + 3; i++) rejected += tryHit(() => rateLimitBy("test:same-voter", "vt_abuse", VOTER_STEP_LIMIT));
+    expect(rejected).toBe(3);
+  });
+
+  it("una sola IP abusando sigue frenada por el tope alto", () => {
+    vi.stubEnv("QUORUM_RATELIMIT", "on");
+    let rejected = 0;
+    for (let i = 0; i < VOTER_IP_LIMIT + 5; i++) rejected += tryHit(() => rateLimit(req("198.51.100.10"), "test:ip-abuse", VOTER_IP_LIMIT));
+    expect(rejected).toBe(5);
   });
 });

@@ -22,15 +22,29 @@ export function clientKey(req: Request): string {
  * recibiría 429 (docs/LOAD_TEST.md). Subirlo para el evento no quita controles: el tope real es `maxSeats`, el voto
  * doble lo bloquea el nullifier y cada paso exige `inviteToken`.
  */
+export const VOTER_IP_LIMIT = 200;
+export const VOTE_IP_LIMIT = 600;
+export const VOTER_STEP_LIMIT = 10;
+
 export function rateLimitScale(): number {
   const n = Number(process.env.QUORUM_RATELIMIT_SCALE ?? "1");
   return Number.isFinite(n) && n >= 1 ? n : 1;
 }
 
 export function rateLimit(req: Request, scope: string, baseLimit = 30, windowMs = 60_000): void {
+  hit(`${scope}:${clientKey(req)}`, Math.floor(baseLimit * rateLimitScale()), windowMs);
+}
+
+/**
+ * Tope por credencial (voterId) en vez de por IP: en una sala todos salen por el wifi del evento, así que el tope por IP
+ * juntaría a todos como una sola persona. Cada paso del votante exige su `inviteToken`; la IP queda como freno alto.
+ */
+export function rateLimitBy(scope: string, id: string, limit: number, windowMs = 60_000): void {
+  hit(`${scope}:id:${id}`, limit, windowMs);
+}
+
+function hit(key: string, limit: number, windowMs: number): void {
   if (process.env.QUORUM_RATELIMIT === "off") return;
-  const limit = Math.floor(baseLimit * rateLimitScale());
-  const key = `${scope}:${clientKey(req)}`;
   const now = Date.now();
   const b = buckets.get(key);
   if (!b || b.resetAt <= now) {
