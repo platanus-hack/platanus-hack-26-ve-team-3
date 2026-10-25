@@ -149,7 +149,7 @@ export function RankedCards({ options, totalVotes, size = "md", tone = "light", 
             <div className={cn("flex items-center", lg ? "gap-3.5 md:gap-4" : "gap-3")}>
               <OptionAvatar label={o.label} image={o.image} tone={tone} className={lg ? "size-14 text-[1.5rem] md:size-16 md:text-[1.75rem]" : "size-11 text-[1.25rem]"} />
               <div className="min-w-0 flex-1">
-                <p className={cn("truncate font-bold leading-tight", lg ? "text-[1.125rem] md:text-[1.375rem]" : "text-body")}>{o.label}</p>
+                <p className={cn("line-clamp-2 break-words font-bold leading-tight", lg ? "text-[1.125rem] md:text-[1.375rem]" : "text-body")}>{o.label}</p>
                 {o.subtitle ? <p className={cn("truncate", lg ? "text-small md:text-body" : "text-small", dark ? "text-[#b9bac4]" : "text-muted-foreground")}>{o.subtitle}</p> : null}
                 <span className="sr-only">
                   {" "}

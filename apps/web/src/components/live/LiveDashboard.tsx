@@ -128,17 +128,11 @@ export function LiveDashboard({ electionId }: { electionId: string }) {
         {!data && !error ? <LoadingState label="Cargando resultados…" lines={4} /> : null}
 
         {data && closed ? <WinnerScreen electionId={electionId} status={data.status} options={withPhotos} totalVotes={data.totalVotes} audit={audit} /> : null}
-        {data && !closed && breakdown && phase !== "registration" ? (
-          <section aria-labelledby="ranked-title" className="flex flex-col gap-3">
-            <h2 id="ranked-title" className="q-eyebrow">
-              Por opción · {data.status === "open" ? "preliminar, se confirma al cerrar" : "se confirma con el verificador"}
-            </h2>
-            <RankedCards ariaHidden options={withPhotos.map((o) => ({ ...o, count: o.count ?? 0 }))} totalVotes={data.totalVotes} size="lg" />
-          </section>
-        ) : null}
-
         {data && phase !== "registration" ? (
-          <ResultsCard options={data.options} totalVotes={data.totalVotes} eligible={data.eligible} turnout={data.turnout} live={data.status === "open"} statusLabel={phaseLabel[data.status]} closesAt={data.closesAt} compact={closed || breakdown} />
+          <ResultsCard options={data.options} totalVotes={data.totalVotes} eligible={data.eligible} turnout={data.turnout} live={data.status === "open"} statusLabel={phaseLabel[data.status]} closesAt={data.closesAt} compact={closed || breakdown}>
+            {/* Una sola carta: «En vivo», participación y «va ganando» arriba; debajo, en la misma carta, las tarjetas con foto que se reordenan. */}
+            {!closed && breakdown ? <RankedCards ariaHidden options={withPhotos.map((o) => ({ ...o, count: o.count ?? 0 }))} totalVotes={data.totalVotes} size="lg" /> : null}
+          </ResultsCard>
         ) : null}
 
         {data && extraTiles.length > 0 ? (
