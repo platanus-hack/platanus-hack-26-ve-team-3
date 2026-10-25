@@ -293,33 +293,17 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Qué garantiza y qué no</CardTitle>
+            <CardTitle>Qué garantiza</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <p className="mb-3 font-semibold">Se puede comprobar</p>
-              <CheckList
-                items={[
-                  "Cada boleta prueba que viene de alguien del padrón, sin decir de quién.",
-                  "Un inscrito, un voto.",
-                  "Cualquiera reproduce el recuento.",
-                  "Tu comprobante confirma que tu boleta está en el registro.",
-                ]}
-              />
-            </div>
-            <div>
-              <p className="mb-3 font-semibold">No se garantiza</p>
-              <CheckList
-                tone="no"
-                items={[
-                  "Que el servidor no vea la opción de cada boleta.",
-                  "Que el padrón sea correcto: lo define el organizador. La cámara no impide todos los duplicados.",
-                  "Que no falten boletas, si no hay registro público externo.",
-                  "La clave del votante vive solo en su navegador; si la borra, no puede votar.",
-                  "«Verificado» sólo lo muestra el verificador, nunca el servidor.",
-                ]}
-              />
-            </div>
+          <CardContent>
+            <CheckList
+              items={[
+                "Cada boleta prueba que viene de alguien del padrón, sin decir de quién.",
+                "Un inscrito, un voto.",
+                "Cualquiera reproduce el recuento.",
+                "Tu comprobante confirma que tu boleta está en el registro.",
+              ]}
+            />
           </CardContent>
         </Card>
       </Disclosure>

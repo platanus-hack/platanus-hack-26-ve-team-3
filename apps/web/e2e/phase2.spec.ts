@@ -146,7 +146,7 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     await expect(page.getByTestId("input-artifact-digest")).toHaveAttribute("title", /^sha256:[0-9a-f]{64}$/);
     await expect(page.getByTestId("verifier-version")).toContainText("quorum-verifier");
     await expect(page.getByText("Propiedades no evaluadas")).toHaveCount(0);
-    await expect(page.getByText("Qué garantiza y qué no")).toBeVisible();
+    await expect(page.getByText("Qué garantiza", { exact: true })).toBeVisible();
 
     await page.getByTestId("my-vote-disclosure").locator("summary").click();
     await page.getByLabel("Código del comprobante").fill(E2E.fixtureNullifier);
