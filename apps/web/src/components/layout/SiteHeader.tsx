@@ -4,7 +4,6 @@ import { Logo } from "@/components/ui/logo";
 
 const nav = [
   { href: "/votaciones", label: "Mis votaciones", mobile: true },
-  { href: "/org/new", label: "Crear votación", mobile: false },
   { href: "/audit", label: "Auditar", mobile: false },
 ];
 

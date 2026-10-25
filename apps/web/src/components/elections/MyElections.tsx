@@ -144,10 +144,7 @@ export function MyElections({ demoHref }: { demoHref: string }) {
           title="Aún no tienes votaciones aquí"
           action={
             <div className="flex flex-col items-center gap-1">
-              <Link href="/org/new" className={buttonVariants()}>
-                Crear votación
-              </Link>
-              <Link href={demoHref} className={buttonVariants({ variant: "link" })}>
+              <Link href={demoHref} className={buttonVariants()}>
                 Ver un ejemplo
               </Link>
             </div>

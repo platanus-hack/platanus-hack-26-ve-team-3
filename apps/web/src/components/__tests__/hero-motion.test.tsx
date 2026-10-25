@@ -54,7 +54,7 @@ describe("HeroMotion", () => {
       const summary = within(hero).getByText(a.summary);
       expect(summary.closest(".sr-only")).toBeNull();
     });
-    expect(within(hero).getByRole("link", { name: /Crear votación/ }).getAttribute("href")).toBe("/org/new");
+    expect(within(hero).queryByRole("link", { name: /Crear votación/ })).toBeNull(); // D-25: sin «Crear votación» en la landing
     expect(within(hero).getByRole("link", { name: "Mis votaciones" }).getAttribute("href")).toBe("/votaciones");
   });
 

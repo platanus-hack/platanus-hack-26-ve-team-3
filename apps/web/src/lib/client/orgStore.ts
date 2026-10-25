@@ -91,3 +91,34 @@ export function orgAuthHeaders(electionId: string): Record<string, string> {
   const t = loadOrgToken(electionId);
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
+
+/* ───────────────────────── D-25: código de acceso para crear ───────────────────────── */
+const CREATE_CODE_KEY = "quorum.createCode";
+
+/** Guarda el código de acceso solo en esta pestaña (sessionStorage). */
+export function saveCreateCode(code: string) {
+  try {
+    sessionStorage.setItem(CREATE_CODE_KEY, code);
+  } catch {
+    /* sin almacenamiento: se pedirá otra vez */
+  }
+}
+export function loadCreateCode(): string | null {
+  try {
+    return sessionStorage.getItem(CREATE_CODE_KEY);
+  } catch {
+    return null;
+  }
+}
+export function clearCreateCode() {
+  try {
+    sessionStorage.removeItem(CREATE_CODE_KEY);
+  } catch {
+    /* nada */
+  }
+}
+/** Cabecera `x-quorum-create-code` para `POST /api/elections` (vacía si no hay código guardado). */
+export function createCodeHeaders(): Record<string, string> {
+  const c = loadCreateCode();
+  return c ? { "x-quorum-create-code": c } : {};
+}
