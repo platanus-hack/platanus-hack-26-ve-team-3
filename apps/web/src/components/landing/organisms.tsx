@@ -17,7 +17,9 @@ function HeroCopy() {
     <div className="flex flex-col gap-6">
       <p className="q-eyebrow">Infraestructura de confianza para decisiones colectivas</p>
       <h1 className="font-display text-[2.6rem] font-bold leading-[0.98] tracking-[-0.045em] sm:text-[3.75rem] lg:text-[4.5rem]">
-        Nadie tiene que creerle a <span className="text-primary-ink">quien cuenta.</span>
+        Vota en segundos.
+        <br />
+        <span className="text-primary-ink">Verifica siempre.</span>
       </h1>
       <p className="max-w-[38ch] text-heading text-muted-foreground">Cada voto trae una prueba matemática. Cada resultado se recalcula desde cualquier teléfono.</p>
       <div className="flex flex-col gap-3 sm:flex-row">
