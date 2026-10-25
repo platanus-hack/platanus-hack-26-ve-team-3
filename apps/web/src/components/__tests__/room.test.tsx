@@ -99,7 +99,8 @@ describe("RoomJoin (/j/[roomCode])", () => {
     render(<RoomJoin roomCode="abc234" />);
     expect(await screen.findByText("Asamblea ficticia (fixture)")).toBeTruthy();
     expect(screen.getByTestId("step-indicator").textContent).toContain("Paso 1 de 2");
-    expect(screen.getByTestId("room-closes-in").textContent).toMatch(/^La entrada cierra en \d+:\d{2}$/);
+    // «La entrada cierra en…» depende del reloj (`useNow` arranca en un setTimeout 0): se espera, no se exige en el primer render.
+    expect((await screen.findByTestId("room-closes-in")).textContent).toMatch(/^La entrada cierra en \d+:\d{2}$/);
     expect(screen.queryByTestId("room-seats")).toBeNull();
     expect(document.body.textContent).not.toMatch(/lugares/);
     expect(screen.getByLabelText("Tu nombre o apodo")).toBeTruthy();
