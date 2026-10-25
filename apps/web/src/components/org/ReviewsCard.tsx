@@ -18,7 +18,7 @@ const statusLabel = { pending: "Por revisar", approved: "Aprobado", rejected: "R
  * propia credencial (p. ej. gemelos). El organizador mira a la persona y su credencial y decide. Sin datos biométricos:
  * solo hora, alias genérico y método. Cada aprobación se publica (como número) en el paquete de auditoría.
  */
-export function ReviewsCard({ electionId, reviews, hasToken, onDecided }: { electionId: string; reviews: ReviewSummary[]; hasToken: boolean; onDecided: () => void }) {
+export function ReviewsCard({ electionId, reviews, hasToken, onDecided, className }: { electionId: string; reviews: ReviewSummary[]; hasToken: boolean; onDecided: () => void; className?: string }) {
   const [confirm, setConfirm] = useState<{ id: string; decision: "approve" | "reject" } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function ReviewsCard({ electionId, reviews, hasToken, onDecided }: { elec
   }
 
   return (
-    <Card data-testid="reviews-card">
+    <Card data-testid="reviews-card" className={className}>
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle>Casos por revisar ({pending.length})</CardTitle>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState, type HTMLAttributes } from "react";
 import { CalendarClock, Copy, DoorClosed, DoorOpen, MonitorUp } from "lucide-react";
 import type { Election, RoomStatus } from "@quorum/contracts";
 import { checkLabel, DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, methodLabel, type EligibilityDraft } from "@/components/org/EligibilityPicker";
@@ -11,15 +11,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, Input } from "@/components/ui/input";
 import { orgMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { countdownText, formatStartTime, timed, useCountdown, useServerClock } from "@/lib/client/clock";
+import { countdownText, formatStartTime, timed, useCountdown } from "@/lib/client/clock";
 import { copyText } from "@/lib/client/download";
 import { formatInt } from "@/lib/client/format";
 import { loadOrgToken } from "@/lib/client/orgStore";
 import { roomApi } from "@/lib/client/room";
+import { cn } from "@/lib/client/cn";
+import { useRoomStatus, type RoomFeed } from "./useRoomStatus";
 import { remaining, useNow } from "./useNow";
 import { ConfirmInline } from "@/components/ui/confirm-inline";
 
-const POLL_MS = 3000;
 const closedLabel: Record<NonNullable<RoomStatus["closedReason"]>, string> = {
   manual: "Cerrada por el organizador",
   expired: "Expirada",
@@ -35,42 +36,21 @@ export function openProjector(electionId: string) {
 }
 
 /**
- * Tarjeta "Sala abierta" del panel (fase `registration`): tope y minutos, Abrir / Ampliar / Cerrar, código y enlace,
+ * Tarjeta "Sala" del panel (fase `registration`): tope y minutos, Abrir / Ampliar / Cerrar, código y enlace,
  * botón "Proyectar". Datos de `GET/POST/DELETE /api/elections/:id/room` con Bearer.
+ * `feed`: estado compartido con la cabina del panel (si falta, la tarjeta sondea sola). `embedded`: dentro de
+ * «Más › Sala», sin marco de tarjeta y sin repetir el código y el enlace (ya están en la cabina).
  */
-export function RoomCard({ electionId, hasToken, eligibility, onElectionChange }: { electionId: string; hasToken: boolean; eligibility?: Election["eligibility"]; onElectionChange?: (e: Election) => void }) {
+export function RoomCard({ electionId, hasToken, eligibility, onElectionChange, feed, embedded = false }: { electionId: string; hasToken: boolean; eligibility?: Election["eligibility"]; onElectionChange?: (e: Election) => void; feed?: RoomFeed; embedded?: boolean }) {
   const now = useNow(1000);
-  const { offset, record } = useServerClock();
-  const [status, setStatus] = useState<RoomStatus | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const own = useRoomStatus(electionId, { enabled: !feed, hasToken });
+  const { status, setStatus, refresh, offset, record, error: loadError } = feed ?? own;
   const [seats, setSeats] = useState("60");
   const [minutes, setMinutes] = useState("15");
   const [busy, setBusy] = useState<"open" | "close" | "schedule" | "start" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const refresh = useCallback(async () => {
-    try {
-      const { value, sample } = await timed(() => roomApi.status(electionId));
-      record(sample);
-      setStatus(value);
-      setLoadError(null);
-    } catch (e) {
-      setLoadError(orgMessage(e));
-    }
-  }, [electionId, record]);
-
-  useEffect(() => {
-    const first = window.setTimeout(() => void refresh(), 0);
-    const t = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
-    }, POLL_MS);
-    return () => {
-      clearTimeout(first);
-      clearInterval(t);
-    };
-  }, [refresh, hasToken]);
 
   const isBadge = eligibility?.method === "event-badge";
   const canEditEligibility = hasToken && (status?.seatsTaken ?? 0) === 0;
@@ -132,11 +112,14 @@ export function RoomCard({ electionId, hasToken, eligibility, onElectionChange }
   const startsAt = status?.votingStartsAt ?? null;
   const startLeft = useCountdown(startsAt, offset, 500);
 
+  const Shell = embedded ? EmbeddedShell : Card;
+  const Head = embedded ? EmbeddedHead : CardHeader;
+  const Body = embedded ? EmbeddedBody : CardContent;
   return (
-    <Card data-testid="room-card">
-      <CardHeader>
+    <Shell data-testid="room-card">
+      <Head>
         <div className="flex flex-wrap items-center gap-2">
-          <CardTitle>Sala abierta</CardTitle>
+          {embedded ? <h3 className="sr-only">Sala</h3> : <CardTitle>Sala abierta</CardTitle>}
           {status ? (
             <Badge tone={isOpen ? "success" : "neutral"} data-testid="room-state">
               {isOpen ? "Abierta" : status.closedReason ? closedLabel[status.closedReason] : "Sin abrir"}
@@ -154,8 +137,8 @@ export function RoomCard({ electionId, hasToken, eligibility, onElectionChange }
             {isBadge ? `${methodLabel["event-badge"]} (comprobación ${checkLabel[eligibility?.badgeCheck ?? "live"]}${eligibility?.badgeCheck === "list" ? `, ${formatInt(eligibility.allowlistCount ?? 0)} usuarios` : ""})` : methodLabel["open-alias"]}
           </strong>
         </p>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      </Head>
+      <Body className="flex flex-col gap-4">
         {canEditEligibility && onElectionChange ? <EligibilityEditor electionId={electionId} eligibility={eligibility} onSaved={onElectionChange} /> : null}
         {loadError && !status ? <Alert tone="warning" title="No se pudo leer el estado de la sala">{loadError}</Alert> : null}
 
@@ -172,7 +155,7 @@ export function RoomCard({ electionId, hasToken, eligibility, onElectionChange }
               <dt className="text-muted-foreground">Cierra en</dt>
               <dd className="text-heading font-bold">{left ?? "—"}</dd>
             </div>
-            {status.roomCode ? (
+            {status.roomCode && !embedded ? (
               <div>
                 <dt className="text-muted-foreground">Código</dt>
                 <dd className="q-mono text-heading font-bold tracking-widest" data-testid="room-code">
@@ -206,7 +189,7 @@ export function RoomCard({ electionId, hasToken, eligibility, onElectionChange }
                   </p>
                 ) : (
                   <p className="text-small text-muted-foreground" data-testid="start-countdown">
-                    Sin hora: la abres tú desde «Siguiente paso».
+                    Sin hora: la abres tú con «Abrir votación».
                   </p>
                 )}
               </div>
@@ -229,7 +212,7 @@ export function RoomCard({ electionId, hasToken, eligibility, onElectionChange }
           </section>
         ) : null}
 
-        {status?.joinUrl ? (
+        {status?.joinUrl && !embedded ? (
           <div className="flex flex-col gap-2 rounded-md border border-border bg-muted p-3 sm:flex-row sm:items-center">
             <p className="q-mono min-w-0 flex-1 break-all text-small" data-testid="room-join-url">
               {status.joinUrl}
@@ -278,9 +261,19 @@ export function RoomCard({ electionId, hasToken, eligibility, onElectionChange }
         <p className="sr-only" role="status" aria-live="polite">
           {copied ? "Enlace copiado" : ""}
         </p>
-      </CardContent>
-    </Card>
+      </Body>
+    </Shell>
   );
+}
+
+function EmbeddedShell({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("flex flex-col gap-4", className)} {...props} />;
+}
+function EmbeddedHead({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("flex flex-col gap-1.5", className)} {...props} />;
+}
+function EmbeddedBody(props: HTMLAttributes<HTMLDivElement>) {
+  return <div {...props} />;
 }
 
 function draftOf(e: Election["eligibility"]): EligibilityDraft {

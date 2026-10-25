@@ -2,6 +2,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { fakeCamera, qrDataUrl } from "./mocks/badgeCamera";
 import { E2E, MockV1 } from "./mocks/v1";
+import { openMore } from "./helpers/org";
 
 /**
  * D-19 — entrar con la credencial del evento contra MOCKS del contrato (datos FIXTURE).
@@ -152,25 +153,30 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
 });
 
 test.describe("organizador y proyector (credencial)", () => {
-  test("asistente: '¿Quién puede votar?' con credencial por defecto; crea con eligibility", async ({ page }) => {
-    const mock = new MockV1("registration");
+  test("crear en una pantalla: credencial del evento con comprobación en vivo por defecto; lista en «Avanzado»; crea con eligibility", async ({ page }) => {
+    const mock = new MockV1("draft");
     await mock.install(page);
     await page.goto("/org/new");
-    await page.getByLabel("Título de la votación").fill("Premio del público (fixture)");
-    await page.locator("#opt-0").fill("Equipo A");
-    await page.locator("#opt-1").fill("Equipo B");
-    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByLabel("Pregunta de la votación").fill("Premio del público (fixture)");
+    await page.getByLabel("Opción A", { exact: true }).fill("Equipo A");
+    await page.getByLabel("Opción B", { exact: true }).fill("Equipo B");
+    await expect(page.getByTestId("review-eligibility")).toHaveText("Credencial del evento (comprobación en vivo) + rostro");
+    await page.getByTestId("who-segment").click();
     const picker = page.getByTestId("eligibility-picker");
     await expect(picker.getByRole("radio", { name: /Credencial del evento/ })).toBeChecked();
     await expect(page.getByText(/Verificación de rostro/)).toHaveCount(0);
-    await picker.locator("label", { hasText: "Con mi lista" }).click();
-    await picker.getByLabel(/Usuarios permitidos/).fill("jgalvis414\n@ana-hack\nhttps://hack.platan.us/26-ve/id/beto-hack");
-    await expect(picker.getByText(/3 usuarios/)).toBeVisible();
+    await page.getByTestId("who-sheet").getByRole("button", { name: "Listo" }).click();
+    await page.getByTestId("advanced-segment").click();
+    const adv = page.getByTestId("advanced-sheet");
+    await adv.getByTestId("badge-check").locator("label", { hasText: "Con lista" }).click();
+    await adv.getByLabel(/Usuarios permitidos/).fill("jgalvis414\n@ana-hack\nhttps://hack.platan.us/26-ve/id/beto-hack");
+    await expect(adv.getByText(/^3 usuarios ·|^3 usuarios\./).first()).toBeVisible();
     await shot(page, "07-organizador-quien-puede-votar");
-    await page.getByRole("button", { name: "Continuar" }).click();
-    await expect(page.getByTestId("review-eligibility")).toContainText("Credencial del evento (comprobación con lista) + rostro");
-    await page.getByRole("button", { name: /publicar/i }).click();
-    await expect.poll(() => mock.createBodies.length).toBe(1);
+    await adv.getByRole("button", { name: "Listo" }).click();
+    await expect(page.getByTestId("review-eligibility")).toHaveText("Credencial del evento (comprobación con lista) + rostro");
+    await page.getByTestId("publish").click();
+    await page.waitForURL(`**/org/${E2E.electionId}/listo`);
+    expect(mock.createBodies).toHaveLength(1);
     expect((mock.createBodies[0] as { eligibility: unknown }).eligibility).toEqual({ method: "event-badge", badgeCheck: "list", badgeUrlPrefix: PREFIX, badgeAllowlist: ["jgalvis414", "ana-hack", "beto-hack"] });
   });
 
@@ -180,6 +186,7 @@ test.describe("organizador y proyector (credencial)", () => {
     await mock.install(page);
     await page.addInitScript(([eid, t]) => sessionStorage.setItem(`quorum.orgToken.${eid}`, t), [E2E.electionId, E2E.orgToken] as const);
     await page.goto(`/org/${E2E.electionId}`);
+    await openMore(page, "room");
     const card = page.getByTestId("room-card");
     await expect(card.getByTestId("room-eligibility")).toContainText("Apodo libre");
     await card.getByText("Cambiar quién puede votar").click();

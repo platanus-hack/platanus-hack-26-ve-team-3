@@ -1,6 +1,7 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { E2E, fixtureAudit, MockV1, type Phase } from "./mocks/v1";
+import { openMore } from "./helpers/org";
 
 /**
  * Capturas de la sala abierta y del proyector a 360 y 1440 px con datos FIXTURE (mocks del contrato).
@@ -67,8 +68,9 @@ for (const w of WIDTHS) {
       await at(page, w, "registration");
       await page.addInitScript(([id, t]) => sessionStorage.setItem(`quorum.orgToken.${id}`, t), [E2E.electionId, E2E.orgToken] as const);
       await page.goto(`/org/${E2E.electionId}`);
+      await expect(page.getByTestId("room-code")).toHaveText(CODE);
+      await openMore(page, "room");
       const card = page.getByTestId("room-card");
-      await expect(card.getByTestId("room-code")).toHaveText(CODE);
       await card.scrollIntoViewIfNeeded();
       await card.screenshot({ path: path.join(OUT, `sala-06-panel-organizador-${w}.png`), animations: "disabled" });
     });

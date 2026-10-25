@@ -10,7 +10,7 @@ const nav = [
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
+    <header data-site-chrome className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
       <div className="q-container flex min-h-14 items-center justify-between gap-2 sm:min-h-16 sm:gap-4">
         <Link href="/" aria-label="Quórum, inicio" className="flex min-h-tap shrink-0 items-center">
           <Logo />
@@ -30,7 +30,7 @@ export function SiteHeader() {
 
 export function SiteFooter() {
   return (
-    <footer className="mt-auto border-t border-border/70">
+    <footer data-site-chrome className="mt-auto border-t border-border/70">
       <div className="q-container flex flex-col gap-2 py-6 text-small text-muted-foreground md:flex-row md:items-center md:justify-between">
         <p>Quórum · Votaciones internas verificables</p>
         <p className="flex flex-wrap items-center gap-x-3">

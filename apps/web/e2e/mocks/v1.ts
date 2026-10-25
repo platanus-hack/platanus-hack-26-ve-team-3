@@ -21,7 +21,8 @@ export const E2E = {
   electionId: "e2e-samanes",
   token: "tok-e2e-ana",
   voterId: "v-ana",
-  orgToken: "org-token-e2e-fixture-0001",
+  // ≥ 32 caracteres, como exige `CreateElectionResult` (crear de punta a punta contra el mock valida la respuesta).
+  orgToken: "org-token-e2e-fixture-0001-ficticio-000",
   title: "Condominio Los Samanes (ficticio): ¿cuántos proyectos vecinales financiamos?",
   options: ["1", "2", "3", "4", "5"].map((n) => ({ id: `opt-${n}`, label: n })),
   candidates: [
@@ -102,6 +103,8 @@ export class MockV1 {
    * fase de `registration` a `open` (y cierra la sala). `null` = la abre el organizador a mano.
    */
   votingStartsAt: string | null = null;
+  /** Cierre de la votación (ISO). Fijo por defecto; las capturas lo ponen en el futuro para ver «Quedan». */
+  endsAt = "2026-10-24T22:00:00.000Z";
   /** Retiene la apertura automática (para capturar "Abriendo la votación…"). */
   holdSchedule = false;
   schedules: unknown[] = [];
@@ -123,7 +126,7 @@ export class MockV1 {
       protocol: "semaphore-ledger",
       manifestHash: "0x6b1c3e5f0a9d4c2b8e7f6a5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b",
       startsAt: "2026-10-24T14:00:00.000Z",
-      endsAt: "2026-10-24T22:00:00.000Z",
+      endsAt: this.endsAt,
       eligibilityIssuerId: "junta-condominio (fixture)",
       organizerId: "org-fixture",
       groupRoot: ["draft", "registration"].includes(this.phase) ? null : "105088850375",

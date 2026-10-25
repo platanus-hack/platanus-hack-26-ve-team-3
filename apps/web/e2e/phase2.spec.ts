@@ -142,7 +142,67 @@ test.describe("fase 2 · transparencia y sorteo", () => {
 });
 
 test.describe("fase 2 · organizador", () => {
-  test("token mostrado una vez y un botón por fase con Authorization Bearer", async ({ page }) => {
+  test("crear en una pantalla → «Publicar y compartir» (crear + publicar + abrir sala 60/15) → «¡Listo! Comparte» → panel", async ({ page }) => {
+    const mock = new MockV1("draft");
+    const roomBodies: unknown[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && r.url().endsWith(`/api/elections/${E2E.electionId}/room`)) roomBodies.push(r.postDataJSON());
+    });
+    await mock.install(page);
+    await page.goto("/org/new");
+    await expect(page.locator("[data-site-chrome]").first()).toBeHidden(); // pantalla enfocada, sin la cabecera del sitio
+    // Apagado mientras falte algo: el resumen dice qué falta y tocarlo no crea nada.
+    const publish = page.getByTestId("publish");
+    await expect(publish).toHaveAttribute("aria-disabled", "true");
+    await expect(page.getByTestId("publish-summary")).toHaveText("Escribe la pregunta para publicar");
+    await expect(publish).toBeVisible();
+    await publish.click({ force: true }); // apagado (aria-disabled): lleva el foco a lo que falta
+    await expect(page.getByLabel("Pregunta de la votación")).toBeFocused();
+    await page.getByLabel("Pregunta de la votación").fill(E2E.title);
+    await expect(page.getByTestId("publish-summary")).toHaveText("Agrega al menos 2 opciones");
+    await page.getByRole("button", { name: "1 a 5" }).click();
+    await expect(page.getByRole("button", { name: "1 a 5" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("publish-summary")).toHaveText(/5 opciones\s*2 horas\s*credencial \+ rostro/);
+    await expect(publish).toHaveAttribute("aria-disabled", "false");
+    expect(mock.createBodies).toHaveLength(0);
+    await publish.click();
+
+    await page.waitForURL(`**/org/${E2E.electionId}/listo`);
+    const body = mock.createBodies[0] as { kind: string; options: { label: string }[]; votingMode: string; startsAt: string; endsAt: string };
+    expect(body.kind).toBe("multiple");
+    expect(body.options.map((o) => o.label)).toEqual(["1", "2", "3", "4", "5"]);
+    expect(body.votingMode).toBe("phased");
+    expect(Date.parse(body.endsAt) - Date.parse(body.startsAt)).toBe(2 * 3_600_000); // 2 horas por defecto, desde publicar
+    expect(roomBodies).toEqual([{ maxSeats: 60, expiresInMin: 15 }]);
+    expect(mock.authSeen.every((h) => h === `Bearer ${E2E.orgToken}`)).toBe(true);
+
+    const ready = page.getByTestId("ready-screen");
+    await expect(ready.getByTestId("room-code")).toHaveText("K7M3QP");
+    await expect(ready.getByTestId("qr")).toHaveAttribute("data-qr-value", /\/j\/K7M3QP$/);
+    await expect(ready.getByTestId("ready-state")).toHaveText(/Inscripción abierta/);
+    await expect(page.getByTestId("ready-whatsapp")).toHaveAttribute("href", /^https:\/\/wa\.me\/\?text=.*%2Fj%2FK7M3QP$/);
+    await expect(page.getByTestId("ready-start-countdown")).toContainText(/\(en 1[45] min\)/);
+    await expect(page.getByTestId("org-token")).toHaveText(E2E.orgToken); // plegado, pero en el DOM
+    await expect(page.getByTestId("org-token")).toBeHidden();
+    await page.getByText("Guarda tu token de organizador").click();
+    await expect(page.getByTestId("org-token")).toBeVisible();
+    await page.getByTestId("ready-start-change").click();
+    await page.getByTestId("ready-start-in-5").click();
+    await expect(page.getByTestId("ready-start-countdown")).toContainText(/\(en [45] min\)/);
+    expect(mock.schedules).toEqual([{ inSeconds: 300 }]);
+
+    await page.getByTestId("ready-go-panel").click();
+    await page.waitForURL(`**/org/${E2E.electionId}`);
+    // Next conserva «Listo» oculto tras navegar: se mira solo dentro de la cabina.
+    const cockpit = page.getByTestId("org-cockpit");
+    await expect(cockpit.getByTestId("org-phase-pill")).toHaveText("Inscripción abierta");
+    await expect(cockpit.getByTestId("room-code")).toHaveText("K7M3QP");
+    await expect(cockpit.getByTestId("org-clock")).toContainText(/0[45]:\d\d/);
+    await expect(cockpit.getByTestId("org-token")).toHaveCount(0); // ya se mostró en «Listo»
+    await expect(cockpit.getByTestId("more-sheet")).not.toHaveAttribute("open", "");
+  });
+
+  test("cabina: token mostrado una vez (en «Más › Token») y un botón por fase con Authorization Bearer", async ({ page }) => {
     const mock = new MockV1("draft");
     await mock.install(page);
     await page.addInitScript(([id, t]) => {
@@ -155,15 +215,18 @@ test.describe("fase 2 · organizador", () => {
     await expect(page.getByTestId("org-token")).toHaveText(E2E.orgToken);
     await expect(page.getByTestId("candidates-list")).toContainText("Huerto comunitario");
 
+    await expect(page.getByTestId("org-phase-pill")).toHaveText("Borrador");
+    await expect(page.getByTestId("phase-timeline")).toHaveCount(0); // la cabina no lleva tira de fases
     for (const [label, next] of [
       ["Abrir inscripción", "Inscripción abierta"],
-      ["Abrir votación", "Votación abierta"],
-      ["Cerrar votación", "Resultado publicado"],
-      ["Hacer el sorteo", "Sorteo realizado"],
+      ["Abrir votación", "Votación en curso"],
+      ["Cerrar votación", "Auditable"],
+      ["Hacer el sorteo", "Sorteada"],
     ] as const) {
       await page.getByTestId("phase-action").filter({ hasText: label }).click();
       await page.getByRole("button", { name: new RegExp(`^Sí, ${label}`, "i") }).click();
-      await expect(page.getByTestId("phase-timeline")).toContainText(next);
+      await expect(page.getByTestId("org-phase-pill")).toHaveText(next);
+      if (next === "Votación en curso") await expect(page.getByTestId("live-breakdown")).toContainText("Preliminar");
     }
     expect(mock.authSeen.every((h) => h === `Bearer ${E2E.orgToken}`)).toBe(true);
     await expect(page.getByTestId("voters-list")).toContainText("Vecino Bruno (ficticio)");

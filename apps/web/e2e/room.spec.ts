@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E, fixtureAudit, MockV1 } from "./mocks/v1";
+import { openMore } from "./helpers/org";
 
 /**
  * Sala abierta + proyector contra MOCKS del contrato (e2e/mocks/v1.ts, § "Sala abierta"). Datos FIXTURE.
@@ -92,18 +93,24 @@ test.describe("sala abierta · /j/[roomCode]", () => {
   });
 });
 
-test.describe("panel del organizador · tarjeta Sala abierta", () => {
-  test("abrir con tope y minutos, ver código y joinUrl, ampliar, proyectar y cerrar", async ({ page, context }) => {
+test.describe("panel del organizador · «Más › Sala»", () => {
+  test("abrir con tope y minutos, ver código y joinUrl en la cabina, ampliar, proyectar y cerrar", async ({ page, context }) => {
     const mock = new MockV1("registration");
     await mock.installContext(context);
     await page.addInitScript(([id, t]) => sessionStorage.setItem(`quorum.orgToken.${id}`, t), [E2E.electionId, E2E.orgToken] as const);
     await page.goto(`/org/${E2E.electionId}`);
+    await expect(page.getByTestId("cockpit-open-room")).toBeVisible(); // sala cerrada: la cabina ofrece abrirla
+    await openMore(page, "room");
     const card = page.getByTestId("room-card");
     await expect(card.getByTestId("room-state")).toHaveText("Sin abrir");
     await card.getByLabel("Tope de personas").fill("60");
     await card.getByLabel("Minutos abierta").fill("15");
     await card.getByTestId("room-open").click();
-    await expect(card.getByTestId("room-code")).toHaveText(CODE);
+    // El QR, el código y el enlace viven en la cabina (no se repiten dentro de «Más»).
+    await expect(page.getByTestId("room-code")).toHaveText(CODE);
+    await expect(page.getByTestId("qr")).toHaveAttribute("data-qr-value", new RegExp(`/j/${CODE}$`));
+    await expect(card.getByTestId("room-code")).toHaveCount(0);
+    await expect(page.getByTestId("org-clock")).toHaveAttribute("role", "timer");
     // Inicio programado: por defecto, el cierre de la sala (15 min); «+5 min» y «Empezar en 5 min».
     const start = card.getByTestId("start-countdown");
     await expect(start).toContainText(/La votación empieza en 1[45]:\d\d/);
@@ -112,13 +119,14 @@ test.describe("panel del organizador · tarjeta Sala abierta", () => {
     await card.getByTestId("start-in-5").click();
     await expect(start).toContainText(/La votación empieza en 0[45]:\d\d/);
     expect(mock.schedules).toEqual([{ addSeconds: 300 }, { inSeconds: 300 }]);
-    await expect(card.getByTestId("room-join-url")).toHaveText(new RegExp(`/j/${CODE}$`));
+    await expect(page.getByTestId("room-join-url")).toHaveText(new RegExp(`/j/${CODE}$`));
     await expect(card.getByTestId("room-open")).toContainText("Ampliar");
 
     await card.getByLabel("Tope de personas").fill("80");
     await card.getByTestId("room-open").click();
     await expect(card.getByTestId("room-seats-org")).toContainText("de 80");
-    await expect(card.getByTestId("room-code")).toHaveText(CODE); // mismo código, mismo QR
+    await expect(page.getByTestId("room-code")).toHaveText(CODE); // mismo código, mismo QR
+    await expect(page.getByTestId("org-seats")).toContainText("de 80");
 
     const popupPromise = context.waitForEvent("page");
     await card.getByTestId("room-project").click();
