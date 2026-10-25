@@ -4,15 +4,17 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import type { RoomPublicInfo } from "@quorum/contracts";
+import type { Option, RoomPublicInfo } from "@quorum/contracts";
 import { ErrorState, LoadingState } from "@/components/states";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Input } from "@/components/ui/input";
 import { Consent } from "@/components/voter/Consent";
 import { StepIndicator } from "@/components/voter/VoterUi";
 import { ApiClientError, voterMessage } from "@/lib/client/api";
+import { optionInitial } from "@/lib/client/optionImage";
 import {
   classifyJoinError,
   forgetRoomJoin,
@@ -41,9 +43,97 @@ const POLL_MS = 5000;
 /** Lo propio de la sala, antes del texto común del consentimiento (components/voter/Consent.tsx). */
 export const ROOM_CONSENT_EXTRA = ["Entras con un nombre o apodo. No pedimos tu nombre real, teléfono ni documento."] as const;
 
+/** Línea corta bajo el título de /j (apodo y credencial). */
+export const JOIN_SUBTITLE = "Inscríbete para votar en esta votación desde tu teléfono.";
+/** Enlace del desplegable que explica la inscripción (misma pinta que «Cómo usamos tu cámara»). */
+export const JOIN_PURPOSE_LABEL = "¿Para qué me inscribo?";
+/**
+ * Tres viñetas honestas, por forma de entrar: qué pasa al tocar el botón, qué recibes y qué NO hacemos.
+ * Sin «anónimo», «voto secreto» ni «identidad verificada»; sí se dice que el servidor ve cada boleta.
+ * En modo apodo no se nombra la credencial (en /j con apodo esa palabra es jerga).
+ */
+export const JOIN_PURPOSE_POINTS: Record<"open-alias" | "event-badge", readonly [string, string, string]> = {
+  "event-badge": [
+    "Al escanear: tu credencial del evento vale una sola vez en esta votación. Después, la cámara comprueba que eres una persona y que no te inscribes dos veces. No guardamos fotos.",
+    "Qué recibes: una boleta en este teléfono y, al votar, un comprobante que no muestra tu opción.",
+    "Qué no hacemos: no pedimos tu documento ni comprobamos quién eres. El servidor sí ve cada boleta cuando llega.",
+  ],
+  "open-alias": [
+    "Al tocar Continuar: entras con un nombre o apodo, sin documento ni teléfono. La cámara comprueba que eres una persona y que no te inscribes dos veces. No guardamos fotos.",
+    "Qué recibes: una boleta en este teléfono y, al votar, un comprobante que no muestra tu opción.",
+    "Qué no hacemos: no pedimos tu documento ni comprobamos quién eres. El servidor sí ve cada boleta cuando llega.",
+  ],
+};
+
+/** Subtítulo + desplegable «¿Para qué me inscribo?» (plegado por defecto), debajo del título de /j. */
+export function JoinPurpose({ method }: { method: keyof typeof JOIN_PURPOSE_POINTS }) {
+  return (
+    <div className="flex flex-col gap-1" data-testid="join-purpose-block">
+      <p className="text-body text-muted-foreground" data-testid="join-subtitle">
+        {JOIN_SUBTITLE}
+      </p>
+      <Disclosure
+        variant="link"
+        title={JOIN_PURPOSE_LABEL}
+        testId="join-purpose"
+        className="[&>summary]:text-small [&>summary]:font-normal [&>summary]:text-muted-foreground [&>summary]:decoration-muted-foreground/50 [&>summary>svg]:size-4"
+      >
+        <ul className="list-disc space-y-2 pl-5 text-small leading-relaxed text-muted-foreground" data-testid="join-purpose-points">
+          {JOIN_PURPOSE_POINTS[method].map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+      </Disclosure>
+    </div>
+  );
+}
+
+/**
+ * «Así es la boleta»: la pregunta y sus opciones como tarjetas pequeñas de solo lectura (foto o inicial, nombre,
+ * subtítulo), con el mismo estilo que la boleta real (components/voter/BallotScreen.tsx) pero sin radios ni botón.
+ */
+export function BallotPreview({ title, options }: { title: string; options: readonly Option[] }) {
+  if (options.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-2" aria-labelledby="ballot-preview-eyebrow" data-testid="ballot-preview">
+      <p className="q-eyebrow" id="ballot-preview-eyebrow">
+        Así es la boleta
+      </p>
+      <p className="text-body font-semibold leading-snug" data-testid="preview-question">
+        {title}
+      </p>
+      <ul className="flex flex-col gap-1.5" aria-label="Opciones de la boleta">
+        {options.map((opt) => (
+          <li key={opt.id} className="flex min-h-12 items-center gap-3 rounded-md border-2 border-border bg-card px-3 py-1.5 text-body shadow-card" data-testid="preview-option">
+            {/* Avatar de 36 px: la foto de la opción si la hay; si no, su inicial. Decorativo (el nombre va al lado). */}
+            <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-primary-soft text-body font-bold text-primary-soft-foreground" aria-hidden="true" data-testid="preview-avatar">
+              {opt.image ? (
+                // eslint-disable-next-line @next/next/no-img-element -- data URI recortado y comprimido en el teléfono del organizador; no hay nada que optimizar.
+                <img src={opt.image} alt="" width={36} height={36} className="size-full object-cover" draggable={false} />
+              ) : (
+                optionInitial(opt.label)
+              )}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold leading-tight">{opt.label}</span>
+              {opt.subtitle ? (
+                <span className="block text-small leading-snug text-muted-foreground" data-testid="preview-subtitle">
+                  {opt.subtitle}
+                </span>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-small text-muted-foreground">Solo para que la conozcas: se vota después de inscribirse.</p>
+    </section>
+  );
+}
+
 /**
  * `/j/<roomCode>`: entrada a la sala abierta desde el QR del proyector. Móvil primero (360 px).
- * Paso 1 de 2 de la inscripción en UNA pantalla: título, "La entrada cierra en …" (gris, pequeño), "Tu nombre o apodo"
+ * Paso 1 de 2 de la inscripción en UNA pantalla: título, "La entrada cierra en …" (gris, pequeño), subtítulo y
+ * «¿Para qué me inscribo?» (plegado), la vista previa de la boleta («Así es la boleta», solo lectura), "Tu nombre o apodo"
  * (misma validación que el backend), el enlace "Cómo usamos tu cámara" y "Continuar" (tocarlo es aceptar). Sin contador
  * de lugares. Al unirse guarda el token en este teléfono y
  * va a `/v/<token>`, que abre directo la cámara (paso 2). Sala llena / cerrada / expirada / votación abierta → observador.
@@ -195,6 +285,9 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
 
   const gate = joinError?.kind === "full" ? "full" : joinError?.kind === "closed" && roomGate(info, now ?? undefined) === "open" ? "manual" : roomGate(info, now ?? undefined);
   const left = remaining(info.expiresAt, now);
+  const method = info.eligibility?.method === "event-badge" ? "event-badge" : "open-alias";
+  // Servidor viejo sin `options`: no hay vista previa (nunca una tarjeta vacía).
+  const preview = info.options && info.options.length > 0 ? <BallotPreview title={info.title} options={info.options} /> : null;
 
   return (
     <VoterShell>
@@ -207,6 +300,7 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
             La entrada cierra en {left}
           </p>
         ) : null}
+        {gate === "open" ? <JoinPurpose method={method} /> : null}
       </header>
 
       {gate !== "open" ? (
@@ -217,10 +311,11 @@ export function RoomJoin({ roomCode: rawCode }: { roomCode: string }) {
           </Alert>
           <ObserverPanel electionId={info.electionId} hasDraw bare />
         </>
-      ) : info.eligibility?.method === "event-badge" ? (
-        <BadgeJoin roomCode={roomCode} badgeUrlPrefix={info.eligibility.badgeUrlPrefix} onJoined={joined} onRoomFailure={badgeRoomFailure} redirecting={redirecting} />
+      ) : method === "event-badge" ? (
+        <BadgeJoin roomCode={roomCode} badgeUrlPrefix={info.eligibility?.badgeUrlPrefix} onJoined={joined} onRoomFailure={badgeRoomFailure} redirecting={redirecting} preview={preview} />
       ) : (
         <form onSubmit={submit} noValidate className="flex flex-col gap-5 text-heading">
+          {preview}
           <div className="flex flex-col gap-1.5">
             <label htmlFor="alias" className="text-heading font-semibold">
               Tu nombre o apodo

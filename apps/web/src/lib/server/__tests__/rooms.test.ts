@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { FaceBindingTypes } from "@quorum/contracts";
+import { FaceBindingTypes, RoomPublicInfo } from "@quorum/contracts";
 import { castBallot, createVoterIdentity, defaultArtifacts } from "@quorum/protocol-adapter";
 import { POST as createElection } from "@/app/api/elections/route";
 import { POST as publish } from "@/app/api/elections/[id]/publish/route";
@@ -146,6 +146,33 @@ describe("Sala abierta — entrada", () => {
     // El organizador ve el origen en su lista (sin teléfono)
     const priv = await call(listVoters, { params: { id: org.id }, headers: org.auth });
     expect(priv.json.voters[0]).toMatchObject({ displayName: "José María", source: "room", state: "invited" });
+  });
+
+  it("GET /api/rooms/:code trae `options` (id, nombre, subtítulo y foto) para «Así es la boleta», y nada más de la elección", async () => {
+    const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    const options = [
+      { id: "ana", label: "Ana", subtitle: "Tesorera (fixture)", image: PNG },
+      { id: "beto", label: "Beto" },
+    ];
+    const created = await call(createElection, { body: sampleElection({ options, description: "Descripción privada del organizador (fixture)" }) });
+    expect(created.status).toBe(201);
+    const org: Org = { id: created.json.id, auth: { authorization: `Bearer ${created.json.organizerToken}` } };
+    await call(publish, { params: { id: org.id }, headers: org.auth });
+    const { json: room } = await openRoom(org, 60, 15);
+
+    const info = await call(roomInfo, { params: { roomCode: room.roomCode } });
+    expect(info.status).toBe(200);
+    // Exactamente lo que pinta cada tarjeta: sin claves vacías (`subtitle`/`image` solo si existen).
+    expect(info.json.options).toEqual(options);
+    expect(Object.keys(info.json.options[1])).toEqual(["id", "label"]);
+    // Ninguna otra pieza de la elección (descripción, fechas, token del organizador…).
+    expect(Object.keys(info.json).sort()).toEqual(["closedReason", "electionId", "expiresAt", "maxSeats", "open", "options", "seatsTaken", "serverNow", "title", "votingStartsAt"]);
+    const raw = JSON.stringify(info.json);
+    expect(raw).not.toContain("Descripción privada");
+    expect(raw).not.toContain(created.json.organizerToken);
+    expect(raw).not.toContain(room.roomCode);
+    // Cumple el contrato que valida el cliente de /j.
+    expect(RoomPublicInfo.safeParse(info.json).success).toBe(true);
   });
 
   it("alias con caracteres raros → 400; nunca algo con forma de teléfono", async () => {

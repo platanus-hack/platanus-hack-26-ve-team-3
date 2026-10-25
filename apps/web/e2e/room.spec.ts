@@ -23,6 +23,10 @@ test.describe("sala abierta · /j/[roomCode]", () => {
     await expect(page.getByTestId("room-closes-in")).toHaveText(/^La entrada cierra en \d+:\d{2}$/);
     expect(await page.locator("main").textContent()).not.toMatch(/lugares/);
     await expect(page.getByText("Cómo usamos tu cámara")).toBeVisible();
+    // Subtítulo + «¿Para qué me inscribo?» (plegado) y «Así es la boleta»: las 5 opciones del mock como tarjetas de solo lectura.
+    await expect(page.getByText("¿Para qué me inscribo?")).toBeVisible();
+    await expect(page.getByTestId("ballot-preview").getByTestId("preview-option")).toHaveCount(5);
+    await expect(page.getByTestId("ballot-preview").getByRole("radio")).toHaveCount(0);
     // Precarga de lo pesado mientras escribe el alias: service worker + Cache Storage (localhost es contexto seguro).
     await expect(page.locator("html")).toHaveAttribute("data-heavy-prefetch", "service-worker", { timeout: 20_000 });
     const cached = await page.evaluate(async () => (await (await caches.open("quorum-heavy-v2")).keys()).map((r) => new URL(r.url).pathname));

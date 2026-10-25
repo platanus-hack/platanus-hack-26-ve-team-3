@@ -520,6 +520,8 @@ export const RoomPublicInfo = RoomStatus.omit({ roomCode: true, joinUrl: true })
   title: z.string(),
   /** D-19: cómo se entra (apodo o credencial). Ausente = `open-alias`. */
   eligibility: Eligibility.pick({ method: true, badgeUrlPrefix: true }).optional(),
+  /** Vista previa de la boleta en /j (solo presentación: id, nombre, subtítulo y foto de cada opción; nada más de la elección). */
+  options: z.array(Option).optional(),
 });
 export type RoomPublicInfo = z.infer<typeof RoomPublicInfo>;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { QrCode } from "lucide-react";
 import { DEFAULT_BADGE_URL_PREFIX, parseBadgeUrl } from "@quorum/contracts";
 import { Alert } from "@/components/ui/alert";
@@ -29,14 +29,16 @@ export const CAMERA_COPY: Record<CameraFailure, string> = {
 /**
  * Entrada con credencial del evento (D-19), dentro de `/j/<código>`. Un botón grande abre la cámara trasera en la página;
  * al leer un QR válido entra sola (sin más toques) y sigue al paso 2 (rostro). Si la cámara falla, se explica cómo
- * permitirla y se ofrece "Escanear otra vez"; no hay usuario tecleado.
+ * permitirla y se ofrece "Escanear otra vez"; no hay usuario tecleado. `preview` (la vista previa de la boleta) va antes
+ * del botón y se oculta mientras la cámara está abierta, para que el visor quede a la vista en 360 px.
  */
-export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, redirecting }: {
+export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, redirecting, preview }: {
   roomCode: string;
   badgeUrlPrefix?: string;
   onJoined: (r: JoinRoomResult) => void;
   onRoomFailure: (f: BadgeFailure) => void;
   redirecting: boolean;
+  preview?: ReactNode;
 }) {
   const prefix = badgeUrlPrefix ?? DEFAULT_BADGE_URL_PREFIX;
   const [scanning, setScanning] = useState(false);
@@ -119,6 +121,8 @@ export function BadgeJoin({ roomCode, badgeUrlPrefix, onJoined, onRoomFailure, r
           <span data-testid="badge-notice">{notice.text}</span>
         </Alert>
       ) : null}
+
+      {!scanning ? preview : null}
 
       {!scanning ? (
         <Button full size="lg" className="min-h-14" onClick={() => (setNotice(null), setScanning(true))} loading={working} data-testid="badge-scan">

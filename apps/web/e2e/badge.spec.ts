@@ -18,11 +18,15 @@ const PREFIX = "https://hack.platan.us/26-ve/id/";
 const FORBIDDEN = /\bwallet|smart wallet|\bfirma|EIP-?712|FaceBinding|Semaphore|credencial|nullifier|commitment|Kernel|eoa-demo|on-?chain|blockchain|Base Sepolia|ZeroDev|testnet|Detalles técnicos/i;
 const FORBIDDEN_ON_BADGE_PAGE = new RegExp(FORBIDDEN.source.replace("|credencial", ""), "i");
 const OUT = path.resolve(__dirname, "../../../docs/screenshots/phase2");
+/** Foto de opción (fixture): PNG de 1×1 con la forma que exige `OptionImage`. */
+const PNG_1x1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 function badgeMock(over: (m: MockV1) => void = () => undefined) {
   const mock = new MockV1("registration");
   mock.room = { code: CODE, open: true, seatsTaken: 41, maxSeats: 120, expiresAt: new Date(Date.now() + 14 * 60_000).toISOString(), closedReason: null };
   mock.eligibility = { method: "event-badge", badgeCheck: "live", badgeUrlPrefix: PREFIX };
+  // La opción 2 lleva foto y subtítulo (fixture): «Así es la boleta» los pinta en /j.
+  mock.options = E2E.options.map((o, i) => (i === 1 ? { ...o, subtitle: "Equipo B (fixture)", image: PNG_1x1 } : o));
   // Inicio programado: la credencial también termina en la espera con cuenta regresiva.
   mock.votingStartsAt = new Date(Date.now() + 20 * 60_000).toISOString();
   over(mock);
@@ -69,6 +73,12 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
     await expect(page.getByText(/Al tocar Escanear mi credencial, aceptas/)).toBeHidden();
     expect(await page.locator("main").textContent()).toMatch(/Al tocar Escanear mi credencial, aceptas/);
     await expect(page.getByText("o escribe tu usuario")).toHaveCount(0);
+    // Subtítulo + «¿Para qué me inscribo?» plegado; «Así es la boleta» antes del botón, con la foto y el subtítulo de la opción 2.
+    await expect(page.getByText("¿Para qué me inscribo?")).toBeVisible();
+    await expect(page.getByText(/El servidor sí ve cada boleta/)).toBeHidden();
+    const card2 = page.getByTestId("ballot-preview").getByTestId("preview-option").nth(1);
+    await expect(card2).toContainText("Equipo B (fixture)");
+    await expect(card2.locator("img")).toHaveAttribute("src", PNG_1x1);
     expect(await page.locator("main").innerText()).not.toMatch(FORBIDDEN_ON_BADGE_PAGE);
     expect(await page.locator("main").textContent()).not.toMatch(FORBIDDEN_ON_BADGE_PAGE);
     await shot(page, "01-inicio");
