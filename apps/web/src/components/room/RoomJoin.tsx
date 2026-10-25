@@ -99,7 +99,8 @@ export function BallotPreview({ title, options }: { title: string; options: read
       <p className="q-eyebrow" id="ballot-preview-eyebrow">
         Así es la boleta
       </p>
-      <p className="text-body font-semibold leading-snug" data-testid="preview-question">
+      {/* La pregunta ya es el título de la página: no se repite; queda solo para lectores de pantalla. */}
+      <p className="sr-only" data-testid="preview-question">
         {title}
       </p>
       <ul className="flex flex-col gap-1.5" aria-label="Opciones de la boleta">
