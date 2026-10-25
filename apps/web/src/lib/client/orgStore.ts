@@ -43,6 +43,16 @@ export function rememberElection(id: string, title: string) {
     /* ignorar */
   }
 }
+/** Quita una votación de la lista reciente del organizador (solo la lista: no toca tokens ni datos del servidor). */
+export function forgetRecentElection(id: string) {
+  try {
+    const raw = localStorage.getItem(RECENT);
+    const list = raw ? (JSON.parse(raw) as { id: string; title: string }[]) : [];
+    localStorage.setItem(RECENT, JSON.stringify(list.filter((e) => e.id !== id)));
+  } catch {
+    /* ignorar */
+  }
+}
 export function recentElections(): { id: string; title: string }[] {
   try {
     const raw = localStorage.getItem(RECENT);

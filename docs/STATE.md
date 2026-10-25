@@ -55,3 +55,6 @@
 ## 2026-10-25 — repo del equipo 3 (`feat/repo-equipo`, ≈07:30 VET)
 - El código completo se refleja en `platanus-hack/platanus-hack-26-ve-team-3` (historial fusionado con la plantilla de Platanus). `origin` empuja a los dos repos; Render sigue desplegando desde `josegalvis27/quorum-hackathon`.
 - Llenados: `README.md`, `project-description.md`, `platanus-hack-project.jsonc` (deploy: https://quorum-sefw.onrender.com) y `project-logo.png` (1000×1000, marca Quórum). Comandos del README ejecutados: verificador sobre `valid.json` (verificado) y `tampered_total.json` (`tally_matches` = fallo detectado).
+## 2026-10-25 — limpiar «Mis votaciones» (`feat/limpiar-lista`, ≈07:50 VET)
+- La lista de «Mis votaciones» vive solo en el navegador (localStorage); no hay listado ni borrado en el servidor. Nuevo botón «Limpiar» en «Anteriores» (con confirmación) que quita esas votaciones de la lista del teléfono sin tocar credenciales, recibos ni datos del servidor.
+- Verde en el worktree: vitest web 344 tests (36 archivos), typecheck, lint. Sin merge (pendiente de aprobación).
