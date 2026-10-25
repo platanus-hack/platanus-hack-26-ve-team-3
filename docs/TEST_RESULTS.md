@@ -980,3 +980,8 @@ Tests nuevos:
 - `apps/web/e2e/voter-taps.spec.ts` (mocks): continuo QR → comprobante en **4 toques** (inscripción 2 + voto 2, más escribir el apodo y la cámara), aviso de K sin jerga, un `stale_root` reintentado solo (2 POST /vote, 0 toques extra).
 
 Carga contra producción en modo continuo: `docs/LOAD_TEST.md` § «Modo continuo».
+
+## Landing: «Cómo funciona por detrás» (rama `feat/landing-motion`, 2026-10-24)
+- `pnpm typecheck && pnpm lint && pnpm test && pnpm --filter @quorum/web build` → exit 0. apps/web 31 archivos / 276 tests; verifier 76; contracts 63; protocol-adapter 36; wallet 31; demo-fixtures 28.
+- `apps/web/src/components/__tests__/how-it-works.test.tsx` (5): reduced-motion → modo quieto con 6 `h3` y sus textos; con movimiento → los 6 pasos en el DOM y `window.__seek`; motor (extremos p=0/1, un texto por beat); lenguaje honesto D-15.
+- Playwright (dev en :3421): capturas p = 0…1 en 360 y 1440 px, reduced-motion, video `motion-scroll.webm` (15,4 s, 2,6 MB) en `docs/screenshots/landing/`; 0 errores de consola.

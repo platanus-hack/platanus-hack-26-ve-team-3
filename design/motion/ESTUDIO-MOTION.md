@@ -65,4 +65,4 @@ La calma de `rossark-motion` («sin rebote, amplitudes pequeñas») manda en la 
 - [ ] ¿Se siente premium o de plantilla? Si es «meh», se dice con el `p` (o el segundo) y el arreglo.
 
 ## Lo que ya sabemos (actualízalo después de cada pieza)
-- 2026-10-24, sección «Cómo funciona por detrás» de la landing: ver `design/motion/LANDING.md`.
+- 2026-10-24, «Cómo funciona por detrás» (landing): rúbrica en verde a la 2.ª vuelta. Arreglos: escena a escala 1 en 360 px (título fuera del sticky), cadena centrada en el beat 4, boleta que sale por detrás del teléfono, enlaces rotos más visibles. Detalle en `design/motion/LANDING.md`.

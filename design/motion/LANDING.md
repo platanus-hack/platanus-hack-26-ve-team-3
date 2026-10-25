@@ -31,3 +31,20 @@ En una landing cambia el formato de entrega, no el método (`ESTUDIO-MOTION.md`)
 
 ## Encargo de ejemplo
 > Renata: concepto de movimiento para «Cómo funciona por detrás». Entrega: 2 conceptos, beat sheet atado al scroll, reparto Abril/Leo/Nico. Formato web: componente con estado = f(p). Respeta `prefers-reduced-motion` y el lenguaje honesto de D-15.
+
+## Pieza hecha: «Cómo funciona por detrás» (2026-10-24)
+
+Código: `apps/web/src/components/landing/HowItWorksMotion.tsx` (sección, scroll, modo quieto), `how-it-works/Stage.tsx` (escena 320×330 = f(p)), `how-it-works/motion.ts` (curvas y beats). Capturas y video: `docs/screenshots/landing/motion-*`.
+
+**Concepto:** «un solo hilo, del QR al verificador»: un escenario fijo (sticky) donde un objeto se transforma en el siguiente, y el raíl naranja de 6 pasos avanza con el scroll.
+
+| Beat | p | Acción principal | Costura de salida |
+|---|---|---|---|
+| 1 | 0–0,17 | QR de la sala; línea naranja lo escanea → tarjeta «Credencial del evento · 1 uso» | teléfono centrado |
+| 2 | 0,17–0,33 | El teléfono se corre a la izquierda; rostro enmarcado + «Gira un poco la cabeza» + check; chip «huella cifrada» viaja en arco al «Servidor · 0 fotos guardadas» | tarjeta del servidor a la derecha |
+| 3 | 0,33–0,5 | «Votar: Sábado 14» se pulsa; la boleta (prueba + nullifier) sale por detrás del teléfono al lugar del servidor; «Segundo voto · mismo nullifier» → `rechazado` | boleta a la derecha |
+| 4 | 0,5–0,67 | El teléfono sale; bloques #1–#3 entran con sus enlaces; la boleta se vuelve el bloque #4 (borde naranja) | cadena centrada |
+| 5 | 0,67–0,83 | La cadena sube; «final d4e1…» baja al sello «Ancla on-chain · Base Sepolia · QuorumRegistry»; el logo «Q verificada» llega | sello bajo la cadena |
+| 6 | 0,83–1 | «copia descargada»: #2 cambia a rojo (`e01a`), #3–#4 se marcan, los enlaces se rompen, `Cadena del registro · fallo detectado` (un temblor); «Copia original · Sorteo recomputado · igual» | cuadro final publicable |
+
+**Aprendido:** el título va fuera del sticky (en 360 px no cabe con escena a escala 1); la escena se escala con `--s` por breakpoint y por alto de pantalla, nunca animado; lo que «sale» de un objeto va detrás de él en el DOM.
