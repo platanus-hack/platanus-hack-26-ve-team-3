@@ -368,7 +368,8 @@ export class MockV1 {
     if (p === `${E}/ledger`) {
       // Como el servidor real: durante la votación no se publican entradas (C3); al cierre, las boletas del paquete fixture.
       const published = this.phase !== "open";
-      return this.json(route, { electionId: E2E.electionId, status: this.phase, groupRoot: "0", scope: "0", genesisHash: `0x${"00".repeat(32)}`, finalHash: E2E.finalHash, count: published ? validPkg.ledger.length : 7, proofsPublished: published, entries: published ? validPkg.ledger : [] });
+      return this.json(route, { electionId: E2E.electionId, status: this.phase, groupRoot: "0", scope: "0", genesisHash: `0x${"00".repeat(32)}`, finalHash: E2E.finalHash, count: published ? validPkg.ledger.length + (this.nullifier ? 1 : 0) : 7, proofsPublished: published, entries: published ? [...validPkg.ledger, ...(this.nullifier ? [{ ...validPkg.ledger[validPkg.ledger.length - 1], idx: validPkg.ledger.length, hash: `0x${"3c".repeat(32)}`, proof: { ...validPkg.ledger[validPkg.ledger.length - 1].proof, nullifier: this.nullifier } }] : [])] : [] });
+      // ↑ Si en esta sesión se votó de verdad (prueba generada en el navegador), la boleta aparece en el registro publicado al cerrar.
     }
     if (p.startsWith(`${E}/receipt/`)) {
       const n = decodeURIComponent(p.split("/").pop() ?? "");

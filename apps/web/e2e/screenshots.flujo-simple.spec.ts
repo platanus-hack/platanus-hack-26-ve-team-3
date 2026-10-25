@@ -36,7 +36,7 @@ test("paso 1 (sala y enlace) y Más detalles", async ({ page }) => {
   await page.goto(`/j/${CODE}`);
   await page.getByLabel("Tu nombre o apodo").fill("Vecina del 4B");
   await shot(page, "01-paso1-sala");
-  await page.getByText("Más detalles").click();
+  await page.getByText("Cómo usamos tu cámara").click();
   await shot(page, "02-paso1-mas-detalles", true);
   await page.goto(`/v/${E2E.token}`);
   await expect(page.getByRole("button", { name: "Continuar" })).toBeVisible();
