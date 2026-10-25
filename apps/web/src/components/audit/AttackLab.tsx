@@ -17,7 +17,7 @@ import { describeError } from "@/lib/client/api";
 import { cn } from "@/lib/client/cn";
 import { shortHash } from "@/lib/client/format";
 import { isLabPackage, serializePackage, unavailableReason, type Change, type LabPackage } from "@/lib/client/lab/alter";
-import { ALTERATIONS, alterationById, checkLabel, expectedFor, type AlterationId, type AnchorMode } from "@/lib/client/lab/catalog";
+import { ALTERATIONS, alterationById, checkLabel, CONTINUOUS_ALTERATIONS, expectedFor, type AlterationId, type AnchorMode } from "@/lib/client/lab/catalog";
 import { evaluate, type Evaluation } from "@/lib/client/lab/evaluate";
 import { canUseRealAnchor, prepare } from "@/lib/client/lab/prepare";
 import { loadSource, parseJsonBytes, type LoadedBytes } from "@/lib/client/lab/source";
@@ -234,9 +234,10 @@ export function AttackLab() {
             <CardDescription>Un toque altera la copia y la verifica.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <AlterationList ids={MAIN_ALTERATIONS} label="Alteraciones principales" original={original} {...listProps} />
+            {/* Votación al instante (D-22): arriba van las 3 alteraciones que aplican a ese formato; el resto, plegado. */}
+            <AlterationList ids={isContinuousPackage(original) ? CONTINUOUS_MAIN : MAIN_ALTERATIONS} label="Alteraciones principales" original={original} {...listProps} />
             <Disclosure title="Más alteraciones" className="text-body" testId="more-alterations">
-              <AlterationList ids={MORE_ALTERATIONS} label="Más alteraciones" original={original} {...listProps} />
+              <AlterationList ids={isContinuousPackage(original) ? CONTINUOUS_MORE : MORE_ALTERATIONS} label="Más alteraciones" original={original} {...listProps} />
             </Disclosure>
           </CardContent>
         </Card>
@@ -251,6 +252,9 @@ export function AttackLab() {
 
 const MAIN_ALTERATIONS: AlterationId[] = ["ballot-message", "tally-inflate", "nullifier-dup", "drop-rechain"];
 const MORE_ALTERATIONS = ALTERATIONS.map((a) => a.id).filter((id) => !MAIN_ALTERATIONS.includes(id));
+const CONTINUOUS_MAIN: AlterationId[] = [...CONTINUOUS_ALTERATIONS];
+const CONTINUOUS_MORE = ALTERATIONS.map((a) => a.id).filter((id) => !CONTINUOUS_MAIN.includes(id));
+const isContinuousPackage = (pkg: LabPackage): boolean => Boolean((pkg.manifest as { enrollment?: unknown }).enrollment);
 
 type ListProps = { ids: AlterationId[]; label: string; original: LabPackage; anchor: AnchorMode; run: Run | null; busy: AlterationId | null; onTamper: (id: AlterationId) => void };
 
