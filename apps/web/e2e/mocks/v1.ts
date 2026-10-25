@@ -36,7 +36,7 @@ export const E2E = {
   finalHash: validPkg.finalHash,
 };
 
-/** Resultado del verificador para el proyector (FIXTURE: forma de `GET /audit`, no una ejecución real). */
+/** Resultado del verificador para la pantalla de cierre en vivo (FIXTURE: forma de `GET /audit` según `AuditResponse`, no una ejecución real). */
 export function fixtureAudit(valid = true) {
   const names = ["package_schema", "manifest_hash", "group_root", "chain_integrity", "proofs_valid", "nullifiers_unique", "tally_matches", "anchor_matches"];
   return {
@@ -49,10 +49,10 @@ export function fixtureAudit(valid = true) {
       valid,
       checks: names.map((name) =>
         name === "anchor_matches"
-          ? { name, passed: true, reason: "no evaluado: sin RPC", status: "not-evaluated" }
+          ? { name, passed: true, reason: "no evaluado: sin RPC", status: "no evaluado" }
           : name === "tally_matches" && !valid
-            ? { name, passed: false, reason: "el recuento publicado no coincide", status: "fail" }
-            : { name, passed: true, status: "pass" },
+            ? { name, passed: false, reason: "el recuento publicado no coincide", status: "fallo detectado" }
+            : { name, passed: true, status: "verificado" },
       ),
       unsupportedGuarantees: ["censo-abierto-en-sala: la elegibilidad depende de la deduplicación facial demo"],
     },

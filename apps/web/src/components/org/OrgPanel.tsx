@@ -348,7 +348,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
       {/* ---------- Cabina según la fase ---------- */}
       {continuous && (phase === "draft" || phase === "open") ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-6">
-          {phase === "open" ? <LiveBreakdown tally={tally} /> : null}
+          {phase === "open" ? <LiveBreakdown tally={tally} options={election.options} /> : null}
           <ContinuousCard election={election} hasToken={Boolean(token)} onChanged={(e) => (e ? (setElection(e), reload()) : reload())} />
         </div>
       ) : phase === "draft" ? (
@@ -438,7 +438,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
           <div className="lg:col-start-2 lg:row-start-1">
             <TimeBoard openedAt={election.votingStartsAt ?? election.startsAt} endsAt={election.endsAt} offset={clock.offset} />
           </div>
-          <LiveBreakdown tally={tally} className="lg:col-start-1 lg:row-span-3 lg:row-start-1" />
+          <LiveBreakdown tally={tally} options={election.options} className="lg:col-start-1 lg:row-span-3 lg:row-start-1" />
           <div className="lg:col-start-2 lg:row-start-2">
             <TurnoutCard tally={tally} />
           </div>
@@ -453,7 +453,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-6">
-          <LiveBreakdown tally={tally} final />
+          <LiveBreakdown tally={tally} options={election.options} final />
           <div className="flex flex-col gap-4">
             <TurnoutCard tally={tally} />
             {action ? (

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E, MockV1 } from "./mocks/v1";
+import { E2E, fixtureAudit, MockV1 } from "./mocks/v1";
 
 /**
  * Fase 2 (UI) contra MOCKS del contrato v1 (e2e/mocks/v1.ts). Lo criptográfico es real:
@@ -233,5 +233,64 @@ test.describe("fase 2 · organizador", () => {
 
     await page.reload();
     await expect(page.getByTestId("org-token")).toHaveCount(0); // se muestra una sola vez
+  });
+});
+
+/* ---------- En vivo con fotos: tarjetas ordenadas y pantalla de cierre ---------- */
+
+/** PNG de 1×1 (fixture): basta para que el contrato `OptionImage` acepte la opción y la UI pinte `<img>`. */
+const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const photoOptions = () => E2E.options.map((o, i) => ({ ...o, subtitle: `Propuesta ${o.label} (ficticia)`, ...(i < 3 ? { image: PNG } : {}) }));
+
+test.describe("fase 2 · en vivo con fotos", () => {
+  test("votación abierta (7 votos): tarjetas ordenadas con foto, subtítulo y porcentaje; nunca «verificado»", async ({ page }) => {
+    const mock = new MockV1("open");
+    mock.options = photoOptions();
+    await mock.install(page);
+    await page.goto(`/e/${E2E.electionId}/live`);
+    const cards = page.getByTestId("ranked-cards").first().getByTestId("ranked-card");
+    await expect(cards).toHaveCount(5);
+    // Fixture: [1,3,2,1,0] ⇒ 2 (43 %), 3 (29 %), luego 1 y 4 empatadas, 5 al final.
+    await expect(cards.nth(0)).toHaveAttribute("data-option-id", "opt-2");
+    await expect(cards.nth(1)).toHaveAttribute("data-option-id", "opt-3");
+    await expect(cards.nth(4)).toHaveAttribute("data-option-id", "opt-5");
+    await expect(cards.nth(0)).toContainText(/43\s?%/);
+    await expect(cards.nth(0)).toContainText("Propuesta 2 (ficticia)");
+    await expect(page.getByTestId("ranked-cards").first().locator("img")).toHaveCount(3); // 3 con foto, 2 con inicial
+    await expect(cards.nth(0).locator("img")).toHaveAttribute("src", PNG);
+    await expect(page.getByTestId("winner-screen")).toHaveCount(0);
+    await expect(page.getByText(/^verificado$/i)).toHaveCount(0);
+  });
+
+  test("al cierre (auditable): pantalla de ganador con la foto de «2», veredicto del verificador y las demás en orden", async ({ page }) => {
+    const mock = new MockV1("auditable");
+    mock.options = photoOptions();
+    mock.auditBody = fixtureAudit(true);
+    await mock.install(page);
+    await page.goto(`/e/${E2E.electionId}/live`);
+    const win = page.getByTestId("winner-screen");
+    await expect(win).toHaveAttribute("data-outcome", "winner");
+    await expect(page.getByTestId("winner-name")).toHaveText("2");
+    await expect(page.getByTestId("winner-share")).toContainText(/43\s?%/);
+    await expect(page.getByTestId("winner-verdict")).toContainText("Resultado verificado");
+    await expect(win).toContainText("fixture-0.0.0");
+    const rest = win.getByTestId("ranked-card");
+    await expect(rest).toHaveCount(4);
+    await expect(rest.nth(0)).toHaveAttribute("data-option-id", "opt-3");
+    await expect(win.getByRole("link", { name: /Comprobar el resultado/ })).toHaveAttribute("href", `/e/${E2E.electionId}`);
+  });
+
+  test("al cierre con fallo (failed): «Fallo detectado», sin ganador, enlace a Transparencia", async ({ page }) => {
+    const mock = new MockV1("failed");
+    mock.options = photoOptions();
+    mock.auditBody = fixtureAudit(false);
+    await mock.install(page);
+    await page.goto(`/e/${E2E.electionId}/live`);
+    const win = page.getByTestId("winner-screen");
+    await expect(win).toHaveAttribute("data-outcome", "failed");
+    await expect(win).toContainText("Fallo detectado");
+    await expect(win).not.toContainText(/\bverificado\b/i);
+    await expect(page.getByTestId("winner-name")).toHaveCount(0);
+    await expect(win.getByRole("link", { name: /Ver en Transparencia/ })).toHaveAttribute("href", `/e/${E2E.electionId}`);
   });
 });
