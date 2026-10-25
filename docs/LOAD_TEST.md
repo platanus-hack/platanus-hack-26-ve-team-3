@@ -182,3 +182,22 @@ Contadores del proyector (lectura de `GET /tally` del proyector 0, `inscritos ·
 3. **K exacto en producción:** las 4 primeras personas esperaron una vuelta del aviso de K (3 s) y ninguna boleta tiene grupo < 5 (mín 6 en la corrida 1; el verificador lo comprueba en `anonymity_set_min`). En la corrida 1 hubo boletas con grupo de 6: quien vota temprano se esconde entre pocas personas (declarado en el paquete como garantía no soportada).
 4. **Cierre:** sala cerrada (`election-closed`), join tardío 410, paquete con ancla real verificado por el servidor y por el CLI contra el RPC público; sorteo recomputado por el CLI.
 - Lo que no cubre: teléfonos reales (Human + prueba en el móvil), el wifi del lugar, la descarga de estáticos (medida en la sección anterior: ~15 MB por teléfono).
+
+---
+
+# 100+ personas, una sola IP (local, `next start`) — topes por credencial
+
+- **Fecha:** 2026-10-25. **Destino:** build de producción local (`next start`, store JSON en un `DATA_DIR` temporal, `FACE_KEY` efímera, sin ancla). No mide Render ni el wifi del lugar: mide la lógica del servidor y los topes.
+- **Comando:** `scripts/load-test.ts --base http://localhost:3320 --mode continuous --voters N --rate R --proof-delay-ms P` (sin `x-forwarded-for`: todos por una IP, como el wifi del evento). El script ahora abre la sala con `max(80, N)` asientos y reintenta `stale_root` 5 veces, como `BallotScreen`.
+
+| Corrida | Topes | N · entradas/s · prueba | Votaron | 429 | `stale_root` | Inscrito → voto (p50 / p95) |
+|---|---|---|---|---:|---:|---|
+| A | por IP, escala 5 | 120 · 3 · 3 s | 120/120 | 105 (`face/enroll`) | 0 | 3,0 / 3,0 s (inscripción p95 25 s por los 429) |
+| B | por IP, escala 10 | 150 · 5 · 15 s | 150/150 | 663 (`vote`) | 162 (118 personas) | 60 / 75 s |
+| C | **por credencial, sin escala** | 150 · 5 · 15 s | **150/150** | **0** | 162 (118 personas) | **30 / 45 s** |
+
+0 respuestas 5xx en las tres; cierre < 1 s; paquete `valid=true` en el servidor y en el CLI.
+
+**Cambio (corrida C):** enroll, wallet, identity y voted limitan por `voterId` (10/min por persona) y la IP queda como freno alto (200/min); el voto, anónimo, solo por IP (600/min: las pruebas inválidas se descartan con chequeos baratos antes de Groth16); la entrada a la sala pasa de 30 a 200/min por IP (el control real es `maxSeats`). En el cliente, `retryBusy` reintenta los 429 con espera creciente (≈ 1 min) sin cambiar lo que ve la persona.
+
+**Lo que queda:** con teléfonos lentos y mucha gente entrando, `stale_root` sigue ocurriendo (ventana de 32 raíces); todos votaron dentro de los 5 reintentos. Ampliar la ventana es decisión del protocolo. La descarga de ~15 MB por teléfono en el wifi del lugar no se mide aquí.

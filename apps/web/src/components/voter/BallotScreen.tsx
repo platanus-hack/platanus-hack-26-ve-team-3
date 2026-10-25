@@ -6,7 +6,7 @@ import type { z } from "zod";
 import type { Receipt } from "@quorum/contracts";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { ApiClientError, voterMessage } from "@/lib/client/api";
+import { ApiClientError, retryBusy, voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
 import { openIdentity, saveReceipt } from "@/lib/client/identityVault";
@@ -60,7 +60,7 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
         nullifier = proved.nullifier;
         setDetail("Enviando…");
         try {
-          receipt = await apiV1.vote(electionId, { proof: proved.proof });
+          receipt = await retryBusy(() => apiV1.vote(electionId, { proof: proved.proof }));
         } catch (err) {
           // Teléfonos lentos con mucha gente entrando: la lista cambia mientras se genera la prueba; se rehace sola (docs/LOAD_TEST.md).
           if (attempt < 5 && err instanceof ApiClientError && err.code === "stale_root") continue;
@@ -70,7 +70,7 @@ export function BallotScreen({ electionId, electionTitle, options, voterId, invi
       if (receipt.nullifier !== nullifier) throw new Error("El servidor devolvió un comprobante que no coincide con tu voto.");
       saveReceipt(electionId, { inclusionId: receipt.inclusionId, nullifier, index: receipt.index, hash: receipt.hash, state: receipt.state === "incluido" ? "incluido" : "recibido" });
       // "Ya voté": petición separada y sin datos de la boleta; si falla, el voto ya está incluido igual.
-      void apiV1.markVoted(voterId, inviteToken).catch(() => undefined);
+      void retryBusy(() => apiV1.markVoted(voterId, inviteToken)).catch(() => undefined);
       onDone(receipt);
     } catch (e) {
       const x = explain(e);

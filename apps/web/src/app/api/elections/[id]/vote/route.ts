@@ -1,7 +1,7 @@
 import { CastVoteInput } from "@quorum/contracts";
 import { castVote } from "@/lib/server/engine";
 import { json, parseBody, route } from "@/lib/server/errors";
-import { rateLimit } from "@/lib/server/ratelimit";
+import { rateLimit, VOTE_IP_LIMIT } from "@/lib/server/ratelimit";
 import { syncSchedule } from "@/lib/server/schedule";
 
 /**
@@ -9,7 +9,7 @@ import { syncSchedule } from "@/lib/server/schedule";
  * Sin identidad del votante en la petición. Nunca se registra el body (lleva la opción en `message`).
  */
 export const POST = route<{ id: string }>(async (req, { id }) => {
-  rateLimit(req, "vote", 20);
+  rateLimit(req, "vote", VOTE_IP_LIMIT);
   const input = await parseBody(req, CastVoteInput);
   await syncSchedule(id);
   return json(await castVote(id, input), { status: 201 });

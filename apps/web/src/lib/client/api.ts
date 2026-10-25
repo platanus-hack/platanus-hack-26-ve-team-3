@@ -105,6 +105,19 @@ export function orgMessage(err: unknown): string {
   return (code && ORG_FALLBACK[code]) || "Algo salió mal. Inténtalo de nuevo.";
 }
 
+const BUSY_DELAYS_MS = [1500, 3000, 5000, 8000, 10_000, 12_000, 15_000];
+
+export async function retryBusy<T>(fn: () => Promise<T>, delays: readonly number[] = BUSY_DELAYS_MS): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt >= delays.length || !(err instanceof ApiClientError) || err.status !== 429) throw err;
+      await new Promise((r) => setTimeout(r, delays[attempt] + Math.random() * 500));
+    }
+  }
+}
+
 export async function request<T>(path: string, init: RequestInit | undefined, schema: z.ZodType<T> | null): Promise<T> {
   let res: Response;
   try {
