@@ -28,7 +28,7 @@ export const STEPS = [
     icon: ListChecks,
     title: "Padrón",
     body: "Tu credencial queda en tu teléfono. Se vota desde 2 inscritos.",
-    how: ["Credencial Semaphore cifrada con una llave que no sale del teléfono.", "Al padrón solo va su compromiso público.", "Mínimo 5 inscritos para votar: así nadie sabe qué votaste.", "Al cerrar: padrón final sellado y rostros borrados."],
+    how: ["Credencial Semaphore cifrada con una llave que no sale del teléfono.", "Al padrón solo va su compromiso público.", "Mínimo 2 inscritos para votar; el organizador puede exigir más.", "Al cerrar: padrón final sellado y rostros borrados."],
   },
   {
     id: "voto",
@@ -306,7 +306,7 @@ function RollStage() {
         </svg>
       </In>
       <In i={7} className="mt-auto flex flex-wrap gap-2">
-        <Chip tone="ok">Mínimo 5 para votar</Chip>
+        <Chip tone="ok">Mínimo 2 para votar</Chip>
         <Chip tone="danger">Rostros borrados al cerrar</Chip>
       </In>
     </>
