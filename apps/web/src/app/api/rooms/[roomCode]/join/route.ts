@@ -1,13 +1,13 @@
 import { JoinRoomInput, JoinRoomResult } from "@quorum/contracts";
 import { json, parseBody, route } from "@/lib/server/errors";
-import { rateLimit } from "@/lib/server/ratelimit";
+import { rateLimit, VOTER_IP_LIMIT } from "@/lib/server/ratelimit";
 import { joinRoom } from "@/lib/server/rooms";
 import { syncScheduleForRoom } from "@/lib/server/schedule";
 
 /** Muchas personas de la sala comparten la IP del wifi del evento: el tope por IP es generoso; el control real es `maxSeats`. */
 function joinLimitPerMinute(): number {
-  const n = Number(process.env.ROOM_JOIN_RATE_PER_MIN ?? "30");
-  return Number.isFinite(n) && n > 0 ? n : 30;
+  const n = Number(process.env.ROOM_JOIN_RATE_PER_MIN ?? VOTER_IP_LIMIT);
+  return Number.isFinite(n) && n > 0 ? n : VOTER_IP_LIMIT;
 }
 
 /**

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CameraOff, Check, ChevronLeft, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ApiClientError, voterMessage } from "@/lib/client/api";
+import { ApiClientError, retryBusy, voterMessage } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { CAPTURES, clientLog, DESCRIPTOR_DIMS, formatMB, humanSelfTest, humanTimings, LivenessTracker, loadHuman, onDownloadProgress, TURN_DELTA, yawProxy, type DownloadProgress, type HumanInstance } from "@/lib/client/human";
 import { cn } from "@/lib/client/cn";
@@ -125,7 +125,7 @@ export default function FaceCapture({ voterId, inviteToken, onEnrolled, onPendin
       enrollingRef.current = true;
       try {
         setPhase("checking");
-        const res = await apiV1.faceEnroll({ voterId, inviteToken, descriptor, consent: true });
+        const res = await retryBusy(() => apiV1.faceEnroll({ voterId, inviteToken, descriptor, consent: true }));
         // D-21: coincidió con alguien ya inscrito pero entró con su propia credencial → revisión del organizador.
         if ("status" in res) {
           stopAll();

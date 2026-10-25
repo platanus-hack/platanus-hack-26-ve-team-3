@@ -9,6 +9,7 @@
  */
 import type { Address, Hex } from "viem";
 import type { WalletMode } from "@quorum/wallet";
+import { retryBusy } from "./api";
 import { apiV1 } from "./apiV1";
 import { clientLog, shortError } from "./clientLog";
 import { markRegistered, peekIdentity, sealIdentity, type VaultInfo, type WalletUnlock } from "./identityVault";
@@ -58,7 +59,7 @@ export async function linkThisPhone(args: {
 
     onProgress?.({ step: 2, of: 4 });
     const alreadyLinked = Boolean(linkedAddress && linkedAddress.toLowerCase() === wallet.address.toLowerCase());
-    if (!alreadyLinked) await apiV1.linkWallet(voterId, { inviteToken, walletAddress: wallet.address, kind: wallet.mode, bindingSignature: signature });
+    if (!alreadyLinked) await retryBusy(() => apiV1.linkWallet(voterId, { inviteToken, walletAddress: wallet.address, kind: wallet.mode, bindingSignature: signature }));
     log("link:binding", { got: alreadyLinked });
 
     onProgress?.({ step: 3, of: 4 });
@@ -72,7 +73,7 @@ export async function linkThisPhone(args: {
     log("link:identity");
 
     onProgress?.({ step: 4, of: 4 });
-    const res = await apiV1.registerIdentity(voterId, { inviteToken, commitment });
+    const res = await retryBusy(() => apiV1.registerIdentity(voterId, { inviteToken, commitment }));
     if (!res.ok) throw new Error("El servidor no aceptó la inscripción.");
     markRegistered(electionId, commitment);
     log("link:done");
