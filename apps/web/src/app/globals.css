@@ -326,8 +326,38 @@ body {
 .q-flow-timer {
   animation: q-flow-timer linear forwards;
 }
+@keyframes q-flow-hl {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+    background-size: 0% 100%;
+  }
+  40% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.q-flow-hl {
+  background-image: linear-gradient(var(--color-primary-soft), var(--color-primary-soft));
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  animation: q-flow-hl 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+@keyframes q-pop {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.25);
+  }
+}
+.q-pop {
+  animation: q-pop 0.4s ease-out backwards;
+}
 @media (prefers-reduced-motion: reduce) {
   .q-flow-in,
+  .q-flow-hl,
+  .q-pop,
   .q-flow-ring,
   .q-flow-link {
     animation: none;
@@ -352,4 +382,63 @@ body {
   background: var(--color-muted);
   border-radius: var(--radius-sm);
   animation: q-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---------- Organizador (crear / listo / panel) ---------- */
+
+/* Pantalla enfocada («Nueva votación»): sin la cabecera ni el pie del sitio. */
+body:has([data-focus-screen]) [data-site-chrome] {
+  display: none;
+}
+
+/* Fondo con profundidad: velo aqua arriba y degradado hacia el fondo. */
+.q-depth {
+  background:
+    radial-gradient(100% 38rem at 50% -8rem, rgb(0 68 102 / 0.07), transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-card) 45%, var(--color-background)) 0, var(--color-background) 28rem);
+}
+
+/* Hoja inferior (bottom sheet) sobre <dialog> modal; centrada desde 768 px. */
+dialog.q-sheet {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  max-width: none;
+  width: 100%;
+  max-height: 90dvh;
+  inset: auto 0 0 0;
+  border-radius: 1.75rem 1.75rem 0 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  box-shadow: 0 -20px 60px -20px rgb(17 17 34 / 0.4);
+  flex-direction: column;
+}
+dialog.q-sheet[open] {
+  display: flex;
+  animation: q-sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+dialog.q-sheet::backdrop {
+  background: rgb(17 17 34 / 0.42);
+  backdrop-filter: blur(2px);
+}
+@keyframes q-sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+}
+@media (min-width: 768px) {
+  dialog.q-sheet {
+    inset: 0;
+    margin: auto;
+    width: 28rem;
+    max-height: 85dvh;
+    border-radius: 1.75rem;
+  }
+}
+
+/* Titular editable de la boleta: crece con el texto y sin huérfanas. */
+.q-headline-input {
+  text-wrap: pretty;
+  field-sizing: content;
 }

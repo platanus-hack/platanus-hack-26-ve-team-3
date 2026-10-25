@@ -1,6 +1,7 @@
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { E2E, MockV1 } from "./mocks/v1";
+import { openMore } from "./helpers/org";
 
 /**
  * Capturas de la espera con cuenta regresiva y del comprobante sin jerga, a 360×740, con datos FIXTURE (mocks).
@@ -60,6 +61,7 @@ test("panel y proyector con la hora de inicio", async ({ page, context }) => {
   await mock.installContext(context);
   await page.addInitScript(([id, t]) => sessionStorage.setItem(`quorum.orgToken.${id}`, t), [E2E.electionId, E2E.orgToken] as const);
   await page.goto(`/org/${E2E.electionId}`);
+  await openMore(page, "room");
   const card = page.getByTestId("room-card");
   await expect(card.getByTestId("start-countdown")).toContainText(/La votación empieza en 04:3\d/);
   await card.scrollIntoViewIfNeeded();

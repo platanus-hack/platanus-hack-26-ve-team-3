@@ -68,9 +68,10 @@ test("gemelos con credenciales distintas: el segundo queda en revisión → el o
   await orgCtx.addInitScript(([eid, t]) => sessionStorage.setItem(`quorum.orgToken.${eid}`, t), [id, organizerToken] as const);
   const org = await orgCtx.newPage();
   await org.goto(`/org/${id}`);
+  await expect(org.getByTestId("open-readiness")).toHaveText("1 de 2 listos", { timeout: 30_000 });
+  await org.getByTestId("reviews-badge").click(); // «⚠ 1 por revisar» abre «Más › Casos por revisar»
   const card = org.getByTestId("reviews-card");
   await expect(card.getByRole("heading", { name: "Casos por revisar (1)" })).toBeVisible({ timeout: 30_000 });
-  await expect(org.getByTestId("open-readiness")).toContainText("1 de 2 listos · Hay 1 caso por revisar");
   const listed = await (await request.get(`/api/elections/${id}/reviews`, { headers: auth })).json();
   expect(JSON.stringify(listed)).not.toMatch(/similar|sealed|descriptor|vt_/);
   await card.getByTestId("review-approve").click();
@@ -85,7 +86,7 @@ test("gemelos con credenciales distintas: el segundo queda en revisión → el o
   await org.getByTestId("phase-action").click();
   await expect(org.getByTestId("open-warning")).toHaveCount(0);
   await org.getByRole("button", { name: /^Sí, (congelar padrón|abrir votación)/ }).click();
-  await expect(org.getByText("Votación abierta").first()).toBeVisible({ timeout: 15_000 });
+  await expect(org.getByTestId("org-phase-pill")).toHaveText("Votación en curso", { timeout: 15_000 });
   for (const v of voters) {
     await v.p.goto(v.link);
     await v.p.getByRole("radio", { name: /Demo A$/ }).click();
