@@ -2,7 +2,7 @@
 
 <img src="./project-logo.png" alt="Quórum" width="200" />
 
-**Trust the proof, not the organizer.**
+**Nadie tiene que creerle a quien cuenta.**
 
 Track: 🛡️ Trust
 
@@ -16,11 +16,13 @@ team-3
 
 ## Qué es
 
-Votaciones internas (condominios, universidades, cooperativas, comunidades) con elegibilidad verificada, resultados en vivo y un **verificador independiente** que demuestra que el escrutinio publicado corresponde a las boletas incluidas. Cada boleta lleva una prueba Semaphore v4 de pertenencia al padrón (sin revelar quién), el registro va encadenado con hashes y el cierre se ancla en Base Sepolia. Lo que no garantizamos está escrito en [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md).
+Infraestructura de confianza para decisiones colectivas. Cada voto trae una prueba matemática (Semaphore v4) de que lo emitió alguien del padrón, sin revelar quién; el registro de boletas va encadenado con hashes y el cierre se ancla en Base Sepolia. Un **verificador independiente**, que no toca la base de datos del organizador, recalcula padrón, pruebas, unicidad, cadena, recuento y ancla, y falla con causa concreta si alguien tocó algo. Lo que no garantizamos está escrito en [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md).
 
-## Flujo de la demo
+## La demo
 
-crear votación → proyectar QR → entrar con alias y prueba de vida → votar (2 toques) → resultados en vivo → cerrar y anclar → verificar el paquete → alterar una copia y ver el fallo detectado.
+Una **elección presidencial ficticia** (candidatos inventados, sin partidos ni nombres reales, sin premios) en la que todo el público vota desde su teléfono y el jurado hace de auditor:
+
+abrir la elección y proyectar el QR → entrar con alias y prueba de vida → votar en dos toques → escrutinio en vivo → cerrar y anclar → el jurado verifica el paquete sin confiar en nosotros → alteramos una copia (quitar una boleta, inflar un candidato) y el verificador detecta el fraude.
 
 ## Correr en local
 
@@ -46,7 +48,7 @@ El verificador (`apps/verifier`) no importa la app ni lee la base de datos: reco
 
 | Ruta | Qué hay |
 |---|---|
-| `apps/web` | Next.js: landing, organizador, sala por QR, boleta, resultados en vivo, transparencia, laboratorio de auditoría |
+| `apps/web` | Next.js: landing, organizador, sala por QR, boleta, escrutinio en vivo, transparencia, laboratorio de auditoría |
 | `apps/verifier` | Verificador independiente (CLI y librería) |
 | `packages/protocol-adapter` | Adaptador Semaphore v4 + ledger encadenado + paquete de auditoría |
 | `packages/contracts` | Tipos y esquemas Zod del contrato de API |
@@ -59,6 +61,4 @@ Spec maestra: [`QUORUM_HACKATHON_TRUST_ECC_MASTER.md`](./QUORUM_HACKATHON_TRUST_
 
 ## Repositorios y despliegue
 
-El código se desarrolla en `josegalvis27/quorum-hackathon` (desde donde despliega Render) y se refleja en este repositorio de la organización con cada `git push`. El despliegue sigue corriendo desde el repositorio personal.
-
-Este README y la documentación del proyecto se redactaron con ayuda de Claude Code y fueron revisados por el equipo.
+El código se desarrolla en `josegalvis27/quorum-hackathon` (desde donde despliega Render) y se refleja en este repositorio de la organización con cada `git push`.
