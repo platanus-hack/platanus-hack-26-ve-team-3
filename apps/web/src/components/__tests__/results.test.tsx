@@ -25,9 +25,9 @@ describe("ResultsCard", () => {
     expect(screen.queryByText("Va ganando")).toBeNull();
   });
 
-  it("con menos de 5 votos oculta el desglose y dice cuántos faltan", () => {
+  it("con menos de 2 votos oculta el desglose y dice cuántos faltan", () => {
     render(<ResultsCard {...base} totalVotes={1} turnout={1 / 3} eligible={3} options={[{ id: "a", label: "Uno", count: null }, { id: "b", label: "Dos", count: null }]} />);
-    expect(screen.getByText("Faltan 4 votos para ver el desglose")).toBeTruthy();
+    expect(screen.getByText("Falta 1 voto para ver el desglose")).toBeTruthy();
     expect(screen.queryByText("Uno")).toBeNull();
     expect(screen.queryByText("Va ganando")).toBeNull();
   });
@@ -167,14 +167,14 @@ describe("WinnerScreen", () => {
     expect(screen.getByRole("link", { name: /Ver en Transparencia/ }).getAttribute("href")).toBe("/e/e2e-samanes");
   });
 
-  it("menos de 5 votos al cierre: sin desglose ni ganador", () => {
-    render(<WinnerScreen electionId="x" status="auditable" options={seven.map((o) => ({ ...o, count: null }))} totalVotes={3} audit={audit} />);
+  it("menos de 2 votos al cierre: sin desglose ni ganador", () => {
+    render(<WinnerScreen electionId="x" status="auditable" options={seven.map((o) => ({ ...o, count: null }))} totalVotes={1} audit={audit} />);
     const box = screen.getByTestId("winner-screen");
     expect(box.getAttribute("data-outcome")).toBe("hidden");
     expect(box.textContent).toContain("Se publicó sin desglose");
-    expect(box.textContent).toContain("Menos de 5 votos");
+    expect(box.textContent).toContain("Menos de 2 votos");
     expect(screen.queryByTestId("winner-name")).toBeNull();
     expect(screen.queryAllByTestId("ranked-card").length).toBe(0);
-    expect(winnerOutcome("auditable", seven, 4).kind).toBe("hidden");
+    expect(winnerOutcome("auditable", seven, 1).kind).toBe("hidden");
   });
 });

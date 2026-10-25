@@ -297,20 +297,20 @@ describe("AT-10 privacidad de datos públicos y de la DB (public_data_privacy)",
     expect(caracasDayStart(new Date("2026-10-24T03:59:59.999Z")).toISOString()).toBe("2026-10-23T04:00:00.000Z");
   });
 
-  it("tally en vivo por lotes de 5: el 6.º voto no cambia el desglose hasta completar el lote; al cerrar, recuento exacto", async () => {
+  it("tally en vivo por lotes de MIN_VOTES_FOR_BREAKDOWN (2): el 7.º voto no cambia el desglose hasta completar el lote; al cerrar, recuento exacto", async () => {
     const org = await setupRegistration();
     const vs = [];
-    for (let i = 0; i < 6; i++) vs.push(await register(org, 90 + i));
+    for (let i = 0; i < 7; i++) vs.push(await register(org, 90 + i));
     await openIt(org);
-    const opts = [0, 0, 1, 2, 2, 1];
-    for (let i = 0; i < 6; i++) expect((await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, vs[i].identity.privateKey, opts[i]) } })).status).toBe(201);
+    const opts = [0, 0, 1, 2, 2, 1, 0];
+    for (let i = 0; i < 7; i++) expect((await call(vote, { params: { id: org.id }, body: { proof: await ballot(org.id, vs[i].identity.privateKey, opts[i]) } })).status).toBe(201);
     const live = (await call(tally, { params: { id: org.id } })).json;
-    expect(live.totalVotes).toBe(6);
-    expect(live.options.map((o: { count: number }) => o.count)).toEqual([2, 1, 2]);
-    expect(live.leadingShare).toBeCloseTo(2 / 5);
+    expect(live.totalVotes).toBe(7);
+    expect(live.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 2]); // 6 del lote completo; el 7.º espera
+    expect(live.leadingShare).toBeCloseTo(2 / 6);
     await call(close, { params: { id: org.id }, headers: org.auth });
     const final = (await call(tally, { params: { id: org.id } })).json;
-    expect(final.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 2]);
+    expect(final.options.map((o: { count: number }) => o.count)).toEqual([3, 2, 2]); // al cerrar, exacto
   }, 60_000);
 
   const PII_KEYS = ["displayName", "phoneE164", "inviteToken", "walletAddress", "faceBindingHash", "voterId"];

@@ -2,7 +2,7 @@ import { computeAggregates, requireElection } from "@/lib/server/elections";
 import { json, route } from "@/lib/server/errors";
 import { syncSchedule } from "@/lib/server/schedule";
 
-/** GET /api/elections/:id/tally → Aggregates (solo agregados; `count: null` si < 5 votos) */
+/** GET /api/elections/:id/tally → Aggregates (solo agregados; `count: null` si < MIN_VOTES_FOR_BREAKDOWN votos) */
 export const GET = route<{ id: string }>(async (_req, { id }) => {
   await syncSchedule(id);
   const election = await requireElection(id);

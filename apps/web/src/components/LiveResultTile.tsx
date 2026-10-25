@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 /* Agregados con fase v1 (registration/drawn además de las de v0). */
-import type { Aggregates } from "@quorum/contracts";
+import { MIN_VOTES_FOR_BREAKDOWN, type Aggregates } from "@quorum/contracts";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCountdown, formatInt, formatPercent } from "@/lib/client/format";
@@ -168,7 +168,7 @@ function BarListTile({ rows, data }: { rows: { name: string; votos: number }[]; 
 
 function HiddenTile({ title, data }: { title: string; data: Aggregates }) {
   return (
-    <TileShell title={title} note="Se muestra desde 5 votos, por privacidad.">
+    <TileShell title={title} note={`Se muestra desde ${MIN_VOTES_FOR_BREAKDOWN} votos, por privacidad.`}>
       <p className="text-heading font-semibold">{HIDDEN_NOTE}</p>
       <p className="text-small text-muted-foreground">Votos incluidos hasta ahora: {formatInt(data.totalVotes)}</p>
     </TileShell>
@@ -194,7 +194,7 @@ export function CountdownTile({ closesAt, status }: { closesAt: string; status: 
 
 const TEXTS: Record<"howToRead" | "privacyNote" | "rankingHint" | "budgetHint", { title: string; body: string }> = {
   howToRead: { title: "Cómo leer esto", body: "Totales publicados cada pocos segundos. No muestran quién votó ni votos individuales." },
-  privacyNote: { title: "Privacidad", body: "Con menos de 5 votos el desglose se oculta. El servidor ve el contenido de cada boleta." },
+  privacyNote: { title: "Privacidad", body: `Con menos de ${MIN_VOTES_FOR_BREAKDOWN} votos el desglose se oculta. El servidor ve el contenido de cada boleta.` },
   rankingHint: { title: "Orden de preferencia", body: "Las barras muestran menciones por opción. El orden final sale del escrutinio verificado." },
   budgetHint: { title: "Presupuesto participativo", body: "Apoyo acumulado por partida. El reparto sigue las reglas publicadas." },
 };

@@ -163,7 +163,8 @@ describe("Contrato v1 — flujo completo Los Samanes", () => {
       receipts.push(res.json);
       const m = await call(voted, { params: { id: voters[i].id }, body: { inviteToken: voters[i].inviteToken } });
       expect(m.status).toBe(200);
-      if (i < 4) {
+      if (i < 1) {
+        // Con menos de MIN_VOTES_FOR_BREAKDOWN (2) votos no hay desglose; desde ahí se publica por lotes completos.
         const t = await call(tally, { params: { id: org.id } });
         expect(t.json.options.every((o: { count: number | null }) => o.count === null)).toBe(true);
       }
@@ -175,7 +176,8 @@ describe("Contrato v1 — flujo completo Los Samanes", () => {
     const t = await call(tally, { params: { id: org.id } });
     expect(t.json.totalVotes).toBe(5);
     expect(t.json.eligible).toBe(6);
-    expect(t.json.options.map((o: { count: number }) => o.count)).toEqual([1, 1, 3, 0, 0]);
+    // En vivo, por lotes completos de MIN_VOTES_FOR_BREAKDOWN (2): con 5 votos se publican los 4 primeros [2,2,1,2]; el 5.º (opción 0) espera.
+    expect(t.json.options.map((o: { count: number }) => o.count)).toEqual([0, 1, 3, 0, 0]);
 
     // Recibo por nullifier
     const rc = await call(receipt, { params: { id: org.id, inclusionId: receipts[1].nullifier } });

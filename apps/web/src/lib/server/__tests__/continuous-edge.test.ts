@@ -57,7 +57,7 @@ type Org = { id: string; auth: Record<string, string>; code: string };
 type Seat = { voterId: string; inviteToken: string };
 
 async function setup(extra: Record<string, unknown> = {}): Promise<Org> {
-  const { votingMode: _phased, ...base } = sampleElection(extra);
+  const { votingMode: _phased, ...base } = sampleElection({ minAnonymitySet: 5, ...extra });
   void _phased;
   const created = await call(createElection, { body: base });
   expect(created.status).toBe(201);
@@ -205,18 +205,18 @@ describe("modo continuo · casos límite (QA evento en vivo)", () => {
     expect((await call(audit, { params: { id: org.id } })).json.auditResult.valid).toBe(true);
   }, 120_000);
 
-  it("C3 en continuo: mientras se vota el desglose sale por lotes de 5 boletas (el 6.º voto no lo mueve); al cerrar, exacto", async () => {
+  it("C3 en continuo: mientras se vota el desglose sale por lotes de 2 boletas (el 5.º voto no lo mueve, el 6.º sí); al cerrar, exacto", async () => {
     const org = await setup({ minAnonymitySet: 2 });
     const people = [];
     for (let i = 0; i < 6; i++) people.push(await enter(org, 950 + i));
     const choices = [0, 0, 1, 2, 1, 2];
     for (let i = 0; i < 5; i++) expect((await ballot(org, await proofFor(org, people[i].identity.privateKey, choices[i]))).status).toBe(201);
     const five = (await call(tally, { params: { id: org.id } })).json;
-    expect(five.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 1]);
+    expect(five.options.map((o: { count: number }) => o.count)).toEqual([2, 1, 1]); // 4 del lote completo; el 5.º espera
     expect((await ballot(org, await proofFor(org, people[5].identity.privateKey, choices[5]))).status).toBe(201);
     const six = (await call(tally, { params: { id: org.id } })).json;
     expect(six).toMatchObject({ totalVotes: 6, eligible: 6, status: "open" });
-    expect(six.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 1]);
+    expect(six.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 2]); // el 6.º completa el lote
     await call(close, { params: { id: org.id }, headers: org.auth });
     const final = (await call(tally, { params: { id: org.id } })).json;
     expect(final.options.map((o: { count: number }) => o.count)).toEqual([2, 2, 2]);

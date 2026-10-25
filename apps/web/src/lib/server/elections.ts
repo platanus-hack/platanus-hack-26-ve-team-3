@@ -284,7 +284,7 @@ export async function listVoterSummaries(electionId: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Agregados (solo totales; con < 5 votos no se desglosa; en vivo, por lotes de 5)
+// Agregados (solo totales; con < MIN_VOTES_FOR_BREAKDOWN votos no se desglosa; en vivo, por lotes de ese tamaño)
 // ---------------------------------------------------------------------------
 export async function computeAggregates(e: Election): Promise<Aggregates> {
   const engine = await (await getStore()).getEngine(e.id);

@@ -67,7 +67,7 @@ function tallyOf(mock: MockV1, counts: number[], phase: Phase) {
     leadingShare: total ? Math.max(...counts) / total : null,
     closesAt: "2026-10-24T22:00:00.000Z",
     status: phase,
-    options: mock.options.map((o, i) => ({ id: o.id, label: o.label, count: total >= 5 ? (counts[i] ?? 0) : null })),
+    options: mock.options.map((o, i) => ({ id: o.id, label: o.label, count: total >= 2 ? (counts[i] ?? 0) : null })),
   });
 }
 
@@ -109,9 +109,10 @@ test("espera animada y boleta con fotos (modo continuo)", async ({ page }) => {
   const imgs = await photos(page);
   const mock = new MockV1("open");
   mock.continuous = true;
-  mock.groupSize = 2; // con ella serán 3: faltan 2 para K=5
+  mock.minAnonymitySet = 2; // D-24: K por defecto
+  mock.groupSize = 0; // con ella será 1: falta 1 para K=2
   mock.options = optionsWithPhotos(imgs);
-  mock.room = { code: CODE, open: true, seatsTaken: 2, maxSeats: 500, expiresAt: new Date(Date.now() + 170 * 60_000).toISOString(), closedReason: null };
+  mock.room = { code: CODE, open: true, seatsTaken: 0, maxSeats: 500, expiresAt: new Date(Date.now() + 170 * 60_000).toISOString(), closedReason: null };
   await mock.install(page);
   await page.goto(`/j/${CODE}`);
   await page.getByLabel("Tu nombre o apodo").fill("Vecina del 4B");
@@ -119,7 +120,7 @@ test("espera animada y boleta con fotos (modo continuo)", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 60_000 });
   await page.waitForTimeout(900); // deja pasar la entrada de la página; las ondas siguen vivas (un fotograma)
   await page.screenshot({ path: path.join(OUT, "espera-360.png") });
-  mock.groupSize = 5;
+  mock.groupSize = 2;
   const options = page.getByRole("radio");
   await expect(options).toHaveCount(3, { timeout: 15_000 });
   await shot(page, "boleta-fotos-360");
@@ -161,7 +162,7 @@ test("en vivo: tarjetas, ganador, empate y fallo detectado", async ({ page }) =>
     await mock.install(page);
     await page.setViewportSize({ width: 360, height: 740 });
     await page.goto(`/e/${E2E.electionId}/live`);
-    await expect(page.getByText(NAMES[1]!).first()).toBeVisible();
+    await expect(page.getByText(NAMES[1]!).locator("visible=true").first()).toBeVisible();
     await page.waitForTimeout(800);
     await shot(page, `${c.name}-360`, true);
     await page.setViewportSize({ width: 1440, height: 900 });

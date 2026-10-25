@@ -141,11 +141,11 @@ describe("panel cabina", () => {
     expect(cockpitPhase.drawn.label).toBe("Sorteada");
     expect(cockpitPhase.failed.label).toBe("Fallida");
   });
-  it("LiveBreakdown: con count null no desglosa: barras fantasma y «3 de 5 votos · se publica desde 5»", () => {
-    render(<LiveBreakdown tally={tally([null, null], 3)} />);
+  it("LiveBreakdown: con count null no desglosa: barras fantasma y «1 de 2 votos · se publica desde 2»", () => {
+    render(<LiveBreakdown tally={tally([null, null], 1)} />);
     const box = screen.getByTestId("live-breakdown");
-    expect(box.textContent).toContain("3 de 5 votos");
-    expect(box.textContent).toContain("Se publica desde 5 votos");
+    expect(box.textContent).toContain("1 de 2 votos");
+    expect(box.textContent).toContain("Se publica desde 2 votos");
     expect(box.querySelector("table")).toBeNull();
     expect(screen.getByTestId("live-leader").textContent).toBe("Por opción");
   });

@@ -27,7 +27,7 @@ export const STEPS = [
     id: "padron",
     icon: ListChecks,
     title: "Padrón",
-    body: "Tu credencial queda en tu teléfono. Se vota desde 5 inscritos.",
+    body: "Tu credencial queda en tu teléfono. Se vota desde 2 inscritos.",
     how: ["Credencial Semaphore cifrada con una llave que no sale del teléfono.", "Al padrón solo va su compromiso público.", "Mínimo 5 inscritos para votar: así nadie sabe qué votaste.", "Al cerrar: padrón final sellado y rostros borrados."],
   },
   {

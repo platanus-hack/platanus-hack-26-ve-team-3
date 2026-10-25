@@ -176,7 +176,7 @@ export class MockV1 {
       leadingShare: total ? 3 / 7 : null,
       closesAt: "2026-10-24T22:00:00.000Z",
       status: this.phase,
-      options: this.options.map((o, i) => ({ id: o.id, label: o.label, count: total >= 5 ? [1, 3, 2, 1, 0][i] ?? 0 : null })),
+      options: this.options.map((o, i) => ({ id: o.id, label: o.label, count: total >= 2 ? [1, 3, 2, 1, 0][i] ?? 0 : null })),
     };
   }
 

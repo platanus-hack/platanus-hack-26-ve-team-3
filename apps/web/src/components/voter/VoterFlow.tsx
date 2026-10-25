@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clock, UserCheck } from "lucide-react";
-import type { InviteResponse as InviteV1, Receipt } from "@quorum/contracts";
+import { DEFAULT_MIN_ANONYMITY_SET, type InviteResponse as InviteV1, type Receipt } from "@quorum/contracts";
 import type { z } from "zod";
 import { ObserverPanel } from "@/components/room/ObserverPanel";
 import { ErrorState, LoadingState } from "@/components/states";
@@ -318,7 +318,7 @@ export function VoterFlow({ token }: { token: string }) {
               <SuccessMark className="size-8 [&>svg]:size-5" /> ¡Listo! Ya estás inscrito.
             </p>
           ) : null}
-          <AnonymityGate electionId={electionId} minAnonymitySet={invite.election.votingMode === "continuous" ? (invite.election.minAnonymitySet ?? 5) : null}>
+          <AnonymityGate electionId={electionId} minAnonymitySet={invite.election.votingMode === "continuous" ? (invite.election.minAnonymitySet ?? DEFAULT_MIN_ANONYMITY_SET) : null}>
           <BallotScreen
             electionId={electionId}
             electionTitle={title}
