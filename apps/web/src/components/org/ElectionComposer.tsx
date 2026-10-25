@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, CalendarClock, Check, ChevronRight, Clock, Gift, GripVertical, IdCard, Link2, List, ListOrdered, Plus, ScanFace, Send, ShieldCheck, SlidersHorizontal, ThumbsUp, UserRound, X } from "lucide-react";
+import { AlignLeft, CalendarClock, Camera, Check, ChevronRight, Clock, Gift, GripVertical, IdCard, Link2, List, ListOrdered, Plus, ScanFace, Send, ShieldCheck, SlidersHorizontal, ThumbsUp, UserRound, X } from "lucide-react";
 import type { Candidate, VotingMode } from "@quorum/contracts";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { LogoMark } from "@/components/ui/logo";
 import { orgMessage } from "@/lib/client/api";
 import { apiV1, type CreateElectionV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
+import { compressOptionImage, OptionImageError, optionInitial } from "@/lib/client/optionImage";
 import { appendVoters, rememberElection, saveOrgToken } from "@/lib/client/orgStore";
 import { roomApi } from "@/lib/client/room";
 import { CandidatesEditor } from "./CandidatesEditor";
@@ -41,9 +42,13 @@ const DURATIONS: { value: Duration; label: string; ms: number }[] = [
 export const PUBLISH_ROOM = { maxSeats: 60, expiresInMin: 15 } as const;
 const MAX_OPTIONS = 10;
 const TITLE_MAX = 160;
+const SUBTITLE_MAX = 80;
 const LETTERS = "ABCDEFGHIJ";
 
-type Opt = { key: number; label: string };
+/** Fila del editor. `image` es la data URI JPEG ya comprimida en el navegador (`compressOptionImage`). */
+type Opt = { key: number; label: string; subtitle: string; image?: string };
+/** Opción lista para el payload: sin claves vacías (`subtitle`/`image` solo si existen). */
+type CleanOpt = { label: string; subtitle?: string; image?: string };
 type Participant = { displayName: string; phoneE164: string };
 
 const slug = (s: string, i: number) =>
@@ -96,8 +101,8 @@ export function ElectionComposer() {
   const [showDesc, setShowDesc] = useState(false);
   const [template, setTemplate] = useState<Template>("options");
   const [options, setOptions] = useState<Opt[]>([
-    { key: 1, label: "" },
-    { key: 2, label: "" },
+    { key: 1, label: "", subtitle: "" },
+    { key: 2, label: "", subtitle: "" },
   ]);
   const [duration, setDuration] = useState<Duration>("2h");
   const [customEnd, setCustomEnd] = useState(() => toLocalInput(new Date(Date.now() + 2 * 3_600_000)));
@@ -113,6 +118,7 @@ export function ElectionComposer() {
   const [publishing, setPublishing] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [nudge, setNudge] = useState<string | null>(null);
   /** Pasos ya hechos (para reintentar sin duplicar la votación). */
   const done = useRef<{ id?: string; voters?: boolean; published?: boolean }>({});
@@ -123,17 +129,28 @@ export function ElectionComposer() {
   const [dragging, setDragging] = useState<number | null>(null);
   const dragKey = useRef<number | null>(null);
 
-  const cleanOptions = useMemo(() => options.map((o) => o.label.trim()).filter(Boolean), [options]);
+  const cleanOptions = useMemo<CleanOpt[]>(
+    () =>
+      options.flatMap((o) => {
+        const label = o.label.trim();
+        if (!label) return [];
+        const subtitle = o.subtitle.trim();
+        return [{ label, ...(subtitle ? { subtitle } : {}), ...(o.image ? { image: o.image } : {}) }];
+      }),
+    [options],
+  );
   const participants = useMemo(() => parseParticipants(pasted), [pasted]);
   const activeCandidates = drawOn ? candidates : [];
   const optionValues = useMemo(() => {
-    const vals = cleanOptions.map((o) => (/^\d+$/.test(o) ? Number(o) : NaN));
+    const vals = cleanOptions.map((o) => (/^\d+$/.test(o.label) ? Number(o.label) : NaN));
     return vals.every((v) => Number.isInteger(v)) ? vals : null;
   }, [cleanOptions]);
   const allow = eligibility.method === "event-badge" && eligibility.badgeCheck === "list" ? parseAllowlist(eligibility.allowlist, eligibility.prefix || DEFAULT_ELIGIBILITY.prefix) : null;
 
   const titleOk = title.trim().length >= 3;
   const ready = titleOk && cleanOptions.length >= 2;
+  /** Solo «Varias opciones» lleva foto y subtítulo; Sí/No y 1 a 5 son filas simples. */
+  const rich = template === "options";
   const durationLabel = duration === "custom" ? `hasta ${new Date(customEnd).toLocaleString("es-VE", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}` : DURATIONS.find((d) => d.value === duration)!.label;
   const whoShort = eligibility.method === "event-badge" ? "Credencial + rostro" : "Apodo + rostro";
   const missing = !titleOk ? "Escribe la pregunta para publicar" : cleanOptions.length < 2 ? "Agrega al menos 2 opciones" : null;
@@ -153,7 +170,8 @@ export function ElectionComposer() {
   function applyTemplate(t: Template) {
     setTemplate(t);
     const base = TEMPLATES.find((x) => x.value === t)!.options;
-    setOptions(base.map((label) => ({ key: nextKey.current++, label })));
+    setOptions(base.map((label) => ({ key: nextKey.current++, label, subtitle: "" })));
+    setImageError(null);
   }
 
   function editOption(key: number, label: string) {
@@ -161,10 +179,29 @@ export function ElectionComposer() {
     setTemplate("options");
   }
 
+  function editSubtitle(key: number, subtitle: string) {
+    setOptions((prev) => prev.map((o) => (o.key === key ? { ...o, subtitle } : o)));
+  }
+
+  /** Foto de la opción: se recorta y comprime en el navegador; nunca sale el archivo original. */
+  async function pickImage(key: number, file: File) {
+    setImageError(null);
+    try {
+      const image = await compressOptionImage(file);
+      setOptions((prev) => prev.map((o) => (o.key === key ? { ...o, image } : o)));
+    } catch (e) {
+      setImageError(e instanceof OptionImageError ? e.message : "No se pudo procesar la foto. Prueba con otra imagen.");
+    }
+  }
+
+  function clearImage(key: number) {
+    setOptions((prev) => prev.map((o) => (o.key === key ? { key: o.key, label: o.label, subtitle: o.subtitle } : o)));
+  }
+
   function addOption() {
     if (options.length >= MAX_OPTIONS) return;
     const key = nextKey.current++;
-    setOptions((prev) => [...prev, { key, label: "" }]);
+    setOptions((prev) => [...prev, { key, label: "", subtitle: "" }]);
     setTemplate("options");
     window.setTimeout(() => document.getElementById(`${uid}-opt-${key}`)?.focus(), 0);
   }
@@ -211,7 +248,7 @@ export function ElectionComposer() {
     if (!titleOk) return "La pregunta necesita al menos 3 caracteres.";
     if (cleanOptions.length < 2) return "Necesitas al menos 2 opciones.";
     if (cleanOptions.length > MAX_OPTIONS) return `Máximo ${MAX_OPTIONS} opciones.`;
-    if (new Set(cleanOptions.map((o) => o.toLowerCase())).size !== cleanOptions.length) return "Hay opciones repetidas.";
+    if (new Set(cleanOptions.map((o) => o.label.toLowerCase())).size !== cleanOptions.length) return "Hay opciones repetidas.";
     if (duration === "custom" && !(new Date(customEnd).getTime() > Date.now())) return "La hora de cierre debe ser en el futuro.";
     if (activeCandidates.length > 0 && winnersRule === "fromResult" && !optionValues) return "Para que la opción ganadora fije cuántos proyectos ganan, cada opción debe ser un número (p. ej. 1 a 5).";
     if (activeCandidates.length > 0 && winnersRule === "fixed") {
@@ -255,7 +292,8 @@ export function ElectionComposer() {
           title: title.trim(),
           description: description.trim(),
           kind: template === "yes-no" ? "yes-no" : "multiple",
-          options: cleanOptions.map((label, i) => ({ id: slug(label, i), label })),
+          // `{ id, label, subtitle?, image? }`: las claves vacías ya vienen omitidas en `cleanOptions`.
+          options: cleanOptions.map((o, i) => ({ id: slug(o.label, i), ...o })),
           startsAt: new Date(now).toISOString(),
           endsAt: ends.toISOString(),
           votingMode,
@@ -438,6 +476,18 @@ export function ElectionComposer() {
               <ul ref={listRef} aria-labelledby={`${uid}-opts-label`}>
                 {options.map((o, i) => {
                   const letter = LETTERS[i] ?? String(i + 1);
+                  const nameInput = (
+                    <input
+                      id={`${uid}-opt-${o.key}`}
+                      value={o.label}
+                      onChange={(e) => editOption(o.key, e.target.value)}
+                      maxLength={120}
+                      placeholder={`Opción ${i + 1}`}
+                      aria-label={`Opción ${letter}`}
+                      data-testid={`option-input-${i}`}
+                      className="min-w-0 w-full border-0 bg-transparent py-2 text-[1.0625rem] font-semibold text-foreground outline-none placeholder:font-medium placeholder:text-[#8a8890] focus-visible:outline-none"
+                    />
+                  );
                   return (
                     <li
                       key={o.key}
@@ -448,16 +498,25 @@ export function ElectionComposer() {
                       <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono text-[0.75rem] text-subtle">
                         {letter}
                       </span>
-                      <input
-                        id={`${uid}-opt-${o.key}`}
-                        value={o.label}
-                        onChange={(e) => editOption(o.key, e.target.value)}
-                        maxLength={120}
-                        placeholder={`Opción ${i + 1}`}
-                        aria-label={`Opción ${letter}`}
-                        data-testid={`option-input-${i}`}
-                        className="min-w-0 flex-1 border-0 bg-transparent py-2 text-[1.0625rem] font-semibold text-foreground outline-none placeholder:font-medium placeholder:text-[#8a8890] focus-visible:outline-none"
-                      />
+                      {rich ? (
+                        <>
+                          <OptionAvatar index={i} letter={letter} label={o.label} image={o.image} onPick={(file) => void pickImage(o.key, file)} onClear={() => clearImage(o.key)} />
+                          <div className="flex min-w-0 flex-1 flex-col py-1">
+                            {nameInput}
+                            <input
+                              value={o.subtitle}
+                              onChange={(e) => editSubtitle(o.key, e.target.value)}
+                              maxLength={SUBTITLE_MAX}
+                              placeholder="Subtítulo (cargo, equipo…)"
+                              aria-label={`Subtítulo de la opción ${letter}`}
+                              data-testid={`option-subtitle-${i}`}
+                              className="-mt-1.5 min-w-0 w-full border-0 bg-transparent pb-1.5 text-[0.8125rem] font-medium text-muted-foreground outline-none placeholder:text-[#a5a3ab] focus-visible:outline-none"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex min-w-0 flex-1">{nameInput}</div>
+                      )}
                       <button
                         type="button"
                         aria-label={`Mover opción ${letter} (flechas arriba y abajo)`}
@@ -499,6 +558,11 @@ export function ElectionComposer() {
               ) : (
                 <p className="py-4 text-small text-muted-foreground">Máximo {MAX_OPTIONS} opciones.</p>
               )}
+              {imageError ? (
+                <Alert tone="warning" title="No se pudo usar la foto" className="mb-3" role="alert">
+                  <span data-testid="option-image-error">{imageError}</span>
+                </Alert>
+              ) : null}
             </article>
 
             {/* Barra de propiedades */}
@@ -554,7 +618,7 @@ export function ElectionComposer() {
             </div>
           </section>
 
-          <VoterPreview title={title.trim()} options={cleanOptions} />
+          <VoterPreview title={title.trim()} options={cleanOptions} rich={rich} />
         </div>
       </div>
 
@@ -812,9 +876,67 @@ function RowDisclosure({ label, value, icon, children, open }: { label: string; 
   );
 }
 
+/**
+ * Avatar redondo (44 px) de una opción: foto o inicial gris. Tocarlo abre galería/cámara (`<input type="file">`);
+ * con foto, un «×» pequeño encima la quita. La foto se comprime en el navegador antes de guardarse en el estado.
+ */
+function OptionAvatar({ index, letter, label, image, onPick, onClear }: { index: number; letter: string; label: string; image?: string; onPick: (file: File) => void; onClear: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <span className="relative shrink-0">
+      <button
+        type="button"
+        aria-label={image ? `Cambiar foto de la opción ${letter}` : `Añadir foto a la opción ${letter}`}
+        onClick={() => fileRef.current?.click()}
+        data-testid={`option-avatar-${index}`}
+        className={cn(
+          "grid size-tap place-items-center overflow-hidden rounded-full bg-muted text-[1.0625rem] font-bold text-subtle ring-1 ring-foreground/[0.08] transition-colors hover:bg-foreground/10",
+          image && "ring-foreground/[0.12]",
+        )}
+      >
+        {image ? (
+          // Data URI generada en el navegador: no pasa por el optimizador de imágenes.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={image} alt="" className="size-full object-cover" data-testid={`option-image-${index}`} />
+        ) : (
+          <span aria-hidden="true">{optionInitial(label)}</span>
+        )}
+      </button>
+      {image ? (
+        <button
+          type="button"
+          aria-label={`Quitar foto de la opción ${letter}`}
+          onClick={onClear}
+          className="absolute -right-1 -top-1 grid size-[1.375rem] place-items-center rounded-full bg-foreground text-background shadow-[0_0_0_2px_var(--color-card)] after:absolute after:-inset-2.5 after:content-[''] hover:bg-primary-ink"
+        >
+          <X className="size-3" strokeWidth={2.5} aria-hidden="true" />
+        </button>
+      ) : (
+        <span aria-hidden="true" className="pointer-events-none absolute -bottom-0.5 -right-0.5 grid size-[1.125rem] place-items-center rounded-full bg-card text-primary-ink shadow-[0_0_0_1px_rgb(17_17_34/0.08)]">
+          <Camera className="size-[0.625rem]" strokeWidth={2.5} />
+        </span>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-testid={`option-file-${index}`}
+        className="sr-only"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // permite volver a elegir el mismo archivo
+          if (file) onPick(file);
+        }}
+      />
+    </span>
+  );
+}
+
 /** Vista previa en escritorio: teléfono con la boleta del votante (mismo aspecto que `BallotScreen`). Decorativa. */
-function VoterPreview({ title, options }: { title: string; options: string[] }) {
-  const shown = options.length ? options : ["", ""];
+function VoterPreview({ title, options, rich }: { title: string; options: CleanOpt[]; rich: boolean }) {
+  const shown: (CleanOpt | null)[] = options.length ? options : [null, null];
   return (
     <aside aria-label="Vista previa" className="sticky top-24 hidden flex-col items-center gap-6 lg:flex">
       <div className="flex items-center justify-between self-stretch text-[0.75rem] font-bold uppercase tracking-[0.08em] text-muted-foreground">
@@ -849,10 +971,23 @@ function VoterPreview({ title, options }: { title: string; options: string[] }) 
               <div className="flex flex-col gap-2">
                 {shown.map((o, i) =>
                   o ? (
-                    <div key={`${i}-${o}`} className="flex min-h-10 items-center gap-2 rounded-[0.625rem] border border-[#e0dddd] px-2.5 text-[0.875rem] font-semibold">
+                    <div key={`${i}-${o.label}`} data-testid={`preview-option-${i}`} className="flex min-h-10 items-center gap-2 rounded-[0.625rem] border border-[#e0dddd] px-2.5 py-1.5 text-[0.875rem] font-semibold">
                       <i className="size-[0.95rem] shrink-0 rounded-full border-2 border-[#b9b7bf]" />
                       <em className="font-mono text-[0.625rem] not-italic text-[#66646e]">{LETTERS[i]}</em>
-                      <span className="truncate">{o}</span>
+                      {rich ? (
+                        <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-[#e6e4e4] text-[0.8125rem] font-bold text-[#66646e]">
+                          {o.image ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={o.image} alt="" className="size-full object-cover" />
+                          ) : (
+                            optionInitial(o.label)
+                          )}
+                        </span>
+                      ) : null}
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate">{o.label}</span>
+                        {o.subtitle ? <span className="truncate text-[0.75rem] font-medium text-[#66646e]">{o.subtitle}</span> : null}
+                      </span>
                     </div>
                   ) : (
                     <div key={`ghost-${i}`} className="min-h-10 rounded-[0.625rem] border border-dashed border-[#cdcacb]" />
