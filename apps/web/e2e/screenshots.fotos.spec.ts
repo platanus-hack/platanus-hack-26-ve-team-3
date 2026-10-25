@@ -117,7 +117,8 @@ test("espera animada y boleta con fotos (modo continuo)", async ({ page }) => {
   await page.getByLabel("Tu nombre o apodo").fill("Vecina del 4B");
   await page.getByRole("button", { name: "Continuar" }).click();
   await expect(page.getByRole("heading", { name: "En espera para iniciar la votación" })).toBeVisible({ timeout: 60_000 });
-  await page.screenshot({ path: path.join(OUT, "espera-360.png") }); // con animación viva (un fotograma)
+  await page.waitForTimeout(900); // deja pasar la entrada de la página; las ondas siguen vivas (un fotograma)
+  await page.screenshot({ path: path.join(OUT, "espera-360.png") });
   mock.groupSize = 5;
   const options = page.getByRole("radio");
   await expect(options).toHaveCount(3, { timeout: 15_000 });
