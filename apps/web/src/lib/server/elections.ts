@@ -4,7 +4,7 @@
  * Sin PII en nada que salga hacia afuera.
  */
 import { Aggregates, DEFAULT_MIN_ANONYMITY_SET, Election, Voter, VoterSummary, type CreateElectionInput } from "@quorum/contracts";
-import { ballotEntries, createContinuousLedger, DEFAULT_ROOT_WINDOW, manifestHash, MERKLE_TREE_DEPTH, type AnchorPolicy, type DrawRule, type ElectionManifest, type EnrollmentPolicy } from "@quorum/protocol-adapter";
+import { ballotEntries, createContinuousLedger, DEFAULT_ROOT_WINDOW, manifestHash, MERKLE_TREE_DEPTH, sha256Utf8, type AnchorPolicy, type DrawRule, type ElectionManifest, type EnrollmentPolicy } from "@quorum/protocol-adapter";
 import { getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
@@ -145,7 +145,7 @@ export function manifestOf(e: Election): ElectionManifest {
     electionId: e.id,
     title: e.title,
     kind: e.kind,
-    options: e.options.map((o) => ({ id: o.id, label: o.label })),
+    options: e.options.map((o) => ({ id: o.id, label: o.label, ...(o.subtitle ? { subtitle: o.subtitle } : {}), ...(o.image ? { imageSha256: sha256Utf8(o.image) } : {}) })),
     startsAt: e.startsAt,
     endsAt: e.endsAt,
     protocol: "semaphore-ledger",

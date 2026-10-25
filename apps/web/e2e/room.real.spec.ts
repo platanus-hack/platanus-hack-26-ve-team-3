@@ -86,11 +86,4 @@ test("sala real: 2 entran por /j y llegan a /v/<token>; la sala llena ofrece mod
   expect(forced.status()).toBe(409);
   expect(((await forced.json()) as { code: string }).code).toBe("room_full");
   await ctx3.close();
-
-  // Proyector con el token del organizador: QR del joinUrl y contador.
-  const proj = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  await proj.goto(`/e/${id}/proyector#t=${encodeURIComponent(organizerToken)}`);
-  await expect(proj.getByTestId("projector-seats")).toContainText("2 de 2 inscritos");
-  await expect(proj.getByTestId("qr")).toHaveAttribute("data-qr-value", `${baseURL}/j/${code}`);
-  await proj.close();
 });

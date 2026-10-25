@@ -66,7 +66,7 @@ const ManifestSchema = z.object({
   electionId: z.string().min(1),
   title: z.string(),
   kind: z.enum(["yes-no", "multiple", "ranking", "budget"]),
-  options: z.array(z.object({ id: z.string(), label: z.string() }).strict()).min(2),
+  options: z.array(z.object({ id: z.string(), label: z.string(), subtitle: z.string().optional(), imageSha256: Hex32Lower.optional() }).strict()).min(2),
   startsAt: z.string(),
   endsAt: z.string(),
   protocol: z.literal("semaphore-ledger"),

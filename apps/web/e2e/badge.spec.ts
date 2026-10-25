@@ -152,7 +152,7 @@ test.describe("credencial del evento · /j/[roomCode]", () => {
   });
 });
 
-test.describe("organizador y proyector (credencial)", () => {
+test.describe("organizador (credencial)", () => {
   test("crear en una pantalla: credencial del evento con comprobación en vivo por defecto; lista en «Avanzado»; crea con eligibility", async ({ page }) => {
     const mock = new MockV1("draft");
     await mock.install(page);
@@ -180,7 +180,7 @@ test.describe("organizador y proyector (credencial)", () => {
     expect((mock.createBodies[0] as { eligibility: unknown }).eligibility).toEqual({ method: "event-badge", badgeCheck: "list", badgeUrlPrefix: PREFIX, badgeAllowlist: ["jgalvis414", "ana-hack", "beto-hack"] });
   });
 
-  test("tarjeta de sala: cambiar a credencial antes de que entre nadie; proyector: 'Escanea este código y luego tu credencial'", async ({ page }) => {
+  test("tarjeta de sala: cambiar a credencial antes de que entre nadie", async ({ page }) => {
     const mock = new MockV1("registration");
     mock.room = { code: CODE, open: true, seatsTaken: 0, maxSeats: 120, expiresAt: new Date(Date.now() + 14 * 60_000).toISOString(), closedReason: null };
     await mock.install(page);
@@ -195,10 +195,5 @@ test.describe("organizador y proyector (credencial)", () => {
     await expect(card.getByTestId("room-eligibility")).toContainText("Credencial del evento (comprobación en vivo)");
     expect(mock.eligibilityPuts).toEqual([{ method: "event-badge", badgeCheck: "live", badgeUrlPrefix: PREFIX }]);
     await shot(page, "08-tarjeta-sala");
-
-    await page.goto(`/e/${E2E.electionId}/proyector#t=${E2E.orgToken}`);
-    await expect(page.getByTestId("projector-instruction")).toHaveText("Escanea este código y luego tu credencial");
-    await expect(page.getByTestId("qr")).toBeVisible();
-    await shot(page, "09-proyector");
   });
 });

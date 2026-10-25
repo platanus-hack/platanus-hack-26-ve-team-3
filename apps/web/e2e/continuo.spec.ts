@@ -86,15 +86,4 @@ test.describe("modo continuo (mocks)", () => {
     await expect.poll(() => mock.phase).toBe("auditable");
   });
 
-  test("proyector: QR + «27 inscritos · 19 votaron» en vivo", async ({ page }) => {
-    const mock = continuousMock("open");
-    mock.groupSize = 27;
-    mock.votes = 19;
-    await mock.install(page);
-    await page.goto(`/e/${E2E.electionId}/proyector#t=${E2E.orgToken}`);
-    await expect(page.getByTestId("qr")).toHaveAttribute("data-qr-value", new RegExp(`/j/${CODE}$`));
-    await expect(page.getByTestId("projector-live-counts")).toHaveText(/27\s*inscritos · 19\s*votaron/);
-    mock.groupSize = 28;
-    await expect(page.getByTestId("projector-live-counts")).toHaveText(/28\s*inscritos · 19\s*votaron/, { timeout: 8000 });
-  });
 });

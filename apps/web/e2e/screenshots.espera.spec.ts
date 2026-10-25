@@ -55,7 +55,7 @@ test("votante: sin hora → cuenta regresiva → abriendo → boleta → comprob
   await shot(page, "05-comprobante", 360, true);
 });
 
-test("panel y proyector con la hora de inicio", async ({ page, context }) => {
+test("panel con la hora de inicio", async ({ page, context }) => {
   const mock = mockAt();
   mock.votingStartsAt = new Date(Date.now() + 4 * 60_000 + 37_000).toISOString();
   await mock.installContext(context);
@@ -66,10 +66,4 @@ test("panel y proyector con la hora de inicio", async ({ page, context }) => {
   await expect(card.getByTestId("start-countdown")).toContainText(/La votación empieza en 04:3\d/);
   await card.scrollIntoViewIfNeeded();
   await card.screenshot({ path: path.join(OUT, "espera-06-panel-360.png"), animations: "disabled" });
-
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(`/e/${E2E.electionId}/proyector#t=${E2E.orgToken}`);
-  await expect(page.getByTestId("projector-start-countdown")).toContainText(/La votación empieza en 04:3\d/);
-  await page.waitForTimeout(300);
-  await shot(page, "07-proyector", 1440);
 });

@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { E2E, fixtureAudit, MockV1 } from "./mocks/v1";
+import { E2E, MockV1 } from "./mocks/v1";
 import { openMore } from "./helpers/org";
 
 /**
- * Sala abierta + proyector contra MOCKS del contrato (e2e/mocks/v1.ts, § "Sala abierta"). Datos FIXTURE.
+ * Sala abierta contra MOCKS del contrato (e2e/mocks/v1.ts, § "Sala abierta"). Datos FIXTURE.
  * El caso contra el servidor real está en e2e/room.real.spec.ts (config playwright.real.config.ts).
  */
 const CODE = "K7M3QP";
@@ -94,7 +94,7 @@ test.describe("sala abierta · /j/[roomCode]", () => {
 });
 
 test.describe("panel del organizador · «Más › Sala»", () => {
-  test("abrir con tope y minutos, ver código y joinUrl en la cabina, ampliar, proyectar y cerrar", async ({ page, context }) => {
+  test("abrir con tope y minutos, ver código y joinUrl en la cabina, ampliar y cerrar", async ({ page, context }) => {
     const mock = new MockV1("registration");
     await mock.installContext(context);
     await page.addInitScript(([id, t]) => sessionStorage.setItem(`quorum.orgToken.${id}`, t), [E2E.electionId, E2E.orgToken] as const);
@@ -128,92 +128,8 @@ test.describe("panel del organizador · «Más › Sala»", () => {
     await expect(page.getByTestId("room-code")).toHaveText(CODE); // mismo código, mismo QR
     await expect(page.getByTestId("org-seats")).toContainText("de 80");
 
-    const popupPromise = context.waitForEvent("page");
-    await card.getByTestId("room-project").click();
-    const projector = await popupPromise;
-    await expect(projector.getByTestId("qr")).toBeVisible();
-    await expect(projector.getByTestId("projector-join-url")).toHaveText(new RegExp(`/j/${CODE}$`));
-    expect(projector.url()).not.toContain("#t="); // el token se borra de la URL
-
     await card.getByRole("button", { name: "Cerrar sala" }).click();
     await card.getByRole("button", { name: "Sí, cerrar sala" }).click();
     await expect(card.getByTestId("room-state")).toHaveText("Cerrada por el organizador");
-  });
-});
-
-test.describe("proyector · /e/[id]/proyector", () => {
-  test("registration: QR del joinUrl (con token), código, contador y cuenta regresiva; sin token no hay QR", async ({ page }) => {
-    const mock = new MockV1("registration");
-    openRoom(mock, 60, 27);
-    await mock.install(page);
-    await page.goto(`/e/${E2E.electionId}/proyector#t=${E2E.orgToken}`);
-    await expect(page.getByTestId("projector-seats")).toContainText("27 de 60 inscritos");
-    await expect(page.getByTestId("projector-code")).toHaveText(CODE);
-    await expect(page.getByTestId("qr")).toHaveAttribute("data-qr-value", new RegExp(`/j/${CODE}$`));
-    await expect(page.getByTestId("projector-countdown")).toContainText(/cierra en \d+:\d{2}/);
-    mock.room!.seatsTaken = 28;
-    await expect(page.getByTestId("projector-seats")).toContainText("28 de 60", { timeout: 6000 }); // poll de 2 s
-    // Sin scroll en pantalla grande.
-    const overflow = await page.evaluate(() => document.querySelector('[data-testid="projector"] main')!.scrollHeight - document.querySelector('[data-testid="projector"] main')!.clientHeight);
-    if (page.viewportSize()!.width >= 768) expect(overflow).toBeLessThanOrEqual(1);
-
-    const other = await page.context().newPage();
-    await mock.install(other);
-    await other.evaluate(() => sessionStorage.clear()).catch(() => undefined);
-    await other.goto(`/e/${E2E.electionId}/proyector`);
-    await expect(other.getByTestId("projector-seats")).toContainText("28 de 60");
-    await expect(other.getByText(/Abre el proyector desde el panel/)).toBeVisible();
-    await expect(other.getByTestId("qr")).toHaveCount(0);
-  });
-
-  test("inicio programado: «La votación empieza en mm:ss» junto al QR; «+5 min» mueve la hora; al llegar a 0 pasa sola a la votación", async ({ page }) => {
-    const mock = new MockV1("registration");
-    openRoom(mock, 60, 27);
-    mock.votingStartsAt = new Date(Date.now() + 4 * 60_000 + 32_000).toISOString();
-    await mock.install(page);
-    await page.goto(`/e/${E2E.electionId}/proyector#t=${E2E.orgToken}`);
-    const cd = page.getByTestId("projector-start-countdown");
-    await expect(cd).toContainText(/La votación empieza en 04:3\d/);
-    await page.getByRole("button", { name: "+5 min" }).click();
-    await expect(cd).toContainText(/La votación empieza en 09:3\d/);
-    expect(mock.schedules).toEqual([{ addSeconds: 300 }]);
-    // Sin scroll en pantalla grande, aun con la cuenta y los botones.
-    const overflow = await page.evaluate(() => document.querySelector('[data-testid="projector"] main')!.scrollHeight - document.querySelector('[data-testid="projector"] main')!.clientHeight);
-    if (page.viewportSize()!.width >= 768) expect(overflow).toBeLessThanOrEqual(1);
-    // La hora llega (el mock, como el servidor, abre con la siguiente petición): el proyector cambia solo.
-    mock.votingStartsAt = new Date(Date.now() + 1_500).toISOString();
-    await expect(page.getByTestId("projector")).toHaveAttribute("data-phase", "open", { timeout: 10_000 });
-  });
-
-  test("open: participación y desglose sólo cuando el backend lo da", async ({ page }) => {
-    const mock = new MockV1("open");
-    await mock.install(page);
-    await page.goto(`/e/${E2E.electionId}/proyector`);
-    await expect(page.getByTestId("projector-turnout")).toContainText("7");
-    await expect(page.getByTestId("projector-bars")).toContainText("3");
-  });
-
-  test("auditable: resultado + verificador de tres estados; drawn: ganadores y QR al sorteo", async ({ page }) => {
-    const mock = new MockV1("auditable");
-    mock.auditBody = fixtureAudit(true);
-    mock.anchorTx = `0x${"ab".repeat(32)}`;
-    await mock.install(page);
-    await page.goto(`/e/${E2E.electionId}/proyector`);
-    const v = page.getByTestId("projector-verifier");
-    await expect(v).toContainText("verificado");
-    await expect(v).toContainText("Sello público: no verificable");
-    await expect(v.getByRole("link")).toHaveAttribute("href", `https://sepolia.basescan.org/tx/0x${"ab".repeat(32)}`);
-    await expect(page.getByTestId("projector-result")).toContainText("Resultado publicado: 2");
-
-    mock.auditBody = fixtureAudit(false);
-    await page.reload();
-    await expect(page.getByTestId("projector-verifier")).toContainText("fallo detectado");
-
-    mock.phase = "drawn";
-    mock.auditBody = fixtureAudit(true);
-    await page.reload();
-    await expect(page.getByTestId("projector-winners").locator("li")).toHaveCount(2);
-    await expect(page.getByText("Recompútalo en tu teléfono")).toBeVisible();
-    await expect(page.getByTestId("qr")).toHaveAttribute("data-qr-value", new RegExp(`/e/${E2E.electionId}/draw$`));
   });
 });

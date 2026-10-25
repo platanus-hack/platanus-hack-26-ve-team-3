@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type HTMLAttributes } from "react";
-import { CalendarClock, Copy, DoorClosed, DoorOpen, MonitorUp } from "lucide-react";
+import { CalendarClock, Copy, DoorClosed, DoorOpen } from "lucide-react";
 import type { Election, RoomStatus } from "@quorum/contracts";
 import { checkLabel, DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, methodLabel, type EligibilityDraft } from "@/components/org/EligibilityPicker";
 import { Alert } from "@/components/ui/alert";
@@ -14,7 +14,6 @@ import { apiV1 } from "@/lib/client/apiV1";
 import { countdownText, formatStartTime, timed, useCountdown } from "@/lib/client/clock";
 import { copyText } from "@/lib/client/download";
 import { formatInt } from "@/lib/client/format";
-import { loadOrgToken } from "@/lib/client/orgStore";
 import { roomApi } from "@/lib/client/room";
 import { cn } from "@/lib/client/cn";
 import { useRoomStatus, type RoomFeed } from "./useRoomStatus";
@@ -28,16 +27,9 @@ const closedLabel: Record<NonNullable<RoomStatus["closedReason"]>, string> = {
   "election-closed": "Cerrada: la votación terminó",
 };
 
-/** Abre el proyector en otra pestaña. El token va en el fragmento (#t=…): nunca llega al servidor y el proyector lo borra de la URL. */
-export function openProjector(electionId: string) {
-  const token = loadOrgToken(electionId);
-  const url = `/e/${encodeURIComponent(electionId)}/proyector${token ? `#t=${encodeURIComponent(token)}` : ""}`;
-  window.open(url, "_blank");
-}
-
 /**
  * Tarjeta "Sala" del panel (fase `registration`): tope y minutos, Abrir / Ampliar / Cerrar, código y enlace,
- * botón "Proyectar". Datos de `GET/POST/DELETE /api/elections/:id/room` con Bearer.
+ * datos de `GET/POST/DELETE /api/elections/:id/room` con Bearer.
  * `feed`: estado compartido con la cabina del panel (si falta, la tarjeta sondea sola). `embedded`: dentro de
  * «Más › Sala», sin marco de tarjeta y sin repetir el código y el enlace (ya están en la cabina).
  */
@@ -240,9 +232,6 @@ export function RoomCard({ electionId, hasToken, eligibility, onElectionChange, 
         )}
 
         <div className="flex flex-col gap-2">
-          <Button variant="secondary" full onClick={() => openProjector(electionId)} data-testid="room-project">
-            <MonitorUp aria-hidden="true" /> Proyectar
-          </Button>
           {hasToken && isOpen ? (
             confirmClose ? (
               <ConfirmInline message="Nadie más podrá entrar con este código." confirmLabel="Sí, cerrar sala" tone="danger" onConfirm={close} onCancel={() => setConfirmClose(false)} loading={busy === "close"} />

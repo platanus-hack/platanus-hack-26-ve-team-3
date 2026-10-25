@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ChartNoAxesColumn, ChevronDown, Copy, DoorOpen, Download, Gift, KeyRound, Link2, MonitorUp, Play, Send, Square, TriangleAlert, Users } from "lucide-react";
+import { ChartNoAxesColumn, ChevronDown, Copy, DoorOpen, Download, Gift, KeyRound, Link2, Play, Send, Square, TriangleAlert, Users } from "lucide-react";
 import type { Aggregates as AggregatesV1, Election as ElectionV1, ElectionStatus, ReviewSummary, VotersListResponse as VotersListV1 } from "@quorum/contracts";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Disclosure } from "@/components/ui/disclosure";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { QrCode } from "@/components/room/QrCode";
-import { RoomCard, openProjector } from "@/components/room/RoomCard";
+import { RoomCard } from "@/components/room/RoomCard";
 import { remaining, useNow } from "@/components/room/useNow";
 import { useRoomStatus } from "@/components/room/useRoomStatus";
 import { orgMessage, type InvitesResponse } from "@/lib/client/api";
@@ -305,10 +305,7 @@ export function OrgPanel({ electionId }: { electionId: string }) {
     ) : null;
 
   const secondaries = (
-    <div className="grid grid-cols-2 gap-2">
-      <Button variant="secondary" className="whitespace-nowrap px-3" onClick={() => openProjector(electionId)} data-testid="org-project">
-        <MonitorUp aria-hidden="true" /> Proyectar
-      </Button>
+    <div className="grid grid-cols-1 gap-2">
       <Button variant="secondary" className="whitespace-nowrap px-3" onClick={() => shareUrl && copy(shareUrl, "share")} disabled={!shareUrl} data-testid="copy-link">
         <Copy aria-hidden="true" /> {copied === "share" ? "Copiado" : "Copiar enlace"}
       </Button>
@@ -685,9 +682,6 @@ export function OrgPanel({ electionId }: { electionId: string }) {
             <nav aria-label="Enlaces de la votación" className="flex flex-col">
               <LinkRow href={`/e/${encodeURIComponent(electionId)}`}>Transparencia</LinkRow>
               <LinkRow href={`/e/${encodeURIComponent(electionId)}/live`}>En vivo</LinkRow>
-              <button type="button" onClick={() => openProjector(electionId)} className="flex min-h-12 items-center border-t border-border text-left font-semibold underline-offset-4 hover:underline">
-                Proyectar
-              </button>
               {hasAuditPackage(phase) ? (
                 <>
                   <a href={`/api/elections/${encodeURIComponent(electionId)}/artifacts`} download className="flex min-h-12 items-center gap-2 border-t border-border font-semibold underline-offset-4 hover:underline">

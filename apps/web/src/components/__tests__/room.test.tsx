@@ -8,7 +8,6 @@ import { RoomCard } from "@/components/room/RoomCard";
 import { ApiClientError } from "@/lib/client/api";
 import { formatDate } from "@/lib/client/format";
 import { saveOrgToken } from "@/lib/client/orgStore";
-import { auditTriState, checkTriState, leadingOption, takeTokenFromHash } from "@/lib/client/projector";
 import { basescanTxUrl, classifyJoinError, invitePathFrom, loadRoomJoin, roomGate, roomJoinForToken, validateAlias } from "@/lib/client/room";
 
 const push = vi.fn();
@@ -206,31 +205,7 @@ describe("RoomCard (panel del organizador)", () => {
   });
 });
 
-describe("proyector: lógica pura", () => {
-  it("check.status de tres estados, con respaldo en passed/reason", () => {
-    expect(checkTriState({ name: "a", status: "pass" })).toBe("verificado");
-    expect(checkTriState({ name: "a", status: "fail", passed: true })).toBe("fallo detectado");
-    expect(checkTriState({ name: "a", status: "not-evaluated", passed: true })).toBe("no verificable");
-    expect(checkTriState({ name: "a", passed: true, reason: "no evaluado: sin RPC" })).toBe("no verificable");
-    expect(checkTriState({ name: "a", passed: false })).toBe("fallo detectado");
-  });
-  it("estado global: nunca 'verificado' sin valid del verificador ni con un fallo", () => {
-    expect(auditTriState({ valid: true, checks: [{ name: "a", passed: true }], unsupportedGuarantees: [] })).toEqual({ overall: "verificado", partial: false });
-    expect(auditTriState({ valid: true, checks: [{ name: "a", passed: true }, { name: "b", status: "not-evaluated" }], unsupportedGuarantees: [] })).toEqual({ overall: "verificado", partial: true });
-    expect(auditTriState({ valid: true, checks: [], unsupportedGuarantees: [] }).overall).toBe("no verificable");
-    expect(auditTriState({ valid: false, checks: [{ name: "a", passed: false }], unsupportedGuarantees: [] }).overall).toBe("fallo detectado");
-  });
-  it("opción líder sólo sin empate", () => {
-    expect(leadingOption([{ id: "a", count: 3 }, { id: "b", count: 1 }])?.id).toBe("a");
-    expect(leadingOption([{ id: "a", count: 2 }, { id: "b", count: 2 }])).toBeNull();
-    expect(leadingOption([{ id: "a", count: null }])).toBeNull();
-  });
-  it("token del organizador por fragmento: se lee y se borra de la URL", () => {
-    const replace = vi.fn();
-    expect(takeTokenFromHash({ hash: "#t=abc%2B1", pathname: "/e/x/proyector", search: "" }, replace)).toBe("abc+1");
-    expect(replace).toHaveBeenCalledWith("/e/x/proyector");
-    expect(takeTokenFromHash({ hash: "", pathname: "/", search: "" }, replace)).toBeNull();
-  });
+describe("QR de la sala", () => {
   it("QR determinista y no vacío", () => {
     const a = qrPath("http://localhost:3000/j/ABC234");
     expect(a.size).toBeGreaterThanOrEqual(21);
