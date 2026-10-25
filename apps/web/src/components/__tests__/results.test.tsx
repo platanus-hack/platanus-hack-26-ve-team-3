@@ -53,11 +53,19 @@ const seven = [
 const cardIds = () => screen.getAllByTestId("ranked-card").map((li) => li.getAttribute("data-option-id"));
 
 describe("RankedCards", () => {
-  it("rankOptions: de mayor a menor, estable, y rota solo los grupos empatados", () => {
+  it("rankOptions: de mayor a menor, estable; rota solo el empate del primer lugar con votos (no los de abajo ni 0 a 0)", () => {
+    // `seven` empata opt-1 y opt-4 en segundo lugar: ese empate NO rota.
     expect(rankOptions(seven).map((o) => o.id)).toEqual(["opt-2", "opt-3", "opt-1", "opt-4", "opt-5"]);
-    expect(rankOptions(seven, 1).map((o) => o.id)).toEqual(["opt-2", "opt-3", "opt-4", "opt-1", "opt-5"]);
-    expect(rankOptions(seven, 2).map((o) => o.id)).toEqual(["opt-2", "opt-3", "opt-1", "opt-4", "opt-5"]);
-    expect(hasTies(seven)).toBe(true);
+    expect(rankOptions(seven, 1).map((o) => o.id)).toEqual(["opt-2", "opt-3", "opt-1", "opt-4", "opt-5"]);
+    expect(hasTies(seven)).toBe(false);
+    // Empate en el primer lugar con votos: se turnan.
+    const topTie = [{ id: "a", count: 3 }, { id: "b", count: 3 }, { id: "c", count: 1 }];
+    expect(rankOptions(topTie, 1).map((o) => o.id)).toEqual(["b", "a", "c"]);
+    expect(hasTies(topTie)).toBe(true);
+    // 0 a 0: nada se mueve.
+    const zeros = [{ id: "a", count: 0 }, { id: "b", count: 0 }];
+    expect(rankOptions(zeros, 1).map((o) => o.id)).toEqual(["a", "b"]);
+    expect(hasTies(zeros)).toBe(false);
     expect(hasTies([{ count: 3 }, { count: 2 }, { count: 0 }])).toBe(false);
   });
 
@@ -84,18 +92,35 @@ describe("RankedCards", () => {
     expect(cardIds()).toEqual(["c", "a", "b"]);
   });
 
-  it("empate: las empatadas se turnan el puesto cada ~4 s; sin empate nada se mueve", () => {
+  it("empate en el primer lugar: las empatadas se turnan el puesto cada ~4 s; empate de abajo o 0 a 0 no se mueve", () => {
     vi.useFakeTimers();
+    const topTie = [{ id: "a", label: "A", count: 3 }, { id: "b", label: "B", count: 3 }, { id: "c", label: "C", count: 1 }];
+    render(<RankedCards options={topTie} totalVotes={7} />);
+    expect(cardIds()).toEqual(["a", "b", "c"]);
+    act(() => {
+      vi.advanceTimersByTime(TIE_ROTATE_MS);
+    });
+    expect(cardIds()).toEqual(["b", "a", "c"]);
+    act(() => {
+      vi.advanceTimersByTime(TIE_ROTATE_MS);
+    });
+    expect(cardIds()).toEqual(["a", "b", "c"]);
+    cleanup();
+
+    // Empate en segundo lugar (opt-1 y opt-4 de `seven`): no rota.
     render(<RankedCards options={seven} totalVotes={7} />);
-    expect(cardIds()).toEqual(["opt-2", "opt-3", "opt-1", "opt-4", "opt-5"]);
     act(() => {
-      vi.advanceTimersByTime(TIE_ROTATE_MS);
-    });
-    expect(cardIds()).toEqual(["opt-2", "opt-3", "opt-4", "opt-1", "opt-5"]);
-    act(() => {
-      vi.advanceTimersByTime(TIE_ROTATE_MS);
+      vi.advanceTimersByTime(TIE_ROTATE_MS * 3);
     });
     expect(cardIds()).toEqual(["opt-2", "opt-3", "opt-1", "opt-4", "opt-5"]);
+    cleanup();
+
+    // 0 a 0: no rota.
+    render(<RankedCards options={[{ id: "a", label: "A", count: 0 }, { id: "b", label: "B", count: 0 }]} totalVotes={0} />);
+    act(() => {
+      vi.advanceTimersByTime(TIE_ROTATE_MS * 3);
+    });
+    expect(cardIds()).toEqual(["a", "b"]);
     cleanup();
 
     render(<RankedCards options={[{ id: "a", label: "A", count: 4 }, { id: "b", label: "B", count: 2 }, { id: "c", label: "C", count: 1 }]} totalVotes={7} />);

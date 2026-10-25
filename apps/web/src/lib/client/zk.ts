@@ -65,4 +65,7 @@ export async function verifyPackageInBrowser(
 }
 
 /** RPC público opcional para leer el ancla desde el navegador. Sin él, el ancla queda "no evaluado". */
-export const publicAnchorRpc = process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC?.trim() || undefined;
+/** RPC público por defecto de Base Sepolia (84532). Se usa si el despliegue no fijó `NEXT_PUBLIC_BASE_SEPOLIA_RPC` (hallazgo 2026-10-24: en Render la variable no llegó al build y el teléfono marcaba el ancla «sin evaluar»). */
+export const DEFAULT_BASE_SEPOLIA_RPC = "https://sepolia.base.org";
+const publicChainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 84532);
+export const publicAnchorRpc = process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC?.trim() || (publicChainId === 84532 ? DEFAULT_BASE_SEPOLIA_RPC : undefined);

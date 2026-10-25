@@ -27,8 +27,8 @@ export const TIE_ROTATE_MS = 4000;
 export const SLIDE_MS = 500;
 
 /**
- * Orden de mayor a menor (estable por la posición original) y, dentro de cada grupo empatado, rotación cíclica según
- * `tick` para que las empatadas se turnen el puesto. Sin empates `tick` no cambia nada.
+ * Orden de mayor a menor (estable por la posición original). Solo el grupo empatado en el PRIMER lugar, y con votos
+ * (> 0), rota cíclicamente según `tick` para turnarse el puesto; los empates de abajo y los 0 a 0 no se mueven.
  */
 export function rankOptions<T extends { count: number }>(options: T[], tick = 0): T[] {
   const sorted = options.map((o, i) => ({ o, i })).sort((a, b) => b.o.count - a.o.count || a.i - b.i);
@@ -39,20 +39,19 @@ export function rankOptions<T extends { count: number }>(options: T[], tick = 0)
     while (j < sorted.length && sorted[j]!.o.count === sorted[i]!.o.count) j++;
     const group = sorted.slice(i, j).map((x) => x.o);
     const n = group.length;
-    const shift = n > 1 ? tick % n : 0;
+    const topWithVotes = i === 0 && group[0]!.count > 0;
+    const shift = n > 1 && topWithVotes ? tick % n : 0;
     for (let k = 0; k < n; k++) out.push(group[(k + shift) % n]!);
     i = j;
   }
   return out;
 }
 
+/** Solo cuenta el empate en el PRIMER lugar y con votos (> 0): dos opciones en 0 a 0 no se turnan. */
 export const hasTies = (options: { count: number }[]) => {
-  const seen = new Set<number>();
-  for (const o of options) {
-    if (seen.has(o.count)) return true;
-    seen.add(o.count);
-  }
-  return false;
+  const top = Math.max(0, ...options.map((o) => o.count));
+  if (top === 0) return false;
+  return options.filter((o) => o.count === top).length > 1;
 };
 
 function reducedMotion() {
