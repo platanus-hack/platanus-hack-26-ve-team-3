@@ -47,7 +47,7 @@ export function AnonymityGate({ electionId, minAnonymitySet, children }: { elect
       <WaitingPulse mode="continuous" k={k} size={size}>
         {size !== null ? (
           <div className="flex flex-col gap-2 text-body text-muted-foreground">
-            <p data-testid="anonymity-gate-text">{anonymityGateText(k, size)}</p>
+            <p data-testid="anonymity-gate-text" className="sr-only">{anonymityGateText(k, size)}</p>
             <p>Con muy pocas personas se podría deducir quién votó qué. Deja esta página abierta: la boleta aparecerá aquí sola.</p>
           </div>
         ) : null}
