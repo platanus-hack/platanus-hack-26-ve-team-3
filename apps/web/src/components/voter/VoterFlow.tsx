@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clock, UserCheck } from "lucide-react";
+import { hasAuditPackage } from "@/lib/client/phases";
 import { DEFAULT_MIN_ANONYMITY_SET, type InviteResponse as InviteV1, type Receipt } from "@quorum/contracts";
 import type { z } from "zod";
 import { ObserverPanel } from "@/components/room/ObserverPanel";
@@ -75,7 +76,8 @@ export function autoView(invite: InviteV1, local: Local, roomConsent: boolean): 
 }
 
 /** Pantallas que se actualizan solas cuando cambia la fase (polling). Las demás son acciones en curso del votante. */
-const FOLLOWS_PHASE = new Set<View>(["intro", "waiting", "draft", "not-linked", "other-device"]);
+// Tras votar también se sigue la fase: la espera «Esperando a que cierre» debe pasar sola al cierre.
+const FOLLOWS_PHASE = new Set<View>(["intro", "waiting", "draft", "not-linked", "other-device", "receipt", "voted"]);
 
 /** Avisa que la votación empezó: vibra y suena si el navegador lo permite. */
 function notifyOpen() {
@@ -348,7 +350,7 @@ export function VoterFlow({ token }: { token: string }) {
           : null;
       return (
         <VoterShell>
-          <VoteReceiptCard electionId={electionId} receipt={r} title={title} votedAt={invite.voter.votedAt ? formatDate(invite.voter.votedAt) : null} />
+          <VoteReceiptCard electionId={electionId} receipt={r} title={title} votedAt={invite.voter.votedAt ? formatDate(invite.voter.votedAt) : null} closed={hasAuditPackage(invite.election.status)} endsAt={invite.election.endsAt} />
         </VoterShell>
       );
     }

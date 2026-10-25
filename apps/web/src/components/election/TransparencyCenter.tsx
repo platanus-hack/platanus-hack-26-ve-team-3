@@ -181,7 +181,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
       {!closed && election.status !== "draft" ? (
         <div className="rounded-xl border border-border bg-card p-5" data-testid="results-at-close">
           <p className="text-heading font-semibold">Los resultados se publican al cerrar la votación.</p>
-          <p className="mt-1 text-small text-muted-foreground">Mientras tanto, aquí puedes comprobar que tu boleta está en el registro.</p>
+          <p className="mt-1 text-small text-muted-foreground">Al cerrar podrás ver el resultado y comprobar que tu boleta está en el registro.</p>
         </div>
       ) : null}
       {!closed ? (
@@ -191,7 +191,7 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
       ) : null}
 
       {/* 3. ¿Está mi voto? (plegado salvo que se venga del comprobante). */}
-      {!isFixture ? (
+      {!isFixture && closed ? (
         <div id="mi-voto" className="scroll-mt-4">
           <Disclosure title={<span className="text-heading font-semibold">¿Está mi voto?</span>} defaultOpen={comprobar} testId="my-vote-disclosure" className="bg-card text-body" bodyClassName="p-4">
             <MyVoteCheck electionId={electionId} verified={verified} anchor={election.anchor ?? null} frame="plain" />

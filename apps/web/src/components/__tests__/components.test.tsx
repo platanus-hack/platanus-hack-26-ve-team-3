@@ -270,8 +270,20 @@ describe("MyVoteCheck · pasos y sello", () => {
 });
 
 describe("VoteReceiptCard (comprobante simple)", () => {
-  it("check grande, 'Tu voto fue contado', hora, 'Comprobar mi voto' (sin «Ver resultados») y 'Código de tu comprobante'; sin jerga ni opción", () => {
-    render(<VoteReceiptCard electionId="e1" receipt={{ inclusionId: "77", nullifier: "77", state: "incluido", at: "2026-10-24T19:45:00.000Z" }} />);
+  it("votación abierta: ticket + «Esperando a que cierre la votación», sin enlaces para comprobar ni ver resultados", () => {
+    render(<VoteReceiptCard electionId="e1" closed={false} endsAt="2026-10-24T22:00:00.000Z" receipt={{ inclusionId: "77", nullifier: "77", state: "incluido", at: "2026-10-24T19:45:00.000Z" }} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Tu voto fue contado" })).toBeTruthy();
+    const wait = screen.getByTestId("waiting-pulse");
+    expect(wait.getAttribute("data-mode")).toBe("closing");
+    expect(wait.textContent).toContain("Esperando a que cierre la votación");
+    expect(wait.textContent).toContain("Cierra a las");
+    expect(screen.queryByRole("link", { name: "Comprobar mi voto" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ver el resultado" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Ver resultados" })).toBeNull();
+  });
+
+  it("check grande, 'Tu voto fue contado', hora; cerrada: 'Ver el resultado' y 'Comprobar mi voto'; 'Código de tu comprobante'; sin jerga ni opción", () => {
+    render(<VoteReceiptCard electionId="e1" closed receipt={{ inclusionId: "77", nullifier: "77", state: "incluido", at: "2026-10-24T19:45:00.000Z" }} />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Tu voto fue contado");
     expect(screen.getByTestId("receipt-time").textContent).toMatch(/3:45/);
     expect(screen.getByText("Código de tu comprobante")).toBeTruthy();
@@ -280,7 +292,8 @@ describe("VoteReceiptCard (comprobante simple)", () => {
     expect(screen.queryByTestId("link-mode")).toBeNull();
     expect(screen.queryByTestId("tech-details")).toBeNull();
     expect(screen.getByRole("link", { name: "Comprobar mi voto" }).getAttribute("href")).toBe("/e/e1?comprobar=1#mi-voto");
-    expect(screen.queryByRole("link", { name: "Ver resultados" })).toBeNull(); // sin «en vivo» para el votante: los resultados se ven al cerrar
+    expect(screen.queryByRole("link", { name: "Ver resultados" })).toBeNull(); // sin «en vivo» para el votante
+    expect(screen.getByRole("link", { name: "Ver el resultado" }).getAttribute("href")).toBe("/e/e1");
     const text = screen.getByTestId("receipt").textContent ?? "";
     expect(text).not.toMatch(/opción elegida|Reparar/);
     expect(text).not.toMatch(/wallet|Kernel|eoa-demo|EIP-?712|FaceBinding|Semaphore|nullifier|commitment|on-?chain|Base Sepolia|ZeroDev|demo/i);

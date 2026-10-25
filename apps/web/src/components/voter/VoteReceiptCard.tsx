@@ -6,6 +6,7 @@ import { Copy } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { copyText } from "@/lib/client/download";
 import { formatDateTime } from "@/lib/client/format";
+import { WaitingPulse } from "./WaitingPulse";
 
 /** `at`: hora en que el servidor incluyó el voto (o, si viene del teléfono, cuando se guardó el comprobante). */
 export type ReceiptView = { inclusionId: string; nullifier: string; state: "pendiente" | "recibido" | "incluido" | "no verificable"; at?: string | null };
@@ -13,9 +14,10 @@ export type ReceiptView = { inclusionId: string; nullifier: string; state: "pend
 /**
  * Comprobante del votante como ticket térmico que "sale impreso" de una ranura. Muestra estado, hora y el código del
  * comprobante (por debajo, el nullifier de la boleta), que "Comprobar mi voto" usa en la página de transparencia.
- * Después de votar solo se puede comprobar el voto (sin «en vivo»: los resultados se ven al cerrar). NUNCA muestra la opción elegida.
+ * Mientras la votación sigue abierta (`closed` = false) no hay nada que hacer: solo el ticket y la espera «Esperando a que
+ * cierre la votación». Al cerrar aparecen «Ver el resultado» y «Comprobar mi voto». NUNCA muestra la opción elegida.
  */
-export function VoteReceiptCard({ electionId, receipt, votedAt, title }: { electionId: string; receipt: ReceiptView | null; votedAt?: string | null; title?: string }) {
+export function VoteReceiptCard({ electionId, receipt, votedAt, title, closed = true, endsAt = null }: { electionId: string; receipt: ReceiptView | null; votedAt?: string | null; title?: string; /** ¿Ya cerró la votación? Hasta entonces, sin acciones. */ closed?: boolean; endsAt?: string | null }) {
   const [copied, setCopied] = useState<"ok" | "fail" | null>(null);
   const id = encodeURIComponent(electionId);
   const included = receipt?.state === "incluido";
@@ -72,10 +74,18 @@ export function VoteReceiptCard({ electionId, receipt, votedAt, title }: { elect
         </div>
       </div>
 
-      <nav className="q-after-print flex w-full flex-col gap-2" aria-label="Después de votar">
+      {!closed ? (
+        <WaitingPulse mode="closing" endsAt={endsAt} className="q-after-print">
+          <p className="text-body text-muted-foreground">Al cerrar, aquí mismo podrás ver el resultado y comprobar tu voto. Puedes dejar esta página abierta.</p>
+        </WaitingPulse>
+      ) : null}
+      <nav className="q-after-print flex w-full flex-col gap-2" aria-label="Después de votar" hidden={!closed}>
+        <Link href={`/e/${id}`} className={buttonVariants({ size: "lg", full: true })}>
+          Ver el resultado
+        </Link>
         {receipt ? (
           <>
-            <Link href={`/e/${id}?comprobar=1#mi-voto`} className={buttonVariants({ size: "lg", full: true })}>
+            <Link href={`/e/${id}?comprobar=1#mi-voto`} className={buttonVariants({ variant: "ghost", full: true })}>
               Comprobar mi voto
             </Link>
             <Button variant="link" className="self-center" onClick={copy}>
