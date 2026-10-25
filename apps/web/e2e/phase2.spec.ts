@@ -301,7 +301,11 @@ test.describe("fase 2 · organizador", () => {
       await page.getByTestId("phase-action").filter({ hasText: label }).click();
       await page.getByRole("button", { name: new RegExp(`^Sí, ${label}`, "i") }).click();
       await expect(page.getByTestId("org-phase-pill")).toHaveText(next);
-      if (next === "Votación en curso") await expect(page.getByTestId("live-breakdown")).toContainText("Preliminar");
+      // Mientras se vota, la cabina no muestra resultados (se ven en cada teléfono): muestra la escena de la landing.
+      if (next === "Votación en curso") {
+        await expect(page.getByTestId("panel-motion")).toBeVisible();
+        await expect(page.getByTestId("live-breakdown")).toHaveCount(0);
+      }
     }
     expect(mock.authSeen.every((h) => h === `Bearer ${E2E.orgToken}`)).toBe(true);
     await expect(page.getByTestId("voters-list")).toContainText("Vecino Bruno (ficticio)");

@@ -223,6 +223,17 @@ describe("panel cerrado", () => {
     expect(screen.getByTestId("org-turnout")).toBeTruthy();
   });
 
+  it("votación en curso: la cabina no muestra resultados (se ven en cada teléfono), muestra la escena de la landing", async () => {
+    vi.mocked(apiV1.getElection).mockResolvedValue({ ...closedElection("auditable"), status: "open", votingStartsAt: "2026-10-24T14:00:00.000Z" } as never);
+    vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([1, 3, 2], 6), status: "open" } as never);
+    render(<OrgPanel electionId="el-1" />);
+    expect(await screen.findByTestId("panel-motion")).toBeTruthy();
+    expect(screen.queryByTestId("live-breakdown")).toBeNull();
+    expect(screen.queryByTestId("ranked-card")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Va ganando|Preliminar/);
+    expect(screen.getByTestId("org-turnout")).toBeTruthy(); // la participación (sin opciones) sí se queda
+  });
+
   it("escritorio: la carta del ganador y la línea «Ganó» van en la primera columna; participación, exportar y verificar en la segunda, al lado", async () => {
     vi.mocked(apiV1.getElection).mockResolvedValue(closedElection("auditable") as never);
     vi.mocked(apiV1.getTally).mockResolvedValue({ ...tally([1, 3, 2], 6), status: "auditable" } as never);
