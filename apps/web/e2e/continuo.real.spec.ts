@@ -174,9 +174,10 @@ test("modo continuo real: 6 entran por la sala, K=5, votan mientras otros entran
   const vp = people[2].p;
   await vp.goto(`/e/${encodeURIComponent(id)}`);
   await expect(vp.getByTestId("anonymity-min")).toHaveText("5", { timeout: 30_000 });
-  await vp.getByRole("button", { name: "Verificar ahora" }).click();
+  // La verificación arranca sola al abrir Transparencia (ya no hay que pulsar «Verificar ahora»).
   const verdict = vp.getByTestId("audit-verdict");
   await expect(verdict).toContainText("verificado", { timeout: 120_000 });
+  await vp.getByTestId("more-details").locator(":scope > summary").click();
   await expect(vp.getByText("Mismo paquete que verificó el servidor")).toBeVisible();
 
   // ---------- Sorteo verificable ----------

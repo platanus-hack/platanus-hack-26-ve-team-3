@@ -50,8 +50,9 @@ for (const w of WIDTHS) {
     test(`transparencia verificada ${w}`, async ({ page }) => {
       await at(page, w, "auditable");
       await page.goto(`/e/${E2E.electionId}`);
-      await page.getByRole("button", { name: "Verificar ahora" }).click();
+      // La verificación arranca sola; «¿Está mi voto?» viene plegado.
       await expect(page.getByTestId("audit-verdict")).toContainText("verificado", { timeout: 30_000 });
+      await page.getByTestId("my-vote-disclosure").locator("summary").click();
       await page.getByLabel("Código del comprobante").fill(E2E.fixtureNullifier);
       await page.getByRole("button", { name: "Comprobar" }).click();
       await expect(page.getByTestId("my-vote-result")).toBeVisible();
@@ -61,7 +62,6 @@ for (const w of WIDTHS) {
     test(`transparencia fallo detectado ${w}`, async ({ page }) => {
       await at(page, w, "auditable", (m) => (m.packageFile = "tampered_total.json"));
       await page.goto(`/e/${E2E.electionId}`);
-      await page.getByRole("button", { name: "Verificar ahora" }).click();
       await expect(page.getByTestId("audit-verdict")).toContainText("fallo detectado", { timeout: 30_000 });
       await shot(page, "12-transparencia-fallo-detectado", w);
     });

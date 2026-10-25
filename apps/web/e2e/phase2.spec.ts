@@ -105,18 +105,39 @@ test.describe("fase 2 · votante", () => {
 });
 
 test.describe("fase 2 · transparencia y sorteo", () => {
-  test("Verificar ahora corre el verificador en el navegador: íntegro ⇒ verificado (parcial, ancla no evaluada)", async ({ page }) => {
+  test("cerrada: la verificación arranca sola (pasos), tarjeta compacta con veredicto real (parcial, ancla no evaluada), resultado y «Más detalles» plegado", async ({ page }) => {
     const mock = new MockV1("auditable");
     await mock.install(page);
     await page.goto(`/e/${E2E.electionId}`);
-    await page.getByRole("button", { name: "Verificar ahora" }).click();
+    // Sin tocar nada: pasos con punto pulsante y, al terminar, la tarjeta compacta.
+    await expect(page.getByTestId("verify-steps")).toContainText("Descargando el paquete");
     const verdict = page.getByTestId("audit-verdict");
     await expect(verdict).toContainText("verificado", { timeout: 30_000 });
     await expect(verdict).toContainText("no verificable");
-    await expect(page.getByText(/Verificación parcial/)).toBeVisible();
+    const summary = page.getByTestId("verify-summary");
+    await expect(summary).toContainText("Verificación parcial");
+    await expect(page.getByTestId("verify-digest")).toHaveAttribute("title", /^sha256:[0-9a-f]{64}$/);
+    await expect(page.getByTestId("verify-anchor")).toContainText("Sin sello");
+    await expect(page.getByRole("button", { name: "Verificar de nuevo" })).toBeVisible();
+    // El resultado (misma carta que /live) con el veredicto del verificador de ESTE navegador.
+    await expect(page.getByTestId("winner-verdict")).toContainText("Resultado verificado");
+    await expect(page.getByTestId("winner-source")).toContainText("tu teléfono");
+    // Orden: verificación → resultado → ¿Está mi voto? → Más detalles (plegados).
+    const order = await page.evaluate(() => ["verify-now", "winner-screen", "my-vote-disclosure", "more-details"].map((id) => document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect().top ?? -1));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    await expect(page.getByTestId("more-details")).toHaveJSProperty("open", false);
+    await expect(page.getByTestId("my-vote-disclosure")).toHaveJSProperty("open", false);
+    // Altura a 360 px con todo plegado (antes del rediseño: 2788 px). La carta del ganador (results/WinnerScreen) ocupa ~1000 px por sí sola.
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: 360, height: 740 });
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(2300);
+    if (viewport) await page.setViewportSize(viewport);
+    // Las 8 comprobaciones completas, método, versión y huella están dentro de «Más detalles».
+    await page.getByTestId("more-details").locator(":scope > summary").click();
     await expect(page.getByTestId("input-artifact-digest")).toHaveAttribute("title", /^sha256:[0-9a-f]{64}$/);
     await expect(page.getByTestId("verifier-version")).toContainText("quorum-verifier");
 
+    await page.getByTestId("my-vote-disclosure").locator("summary").click();
     await page.getByLabel("Código del comprobante").fill(E2E.fixtureNullifier);
     await page.getByRole("button", { name: "Comprobar" }).click();
     await expect(page.getByTestId("my-vote-result")).toContainText("paquete que verificaste");
@@ -132,6 +153,8 @@ test.describe("fase 2 · transparencia y sorteo", () => {
       [E2E.electionId, E2E.fixtureNullifier, E2E.fixtureBallotHash],
     );
     await page.goto(`/e/${E2E.electionId}?comprobar=1#mi-voto`);
+    // Con `?comprobar=1` el acordeón «¿Está mi voto?» viene abierto y comprueba solo.
+    await expect(page.getByTestId("my-vote-disclosure")).toHaveJSProperty("open", true);
     await expect(page.getByLabel("Código del comprobante")).toHaveValue(E2E.fixtureNullifier);
     const steps = page.getByTestId("my-vote-steps");
     await expect(steps).toContainText("Buscando tu código en el registro");
@@ -149,6 +172,10 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     await expect(page.getByTestId("my-vote-anchor")).toContainText("no evaluado por tu teléfono");
     await expect(result).not.toContainText(/voto está en la blockchain|anónim|identidad verificada/i);
     await expect(steps.locator("[data-step-state=done]")).toHaveCount(3);
+    // Mientras tanto la verificación arrancó sola: tarjeta compacta con el mismo enlace al sello.
+    await expect(page.getByTestId("verify-summary")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("verify-anchor-link")).toHaveAttribute("href", `https://sepolia.basescan.org/tx/${mock.anchorTx}`);
+    await expect(page.getByTestId("verify-anchor")).toContainText("no evaluado por tu teléfono");
   });
 
   test("paquete con total alterado ⇒ fallo detectado con la causa", async ({ page }) => {
@@ -156,9 +183,10 @@ test.describe("fase 2 · transparencia y sorteo", () => {
     mock.packageFile = "tampered_total.json";
     await mock.install(page);
     await page.goto(`/e/${E2E.electionId}`);
-    await page.getByRole("button", { name: "Verificar ahora" }).click();
     await expect(page.getByTestId("audit-verdict")).toContainText("fallo detectado", { timeout: 30_000 });
-    await expect(page.getByText(/publicado 2, recomputado 1/).first()).toBeVisible();
+    // La causa se ve en la tarjeta compacta, sin abrir «Más detalles».
+    await expect(page.getByTestId("verify-failures")).toContainText(/publicado 2, recomputado 1/);
+    await expect(page.getByTestId("winner-verdict")).not.toContainText("Resultado verificado");
   });
 
   test("sorteo: Recomputar aquí coincide con lo publicado", async ({ page }) => {

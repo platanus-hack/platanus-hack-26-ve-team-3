@@ -7,6 +7,7 @@ import type { AuditResult } from "@quorum/contracts";
 import { AuditChecklist, checkStatus, overallStatus } from "@/components/AuditChecklist";
 import { PhaseTimeline } from "@/components/election/PhaseTimeline";
 import { buildSteps, judgeInclusion, MyVoteCheck, STEP_MS } from "@/components/election/MyVoteCheck";
+import { buildVerifySteps, VerifyNowPanel } from "@/components/election/VerifyNowPanel";
 import { apiV1 } from "@/lib/client/apiV1";
 import { anchorCheckOf } from "@/lib/client/onchain";
 import { CandidatesEditor, candidateId } from "@/components/org/CandidatesEditor";
@@ -278,6 +279,69 @@ describe("BallotScreen · tarjetas con foto y subtítulo", () => {
     expect(screen.getAllByTestId("option-avatar").map((a) => a.textContent)).toEqual(["S", "N"]);
     expect(screen.queryByTestId("option-subtitle")).toBeNull();
     expect(screen.getByRole("radio", { name: "Sí" })).toBeTruthy();
+  });
+});
+
+describe("VerifyNowPanel · arranca sola y resume en una tarjeta compacta", () => {
+  const fixtureSource = { kind: "fixture" as const, url: "/fixtures/protocol/valid.json", label: "fixture · simulación" };
+  function stubFetch(file: string) {
+    const bytes = fixture(file);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(bytes, { status: 200, headers: { "content-type": "application/json" } })));
+  }
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("buildVerifySteps: tres pasos; el tercero compara con el sello solo si hay ancla y ✓ solo si el verificador lo dijo", () => {
+    expect(buildVerifySteps(null).map((s) => s.label)).toEqual(["Descargando el paquete", "Recalculando el recuento en tu teléfono", "Sin sello publicado: nada que comparar en Base Sepolia"]);
+    expect(buildVerifySteps(ANCHOR, "verificado")[2]).toEqual({ label: "Comparando con el sello en Base Sepolia", mark: "ok" });
+    expect(buildVerifySteps(ANCHOR, "no verificable")[2].mark).toBe("skip");
+    expect(buildVerifySteps(ANCHOR, "fallo detectado")[2].mark).toBe("fail");
+  });
+
+  it("autoStart: pasos visibles sin tocar nada; al terminar, veredicto REAL del verificador (parcial: ancla no evaluada), huella y enlace al sello", async () => {
+    stubFetch("valid.json");
+    const onRun = vi.fn();
+    const onVerified = vi.fn();
+    render(<VerifyNowPanel source={fixtureSource} autoStart anchor={ANCHOR} onRun={onRun} onVerified={onVerified} />);
+    expect(screen.getByTestId("verify-steps").textContent).toContain("Descargando el paquete…");
+    expect(screen.queryByTestId("verify-summary")).toBeNull();
+    const summary = await screen.findByTestId("verify-summary", {}, { timeout: 20_000 });
+    expect(summary.dataset.status).toBe("verificado");
+    const verdict = screen.getByTestId("audit-verdict");
+    expect(verdict.textContent).toContain("verificado");
+    expect(verdict.textContent).toContain("no verificable");
+    expect(summary.textContent).toContain("Verificación parcial: Ancla on-chain sin evaluar");
+    expect(screen.getByTestId("verify-digest").getAttribute("title")).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const link = screen.getByTestId("verify-anchor-link");
+    expect(link.getAttribute("href")).toBe(`https://sepolia.basescan.org/tx/${ANCHOR.txHash}`);
+    expect(screen.getByTestId("verify-anchor").textContent).toContain("no evaluado por tu teléfono");
+    expect(screen.getByTestId("verify-anchor").textContent).not.toContain("coincide");
+    expect(screen.getByTestId("verify-steps").querySelectorAll("[data-step-state=done]")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: /Verificar de nuevo/ })).toBeTruthy();
+    expect(onRun).toHaveBeenLastCalledWith(expect.objectContaining({ ok: true }));
+    expect(onVerified).toHaveBeenCalledWith(expect.objectContaining({ anchorCheck: "no verificable", ledger: expect.any(Array) }));
+    expect(summary.textContent).not.toMatch(FORBIDDEN_CLAIMS);
+  });
+
+  it("sin ancla: «Sin sello» y ningún enlace; paquete alterado ⇒ fallo detectado con la comprobación que falló", async () => {
+    stubFetch("valid.json");
+    render(<VerifyNowPanel source={fixtureSource} autoStart anchor={null} />);
+    await screen.findByTestId("verify-summary", {}, { timeout: 20_000 });
+    expect(screen.getByTestId("verify-anchor").textContent).toContain("Sin sello");
+    expect(screen.queryByTestId("verify-anchor-link")).toBeNull();
+    cleanup();
+    stubFetch("tampered_total.json");
+    render(<VerifyNowPanel source={fixtureSource} autoStart anchor={null} />);
+    const summary = await screen.findByTestId("verify-summary", {}, { timeout: 20_000 });
+    expect(summary.dataset.status).toBe("fallo detectado");
+    expect(screen.getByTestId("verify-failures").textContent).toContain("Recuento reproducido");
+  });
+
+  it("sin autoStart no arranca: botón «Verificar ahora» y ningún paso", () => {
+    stubFetch("valid.json");
+    render(<VerifyNowPanel source={fixtureSource} anchor={null} />);
+    expect(screen.getByRole("button", { name: /Verificar ahora/ })).toBeTruthy();
+    expect(screen.queryByTestId("verify-steps")).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 

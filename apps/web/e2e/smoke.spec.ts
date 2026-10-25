@@ -31,6 +31,7 @@ test.describe("smoke", () => {
   test("fase 2: el centro de transparencia del paquete fixture responde y ofrece Verificar ahora", async ({ page }) => {
     await page.goto("/e/fixture-condominio-2026");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Verificar ahora" })).toBeVisible();
+    // La verificación arranca sola al abrir; el botón pasa a «Verificar de nuevo» cuando termina.
+    await expect(page.getByRole("button", { name: /Verificar (ahora|de nuevo)/ })).toBeVisible();
   });
 });

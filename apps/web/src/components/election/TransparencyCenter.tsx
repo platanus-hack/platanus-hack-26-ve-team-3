@@ -2,29 +2,33 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { AuditChecklist } from "@/components/AuditChecklist";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/states";
 import { describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
 import { cn } from "@/lib/client/cn";
+import { downloadJson } from "@/lib/client/download";
 import { FIXTURE_PACKAGE_ID, FIXTURE_PACKAGE_URL } from "@/lib/client/fixtures";
-import { formatDateTime, kindLabel } from "@/lib/client/format";
+import { formatDateTime, kindLabel, shortHash } from "@/lib/client/format";
 import { hasAuditPackage, phaseLabel } from "@/lib/client/phases";
 import { basescanTxUrl } from "@/lib/client/room";
+import type { BrowserVerification } from "@/lib/client/zk";
 import { MIN_VOTES_FOR_BREAKDOWN, type Aggregates as AggregatesV1, type AuditResponse as StoredAudit, type Election as ElectionV1 } from "@quorum/contracts";
 import { AnonymityCard } from "./AnonymityCard";
 import { MyVoteCheck } from "./MyVoteCheck";
 import { PhaseTimeline } from "./PhaseTimeline";
-import { VerifyNowPanel, type PackageSource, type VerifiedPackage } from "./VerifyNowPanel";
+import { normalizeDigest, VerifyNowPanel, type PackageSource, type VerifiedPackage } from "./VerifyNowPanel";
 import { ActionBar, PageHeader } from "@/components/ui/page-header";
 import { CheckList } from "@/components/ui/check-list";
 import { ResultsCard } from "@/components/results/ResultsCard";
+import { RankedCards } from "@/components/results/RankedCards";
+import { WinnerScreen } from "@/components/results/WinnerScreen";
 import { Disclosure } from "@/components/ui/disclosure";
-
 
 type Fixture = { election: ElectionV1; tally: AggregatesV1 };
 
@@ -49,8 +53,11 @@ async function loadFixture(): Promise<Fixture> {
 }
 
 /**
- * Centro público de transparencia v1: fase, agregados (sin listas nominales), manifiesto, "Verificar ahora" en el
- * navegador, "Mi voto está" y enlace al sorteo. Si el id es el del paquete fixture y la API no responde, usa el fixture.
+ * Centro público de transparencia v1. Orden (cerrada): verificación en el navegador que arranca sola → tarjeta compacta
+ * (veredicto, huella, sello) → resultado (`WinnerScreen`, misma carta que /live y el panel) → «¿Está mi voto?» (plegado
+ * salvo `?comprobar=1`) → «Más detalles» (plegado: comprobaciones completas, resultado del servidor, totales, paquete
+ * para la CLI, grupo de anonimato, huellas, qué garantiza). Abierta: estado, resultados en vivo, «¿Está mi voto?» y
+ * «Más detalles». Sin listas nominales. Si el id es el del paquete fixture y la API no responde, usa el fixture.
  */
 export function TransparencyCenter({ electionId }: { electionId: string }) {
   const [election, setElection] = useState<ElectionV1 | null>(null);
@@ -61,6 +68,10 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
   const [verified, setVerified] = useState<VerifiedPackage | null>(null);
+  const [run, setRun] = useState<BrowserVerification | null>(null);
+  // `?comprobar=1#mi-voto` (desde el comprobante): «¿Está mi voto?» abierto y comprobando solo. Solo se usa tras cargar
+  // (nunca en el marcado de carga que se hidrata), así que leer `window` en el inicializador no desalinea nada.
+  const [comprobar] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("comprobar") === "1");
 
   useEffect(() => {
     let cancelled = false;
@@ -120,11 +131,20 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
     );
   }
 
-  const auditable = hasAuditPackage(election.status);
+  const closed = hasAuditPackage(election.status);
   const source: PackageSource = isFixture ? { kind: "fixture", url: FIXTURE_PACKAGE_URL, label: "fixture · simulación" } : { kind: "api", electionId };
+  const browserResult = run?.ok ? run.result : null;
+  // El veredicto de la carta del ganador: primero el verificador de este navegador; si aún no terminó, el guardado por el servidor.
+  const auditForWinner = browserResult ?? serverAudit?.auditResult ?? null;
+  const auditSource = browserResult ? "tu teléfono" : serverAudit?.auditResult ? "el servidor" : null;
+  const byId = new Map(election.options.map((o) => [o.id, o]));
+  const withPhotos = tally ? tally.options.map((o) => ({ ...o, subtitle: byId.get(o.id)?.subtitle, image: byId.get(o.id)?.image })) : [];
+  const breakdown = tally ? tally.totalVotes >= MIN_VOTES_FOR_BREAKDOWN && withPhotos.length > 0 && withPhotos.every((o) => o.count !== null) : false;
+  const digestMatchesServer = browserResult && serverAudit?.packageDigest ? normalizeDigest(serverAudit.packageDigest) === normalizeDigest(browserResult.inputArtifactDigest) : null;
+  const anchorUrl = election.anchor?.txHash ? basescanTxUrl(election.anchor.chainId, election.anchor.txHash) : null;
 
   return (
-    <div className="q-fade-in q-container flex flex-col gap-6 py-6 md:py-10">
+    <div className="q-fade-in q-container flex flex-col gap-5 py-6 md:py-10">
       <PageHeader title={election.title} description={election.description || undefined}>
         {isFixture ? <Badge tone="warning" className="self-start">Datos de ejemplo: el servidor no respondió</Badge> : null}
         <PhaseTimeline phase={election.status} continuous={election.votingMode === "continuous"} />
@@ -140,33 +160,69 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
         </ActionBar>
       </PageHeader>
 
+      {/* 1. Cerrada: la verificación en el navegador arranca sola; tarjeta compacta al terminar. */}
+      {closed ? <VerifyNowPanel source={source} serverAudit={serverAudit} anchor={election.anchor ?? null} autoStart onVerified={setVerified} onRun={setRun} /> : null}
+
       {election.status === "failed" ? (
-        serverAudit ? (
-          <AuditChecklist result={serverAudit.auditResult} runtime="servidor" title="El verificador rechazó el paquete publicado" />
-        ) : (
-          <Alert tone="danger" title="Fallo detectado">
-            El verificador rechazó el paquete de esta votación, pero no se pudo leer su resultado. Verifícalo tú abajo.
-          </Alert>
-        )
+        <Alert tone="danger" title="Fallo detectado">
+          El verificador rechazó el paquete de esta votación: no hay resultado que declarar. Las comprobaciones están arriba y en «Más detalles».
+        </Alert>
       ) : null}
 
-      {auditable ? (
-        <VerifyNowPanel source={source} serverAudit={serverAudit} onVerified={setVerified} />
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Verificar ahora</CardTitle>
-            <CardDescription>El paquete de auditoría se publica al cerrar la votación. Fase actual: {phaseLabel[election.status]}.</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+      {/* 2. Resultado: misma carta que /live y el panel; «Resultado verificado» solo con valid === true del verificador. */}
+      {closed && election.status !== "failed" && tally ? (
+        <div className="flex flex-col gap-2">
+          <WinnerScreen electionId={electionId} status={tally.status} options={withPhotos} totalVotes={tally.totalVotes} audit={auditForWinner} className="gap-5 py-6 md:py-10" />
+          <p className="text-small text-muted-foreground" data-testid="winner-source">
+            {auditSource ? `Veredicto: verificador ejecutado en ${auditSource}.` : "Veredicto pendiente: sin respuesta del verificador."}
+          </p>
+        </div>
+      ) : null}
 
-      {!isFixture ? <MyVoteCheck electionId={electionId} verified={verified} anchor={election.anchor ?? null} /> : null}
+      {/* 2b. Abierta: una sola carta de resultados en vivo (la misma que /live). */}
+      {!closed && tally && election.status !== "draft" ? (
+        <ResultsCard options={tally.options} totalVotes={tally.totalVotes} eligible={tally.eligible} turnout={tally.turnout} live={tally.status === "open"} statusLabel={phaseLabel[tally.status]} closesAt={tally.closesAt} compact={breakdown} showLeader={false}>
+          {breakdown ? <RankedCards ariaHidden options={withPhotos.map((o) => ({ ...o, count: o.count ?? 0 }))} totalVotes={tally.totalVotes} size="lg" /> : null}
+        </ResultsCard>
+      ) : null}
+      {!closed ? (
+        <p className="text-small text-muted-foreground" data-testid="verify-later">
+          La verificación en tu teléfono se activa al cerrar la votación, cuando se publica el paquete de auditoría. Fase actual: {phaseLabel[election.status]}.
+        </p>
+      ) : null}
 
-      {tally ? <ResultsCard options={tally.options} totalVotes={tally.totalVotes} eligible={tally.eligible} turnout={tally.turnout} live={tally.status === "open"} statusLabel={phaseLabel[tally.status]} /> : null}
-      {election.votingMode === "continuous" && election.status !== "draft" ? <AnonymityCard electionId={electionId} k={election.minAnonymitySet ?? 5} closed={auditable} /> : null}
+      {/* 3. ¿Está mi voto? (plegado salvo que se venga del comprobante). */}
+      {!isFixture ? (
+        <div id="mi-voto" className="scroll-mt-4">
+          <Disclosure title={<span className="text-heading font-semibold">¿Está mi voto?</span>} defaultOpen={comprobar} testId="my-vote-disclosure" className="bg-card text-body" bodyClassName="p-4">
+            <MyVoteCheck electionId={electionId} verified={verified} anchor={election.anchor ?? null} frame="plain" />
+          </Disclosure>
+        </div>
+      ) : null}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {/* 4. Todo lo demás, plegado. */}
+      <Disclosure title={<span className="text-heading font-semibold">Más detalles</span>} testId="more-details" className="bg-card text-body" bodyClassName="flex flex-col gap-4 p-4">
+        {browserResult ? (
+          <AuditChecklist result={browserResult} runtime="navegador" title="Las comprobaciones de tu teléfono" verdictTestId="audit-verdict-detail" onDownload={() => downloadJson(`verificacion-${browserResult.electionId}.json`, browserResult)} />
+        ) : null}
+        {browserResult && serverAudit?.packageDigest ? (
+          <Alert tone={digestMatchesServer ? "info" : "warning"} title={digestMatchesServer ? "Mismo paquete que verificó el servidor" : "Paquete distinto al que verificó el servidor"}>
+            El servidor publicó su propio resultado sobre <span className="q-mono">{shortHash(serverAudit.packageDigest, 14, 8)}</span>
+            {digestMatchesServer ? "; coincide con lo que tú descargaste." : `; tú verificaste ${shortHash(browserResult.inputArtifactDigest, 14, 8)}. Confía en tu verificación, no en la del servidor.`}
+          </Alert>
+        ) : null}
+        {serverAudit ? <AuditChecklist result={serverAudit.auditResult} runtime="servidor" title={election.status === "failed" ? "El verificador rechazó el paquete publicado" : "Resultado guardado por el servidor"} verdictTestId="audit-verdict-server" /> : null}
+
+        {closed && tally ? <ResultsCard options={tally.options} totalVotes={tally.totalVotes} eligible={tally.eligible} turnout={tally.turnout} live={false} statusLabel={phaseLabel[tally.status]} title="Totales publicados" /> : null}
+
+        {source.kind === "api" && closed ? (
+          <a href={`/api/elections/${encodeURIComponent(source.electionId)}/artifacts`} download className="inline-flex min-h-tap w-fit items-center gap-2 text-small font-semibold underline underline-offset-4">
+            <Download className="size-4" aria-hidden="true" /> Descargar el paquete para verificarlo con la CLI
+          </a>
+        ) : null}
+
+        {election.votingMode === "continuous" && election.status !== "draft" ? <AnonymityCard electionId={electionId} k={election.minAnonymitySet ?? 5} closed={closed} /> : null}
+
         <Card>
           <CardHeader>
             <CardTitle>La votación</CardTitle>
@@ -193,59 +249,54 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
                   </ol>
                 </dd>
               </div>
-            </dl>
-            <Disclosure title="Huellas para auditar" className="mt-4" bodyClassName="flex flex-col gap-3">
-              <div>
-                <p className="text-muted-foreground">Hash del manifiesto</p>
-                <p className="q-mono break-all font-semibold" data-testid="manifest-hash">
-                  {election.manifestHash ?? "Aún no publicado (borrador)"}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Huella del padrón</p>
-                <p className="q-mono break-all font-semibold">{election.groupRoot ?? (election.votingMode === "continuous" ? "Crece con cada inscripción; la final se publica al cerrar" : "Se fija al abrir la votación")}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Ancla en blockchain</p>
-                <p className="q-mono break-all" data-testid="anchor-tx">
-                  {election.anchor?.txHash ? (
-                    (() => {
-                      const url = basescanTxUrl(election.anchor.chainId, election.anchor.txHash);
-                      return url ? (
-                        <>
-                          Base Sepolia ·{" "}
-                          <a href={url} target="_blank" rel="noreferrer" className="underline underline-offset-4" data-testid="anchor-explorer-link">
-                            {election.anchor.txHash}
-                          </a>
-                        </>
-                      ) : (
-                        `Base Sepolia · ${election.anchor.txHash}`
-                      );
-                    })()
-                  ) : (
-                    "Sin ancla publicada"
-                  )}
-                </p>
-              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-muted-foreground">Tipo</p>
-                  <p className="font-semibold">{kindLabel[election.kind] ?? election.kind}</p>
+                  <dt className="text-muted-foreground">Tipo</dt>
+                  <dd className="font-semibold">{kindLabel[election.kind] ?? election.kind}</dd>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Protocolo</p>
-                  <p className="q-mono font-semibold">{election.protocol ?? "—"}</p>
+                  <dt className="text-muted-foreground">Protocolo</dt>
+                  <dd className="q-mono font-semibold">{election.protocol ?? "—"}</dd>
                 </div>
               </div>
               <div>
-                <p className="text-muted-foreground">Registro público externo</p>
-                <p className="q-mono break-all">{election.anchor?.txHash ? `Base Sepolia · ${election.anchor.txHash}` : "Sin registro externo"}</p>
+                <dt className="text-muted-foreground">Hash del manifiesto</dt>
+                <dd className="q-mono break-all font-semibold" data-testid="manifest-hash">
+                  {election.manifestHash ?? "Aún no publicado (borrador)"}
+                </dd>
               </div>
-            </Disclosure>
+              <div>
+                <dt className="text-muted-foreground">Huella del padrón</dt>
+                <dd className="q-mono break-all font-semibold">{election.groupRoot ?? (election.votingMode === "continuous" ? "Crece con cada inscripción; la final se publica al cerrar" : "Se fija al abrir la votación")}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Sello del registro en la cadena</dt>
+                <dd className="q-mono break-all" data-testid="anchor-tx">
+                  {election.anchor?.txHash ? (
+                    anchorUrl ? (
+                      <>
+                        Base Sepolia ·{" "}
+                        <a href={anchorUrl} target="_blank" rel="noreferrer" className="underline underline-offset-4" data-testid="anchor-explorer-link">
+                          {election.anchor.txHash}
+                        </a>
+                      </>
+                    ) : (
+                      `Cadena ${election.anchor.chainId} · ${election.anchor.txHash}`
+                    )
+                  ) : (
+                    "Sin sello publicado"
+                  )}
+                </dd>
+              </div>
+            </dl>
           </CardContent>
         </Card>
 
-        <Disclosure title="Qué garantiza y qué no" className="bg-card md:col-span-1" bodyClassName="grid grid-cols-1 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Qué garantiza y qué no</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <p className="mb-3 font-semibold">Se puede comprobar</p>
               <CheckList
@@ -270,8 +321,9 @@ export function TransparencyCenter({ electionId }: { electionId: string }) {
                 ]}
               />
             </div>
-        </Disclosure>
-      </div>
+          </CardContent>
+        </Card>
+      </Disclosure>
     </div>
   );
 }

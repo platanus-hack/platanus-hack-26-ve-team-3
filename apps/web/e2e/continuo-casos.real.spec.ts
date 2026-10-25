@@ -131,9 +131,10 @@ test("modo continuo real · casos límite: recargas, dos pestañas, cierre a med
 
   // ---------- 5. «Verificar ahora» y «¿Está mi voto?» con el comprobante de este teléfono ----------
   await ana.p.goto(`/e/${encodeURIComponent(id)}`);
-  await ana.p.getByRole("button", { name: "Verificar ahora" }).click();
+  // La verificación arranca sola al abrir Transparencia (ya no hay que pulsar «Verificar ahora»).
   await expect(ana.p.getByTestId("audit-verdict")).toContainText("verificado", { timeout: 120_000 });
   const mine = ana.p.locator("#mi-voto");
+  await mine.locator("summary").click();
   await expect(mine.getByText("Tomado del comprobante de este teléfono.")).toBeVisible({ timeout: 15_000 });
   await mine.getByRole("button", { name: "Comprobar" }).click();
   await expect(ana.p.getByTestId("my-vote-result")).toContainText("Tu boleta está en el paquete que verificaste", { timeout: 30_000 });

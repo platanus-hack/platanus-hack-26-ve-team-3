@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, Copy, ExternalLink, Minus, Search, X } from "lucide-react";
+import { Check, Copy, ExternalLink, Search } from "lucide-react";
 import { StatusPill, type HonestStatus } from "@/components/StatusPill";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, Input } from "@/components/ui/input";
 import { ApiClientError, describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
-import { cn } from "@/lib/client/cn";
 import { copyText } from "@/lib/client/download";
 import { shortHash } from "@/lib/client/format";
 import { loadReceipt } from "@/lib/client/identityVault";
 import { findNullifier, normalizeNullifier, type AnchorCheck } from "@/lib/client/onchain";
 import { basescanTxUrl } from "@/lib/client/room";
+import { sleep, STEP_MS, StepList, type Step } from "./StepList";
 import type { Election } from "@quorum/contracts";
 import type { VerifiedPackage } from "./VerifyNowPanel";
 
@@ -44,11 +44,7 @@ export function judgeInclusion(args: { found: { idx?: number } | null; source: I
 
 /* ---------- Pasos de la verificación (animación honesta: cada paso dice qué se hizo de verdad) ---------- */
 
-export type StepMark = "ok" | "skip" | "fail";
-export type Step = { label: string; mark: StepMark };
-
-/** Duración mínima de cada paso: la secuencia dura ≥ 1,8 s aunque la respuesta llegue antes. Exportada para tests. */
-export const STEP_MS = 600;
+export { STEP_MS, type Step, type StepMark } from "./StepList";
 
 /**
  * Pasos que se muestran. El tercero depende del sello: con `anchor` se compara con lo que el verificador del navegador
@@ -65,8 +61,6 @@ export function buildSteps(args: { anchor: AnchorInfo | null; anchorCheck: Ancho
   return [{ label: "Buscando tu código en el registro", mark: "ok" }, { label: "Comprobando el hash de tu boleta", mark: "ok" }, third];
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
 type Found = { idx?: number; hash?: string; hashFromReceipt?: boolean } | null;
 type Result = { outcome: Outcome; found: Found; nullifier: string };
 
@@ -76,7 +70,7 @@ type Result = { outcome: Outcome; found: Found; nullifier: string };
  * Lo que puede afirmar: la boleta está en el registro (posición y hash) y ese registro quedó sellado en Base Sepolia
  * al cerrar (`anchor`). Nunca «tu voto está en la blockchain».
  */
-export function MyVoteCheck({ electionId, verified, anchor = null }: { electionId: string; verified: VerifiedPackage | null; anchor?: AnchorInfo | null }) {
+export function MyVoteCheck({ electionId, verified, anchor = null, frame = "card" }: { electionId: string; verified: VerifiedPackage | null; anchor?: AnchorInfo | null; /** `plain`: sin tarjeta ni título (va dentro del acordeón «¿Está mi voto?» de Transparencia). */ frame?: "card" | "plain" }) {
   const inputId = useId();
   const [value, setValue] = useState("");
   const [fromReceipt, setFromReceipt] = useState(false);
@@ -158,16 +152,10 @@ export function MyVoteCheck({ electionId, verified, anchor = null }: { electionI
 
   const anchorUrl = anchor ? basescanTxUrl(anchor.chainId, anchor.txHash) : null;
 
-  return (
-    <Card id="mi-voto">
-      <CardHeader>
-        <CardTitle>¿Está mi voto?</CardTitle>
-        <CardDescription>
-          Pega el código de tu comprobante. {verified ? "Se busca en el paquete que verificaste." : "Se consulta el registro publicado."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+  const description = <>Pega el código de tu comprobante. {verified ? "Se busca en el paquete que verificaste." : "Se consulta el registro publicado."}</>;
+  const form = (
         <form ref={formRef} onSubmit={check} className="flex flex-col gap-3" noValidate>
+          {frame === "plain" ? <p className="text-small text-muted-foreground">{description}</p> : null}
           <Field label="Código del comprobante" htmlFor={inputId} hint={fromReceipt ? "Tomado del comprobante de este teléfono." : "Pégalo desde tu comprobante."}>
             <Input
               id={inputId}
@@ -190,45 +178,20 @@ export function MyVoteCheck({ electionId, verified, anchor = null }: { electionI
             </Alert>
           ) : null}
           <div role="status" aria-live="polite" className="flex flex-col gap-3">
-            {steps ? <StepList steps={steps} done={done} finished={result !== null} /> : null}
+            {steps ? <StepList steps={steps} done={done} finished={result !== null} testId="my-vote-steps" /> : null}
             {result ? <ResultCard result={result} anchor={anchor} anchorUrl={anchorUrl} anchorCheck={verified?.anchorCheck ?? null} /> : null}
           </div>
         </form>
-      </CardContent>
-    </Card>
   );
-}
-
-/* ---------- Secuencia de pasos ---------- */
-
-function StepList({ steps, done, finished }: { steps: Step[]; done: number; finished: boolean }) {
+  if (frame === "plain") return form;
   return (
-    <ol className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3 text-small" data-testid="my-vote-steps" aria-label="Pasos de la comprobación">
-      {steps.map((s, i) => {
-        const state: "pending" | "active" | "done" = i < done ? "done" : i === done && !finished ? "active" : "pending";
-        if (state === "pending") return null;
-        return (
-          <li key={s.label} className="q-step-in flex items-center gap-3" data-step-state={state} data-step-mark={state === "done" ? s.mark : undefined}>
-            <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
-              {state === "active" ? (
-                <span className="q-step-dot block size-2.5 rounded-full bg-primary" />
-              ) : s.mark === "ok" ? (
-                <Check className="size-4 text-success-strong" strokeWidth={3} />
-              ) : s.mark === "fail" ? (
-                <X className="size-4 text-danger-strong" strokeWidth={3} />
-              ) : (
-                <Minus className="size-4 text-warning-strong" strokeWidth={3} />
-              )}
-            </span>
-            <span className={cn(state === "active" ? "font-semibold" : "text-muted-foreground")}>
-              {s.label}
-              {state === "active" ? "…" : ""}
-            </span>
-            <span className="sr-only">{state === "active" ? "en curso" : s.mark === "ok" ? "listo" : s.mark === "fail" ? "fallo detectado" : "no evaluado"}</span>
-          </li>
-        );
-      })}
-    </ol>
+    <Card id="mi-voto">
+      <CardHeader>
+        <CardTitle>¿Está mi voto?</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>{form}</CardContent>
+    </Card>
   );
 }
 
