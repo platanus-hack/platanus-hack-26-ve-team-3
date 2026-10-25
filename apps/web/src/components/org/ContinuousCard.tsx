@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { QrCode } from "@/components/room/QrCode";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { describeError } from "@/lib/client/api";
 import { apiV1 } from "@/lib/client/apiV1";
@@ -28,7 +29,8 @@ export async function fetchLiveCounts(electionId: string): Promise<LiveCounts> {
 
 /**
  * D-22, panel del organizador en modo continuo: solo "Abrir" (inscripción + votación a la vez) y "Cerrar"
- * (sala + votación), con contadores en vivo (inscritos / votaron), el enlace de la sala y "Proyectar".
+ * (sala + votación), con contadores en vivo (inscritos / votaron), el QR grande de la sala (para quien aún no entró) y
+ * su enlace con "Copiar enlace".
  */
 export function ContinuousCard({ election, hasToken, onChanged }: { election: Election; hasToken: boolean; onChanged: (e?: Election) => void }) {
   const electionId = election.id;
@@ -109,6 +111,20 @@ export function ContinuousCard({ election, hasToken, onChanged }: { election: El
             <Stat label="Inscritos" value={<span data-testid="live-enrolled">{counts ? formatInt(counts.enrolled) : "—"}</span>} hint={counts && counts.enrolled < k ? `Faltan ${formatInt(k - counts.enrolled)} para habilitar el voto` : undefined} />
             <Stat label="Votaron" value={<span data-testid="live-voted">{counts ? formatInt(counts.voted) : "—"}</span>} />
           </StatGrid>
+        ) : null}
+
+        {room?.joinUrl && roomOpen ? (
+          <div className="flex flex-col items-center gap-2 text-center" data-testid="continuous-qr">
+            <QrCode value={room.joinUrl} label={`Código QR para entrar a la sala ${room.roomCode ?? ""}`.trim()} className="w-full max-w-[18rem] rounded-md" />
+            {room.roomCode ? (
+              <>
+                <p className="q-eyebrow">Código de sala</p>
+                <p className="q-mono text-[2rem] font-bold leading-none tracking-[0.16em]" data-testid="room-code">
+                  {room.roomCode}
+                </p>
+              </>
+            ) : null}
+          </div>
         ) : null}
 
         {room?.joinUrl && roomOpen ? (

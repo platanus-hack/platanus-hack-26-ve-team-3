@@ -171,13 +171,16 @@ test("fase 2 real: crear → candidatos → publicar → 2 votantes (flujo simpl
   // Navegador de Bruno (conserva su comprobante; el de Ana se borró para el intento de doble voto).
   const vp = voters[1].page;
   await vp.goto(`/e/${encodeURIComponent(electionId)}`);
-  await vp.getByRole("button", { name: "Verificar ahora" }).click();
+  // La verificación arranca sola al abrir Transparencia (ya no hay que pulsar «Verificar ahora»).
   const verdict = vp.getByTestId("audit-verdict");
   await expect(verdict).toContainText("verificado", { timeout: 90_000 });
   await expect(verdict).toContainText("no verificable"); // ancla no evaluada: nunca verde
-  await expect(vp.getByText(/Verificación parcial/)).toBeVisible();
+  await expect(vp.getByTestId("verify-summary")).toContainText("Verificación parcial");
+  // Comprobaciones completas y comparación con el servidor: dentro de «Más detalles» (plegado por defecto).
+  await vp.getByTestId("more-details").locator(":scope > summary").click();
   await expect(vp.getByTestId("verifier-version")).toContainText("quorum-verifier");
   await expect(vp.getByText("Mismo paquete que verificó el servidor")).toBeVisible();
+  await vp.getByTestId("my-vote-disclosure").locator("summary").click();
   await expect(vp.getByLabel("Código del comprobante")).toHaveValue(voters[1].nullifier!);
   await vp.getByRole("button", { name: "Comprobar" }).click();
   await expect(vp.getByTestId("my-vote-result")).toContainText("incluido");

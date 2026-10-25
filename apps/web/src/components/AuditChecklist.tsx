@@ -35,7 +35,8 @@ export function checkStatus(c: { passed: boolean; reason?: string; status?: "ver
   return "verificado";
 }
 
-const checkName: Record<string, string> = {
+/** Nombres cortos de cada check (los usa también la tarjeta compacta de «Verificar ahora»). */
+export const checkName: Record<string, string> = {
   package_schema: "Formato del paquete",
   manifest_hash: "Hash del manifiesto",
   group_root: "Raíz del padrón",
@@ -61,7 +62,7 @@ export function notEvaluated(result: AuditResult): string[] {
   return result.checks.filter((c) => checkStatus(c) === "no verificable").map((c) => c.name);
 }
 
-export function AuditChecklist({ result, onDownload, runtime, title = "Resultado del verificador" }: { result: AuditResult; onDownload?: () => void; runtime?: "navegador" | "servidor"; title?: string }) {
+export function AuditChecklist({ result, onDownload, runtime, title = "Resultado del verificador", verdictTestId = "audit-verdict" }: { result: AuditResult; onDownload?: () => void; runtime?: "navegador" | "servidor"; title?: string; /** Cambia el `data-testid` del veredicto cuando otra pieza de la página ya usa `audit-verdict`. */ verdictTestId?: string }) {
   const status = overallStatus(result);
   const pending = notEvaluated(result);
   const statuses = result.checks.map(checkStatus);
@@ -73,7 +74,7 @@ export function AuditChecklist({ result, onDownload, runtime, title = "Resultado
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>{title}</CardTitle>
-          <div className="flex flex-wrap items-center gap-2" role="status" data-testid="audit-verdict">
+          <div className="flex flex-wrap items-center gap-2" role="status" data-testid={verdictTestId}>
             <StatusPill status={status} size="lg" />
             {status === "verificado" && pending.length > 0 ? <StatusPill status="no verificable" className="normal-case" /> : null}
           </div>

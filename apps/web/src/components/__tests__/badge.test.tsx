@@ -3,11 +3,11 @@
  * D-19 — escáner de la credencial: decodificación de una imagen QR generada (jsqr), selección BarcodeDetector/jsqr,
  * flujo /j en modo credencial (cámara simulada), cámara negada (sin alternativa tecleada), errores y selector del organizador.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import QRCode from "qrcode";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BADGE_CONSENT_EXTRA, CAMERA_COPY } from "@/components/room/BadgeJoin";
-import { RoomJoin } from "@/components/room/RoomJoin";
+import { JOIN_PURPOSE_LABEL, JOIN_PURPOSE_POINTS, JOIN_SUBTITLE, RoomJoin } from "@/components/room/RoomJoin";
 import { CONSENT_LINK_LABEL } from "@/components/voter/Consent";
 import { DEFAULT_ELIGIBILITY, EligibilityPicker, eligibilityInputOf, parseAllowlist } from "@/components/org/EligibilityPicker";
 import { badgeUrlFromTyped, classifyBadgeError, createQrDetector, decodeQrRgba } from "@/lib/client/badge";
@@ -56,6 +56,9 @@ function mockFetch(handler: Handler) {
 const future = () => new Date(Date.now() + 10 * 60_000).toISOString();
 const info = { electionId: "el-1", title: "Votación Platanus (fixture)", open: true, seatsTaken: 3, maxSeats: 120, expiresAt: future(), closedReason: null, eligibility: { method: "event-badge", badgeUrlPrefix: "https://hack.platan.us/26-ve/id/" } };
 const joined = { electionId: "el-1", voterId: "vt-9", displayName: "Participante", inviteToken: "tok-badge", inviteUrl: "http://x/v/tok-badge" };
+/** Foto de opción (fixture): PNG de 1×1, con la forma que exige `OptionImage`. */
+const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const infoWithBallot = { ...info, options: [{ id: "a", label: "Equipo A", subtitle: "Mesa 1 (fixture)", image: PNG }, { id: "b", label: "Equipo B" }] };
 
 /** Cámara simulada: getUserMedia con pistas detenibles y BarcodeDetector que va devolviendo `reads`. */
 function fakeCamera(reads: (string | null)[], opts: { deny?: boolean } = {}) {
@@ -138,6 +141,41 @@ describe("/j en modo credencial", () => {
     expect(screen.queryByText("o escribe tu usuario")).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(document.body.textContent).not.toMatch(/wallet|blockchain|semaphore|hmac/i);
+  });
+
+  it("subtítulo + «¿Para qué me inscribo?» plegado (viñetas de la credencial, sin palabras prohibidas) y «Así es la boleta» antes del botón; la vista previa se oculta mientras se escanea", async () => {
+    mockFetch(() => ({ status: 200, body: infoWithBallot }));
+    fakeCamera([null]);
+    render(<RoomJoin roomCode="ABC234" />);
+    const preview = await screen.findByTestId("ballot-preview");
+    expect(screen.getByTestId("join-subtitle").textContent).toBe(JOIN_SUBTITLE);
+    const purpose = screen.getByTestId("join-purpose") as HTMLDetailsElement;
+    expect(purpose.open).toBe(false);
+    expect(within(purpose).getByText(JOIN_PURPOSE_LABEL)).toBeTruthy();
+    const points = within(purpose).getAllByRole("listitem").map((li) => li.textContent);
+    expect(points).toEqual([...JOIN_PURPOSE_POINTS["event-badge"]]);
+    expect(points[0]).toMatch(/vale una sola vez/);
+    expect(points[0]).toMatch(/No guardamos fotos/);
+    expect(points[1]).toMatch(/comprobante que no muestra tu opción/);
+    expect(points[2]).toMatch(/El servidor sí ve cada boleta/);
+    expect(document.body.textContent).not.toMatch(/anónim|secreto|identidad verificada|wallet|blockchain|semaphore|hmac/i);
+    // Vista previa de solo lectura: foto, inicial, subtítulo; sin radios; el único botón sigue siendo escanear.
+    expect(within(preview).getByTestId("preview-question").textContent).toBe("Votación Platanus (fixture)");
+    const cards = within(preview).getAllByTestId("preview-option");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]!.querySelector("img")?.getAttribute("src")).toBe(PNG);
+    expect(within(cards[0]!).getByTestId("preview-subtitle").textContent).toBe("Mesa 1 (fixture)");
+    expect(within(cards[1]!).getByTestId("preview-avatar").textContent).toBe("E");
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    const scan = screen.getByTestId("badge-scan");
+    expect(scan.textContent).toContain("Escanear mi credencial");
+    expect(Boolean(preview.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    // Al abrir la cámara, la vista previa se retira para que el visor quede a la vista.
+    fireEvent.click(scan);
+    expect(await screen.findByTestId("badge-scanner")).toBeTruthy();
+    expect(screen.queryByTestId("ballot-preview")).toBeNull();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("escanear: QR ajeno → aviso y sigue leyendo; credencial → entra sola, apaga la cámara y va a /v/<token>", async () => {

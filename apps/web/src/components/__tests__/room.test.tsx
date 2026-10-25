@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { qrPath } from "@/components/room/QrCode";
-import { ROOM_CONSENT_EXTRA, RoomJoin } from "@/components/room/RoomJoin";
+import { JOIN_PURPOSE_LABEL, JOIN_PURPOSE_POINTS, JOIN_SUBTITLE, ROOM_CONSENT_EXTRA, RoomJoin } from "@/components/room/RoomJoin";
 import { CONSENT_DETAILS, CONSENT_LINK_LABEL, CONSENT_SHORT } from "@/components/voter/Consent";
 import { RoomCard } from "@/components/room/RoomCard";
 import { ApiClientError } from "@/lib/client/api";
@@ -30,6 +30,15 @@ function mockFetch(handler: Handler) {
 
 const future = () => new Date(Date.now() + 10 * 60_000).toISOString();
 const info = (over: Record<string, unknown> = {}) => ({ electionId: "el-1", title: "Asamblea ficticia (fixture)", open: true, seatsTaken: 3, maxSeats: 60, expiresAt: future(), closedReason: null, ...over });
+/** Foto de opción (fixture): PNG de 1×1, con la forma que exige `OptionImage`. */
+const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const OPTIONS = [
+  { id: "ana", label: "Ana", subtitle: "Tesorera (fixture)", image: PNG },
+  { id: "beto", label: "Beto" },
+  { id: "carla", label: "Carla", subtitle: "Vocal (fixture)" },
+];
+/** Lo que no se promete en /j (reglas duras 1 y 5). */
+const FORBIDDEN = /anónim|secreto|identidad verificada|100 ?%|wallet|blockchain|semaphore/i;
 
 beforeEach(() => {
   localStorage.clear();
@@ -106,6 +115,52 @@ describe("RoomJoin (/j/[roomCode])", () => {
     for (const p of [CONSENT_SHORT, ...CONSENT_DETAILS, ...ROOM_CONSENT_EXTRA]) expect(p).not.toMatch(/anónim|secreto|100 ?%|wallet|credencial/i);
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getAllByRole("button")).toHaveLength(1);
+    // Servidor viejo sin `options`: no hay vista previa (nunca una tarjeta vacía).
+    expect(screen.queryByTestId("ballot-preview")).toBeNull();
+  });
+
+  it("subtítulo + «¿Para qué me inscribo?» plegado (3 viñetas honestas, sin palabras prohibidas) y vista previa de la boleta de solo lectura con foto, inicial y subtítulo", async () => {
+    mockFetch(() => ({ status: 200, body: info({ options: OPTIONS }) }));
+    render(<RoomJoin roomCode="ABC234" />);
+    const preview = await screen.findByTestId("ballot-preview");
+    // Debajo del título: la línea corta y el desplegable (plegado), con las viñetas del modo apodo.
+    expect(screen.getByTestId("join-subtitle").textContent).toBe(JOIN_SUBTITLE);
+    const purpose = screen.getByTestId("join-purpose") as HTMLDetailsElement;
+    expect(purpose.tagName).toBe("DETAILS");
+    expect(purpose.open).toBe(false);
+    expect(within(purpose).getByText(JOIN_PURPOSE_LABEL)).toBeTruthy();
+    const points = within(purpose).getAllByRole("listitem").map((li) => li.textContent);
+    expect(points).toEqual([...JOIN_PURPOSE_POINTS["open-alias"]]);
+    expect(points[0]).toMatch(/no te inscribes dos veces/);
+    expect(points[0]).toMatch(/No guardamos fotos/);
+    expect(points[1]).toMatch(/comprobante que no muestra tu opción/);
+    expect(points[2]).toMatch(/El servidor sí ve cada boleta/);
+    for (const p of [JOIN_SUBTITLE, JOIN_PURPOSE_LABEL, ...JOIN_PURPOSE_POINTS["open-alias"], ...JOIN_PURPOSE_POINTS["event-badge"]]) expect(p).not.toMatch(FORBIDDEN);
+    // En modo apodo no se habla de credencial.
+    for (const p of JOIN_PURPOSE_POINTS["open-alias"]) expect(p).not.toMatch(/credencial/i);
+    expect(document.body.textContent).not.toMatch(FORBIDDEN);
+    // «Así es la boleta»: pregunta + tarjetas; foto o inicial; subtítulo; solo lectura (sin radios, sigue habiendo un solo botón).
+    expect(within(preview).getByText("Así es la boleta")).toBeTruthy();
+    expect(within(preview).getByTestId("preview-question").textContent).toBe("Asamblea ficticia (fixture)");
+    const cards = within(preview).getAllByTestId("preview-option");
+    expect(cards.map((c) => c.textContent)).toEqual(["AnaTesorera (fixture)", "BBeto", "CCarlaVocal (fixture)"]);
+    expect(cards[0]!.querySelector("img")?.getAttribute("src")).toBe(PNG);
+    expect(within(cards[0]!).getByTestId("preview-subtitle").textContent).toBe("Tesorera (fixture)");
+    expect(cards[1]!.querySelector("img")).toBeNull();
+    expect(within(cards[1]!).getByTestId("preview-avatar").textContent).toBe("B");
+    expect(within(cards[1]!).queryByTestId("preview-subtitle")).toBeNull();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    // Orden: título → subtítulo/desplegable → vista previa → nombre → Continuar.
+    const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(after(screen.getByRole("heading", { level: 1 }), purpose)).toBe(true);
+    expect(after(purpose, preview)).toBe(true);
+    expect(after(preview, screen.getByLabelText("Tu nombre o apodo"))).toBe(true);
+    expect(after(preview, screen.getByRole("button", { name: "Continuar" }))).toBe(true);
+    // Siguen los testids/estados de antes.
+    expect(screen.getByTestId("room-closes-in").textContent).toMatch(/^La entrada cierra en \d+:\d{2}$/);
+    expect(screen.getByText(CONSENT_LINK_LABEL)).toBeTruthy();
   });
 
   it("valida el nombre o apodo antes de llamar al servidor", async () => {

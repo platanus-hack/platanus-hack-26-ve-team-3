@@ -17,3 +17,21 @@ export function findNullifier<T extends { idx: number; hash: string; nullifier: 
   if (!n) return null;
   return entries.find((e) => normalizeNullifier(e.nullifier) === n) ?? null;
 }
+
+/** Estado honesto del check `anchor_matches` del verificador (tri-estado): nunca "verificado" sin que el verificador lo diga. */
+export type AnchorCheck = "verificado" | "no verificable" | "fallo detectado";
+
+/**
+ * Lee el check `anchor_matches` de un `AuditResult`. Mismas reglas que `checkStatus` (AuditChecklist): con `status`
+ * manda el verificador y "no evaluado" nunca es verde. `null` si el verificador no incluyó ese check.
+ */
+export function anchorCheckOf(result: { checks: { name: string; passed: boolean; reason?: string; status?: "verificado" | "fallo detectado" | "no evaluado" }[] }): AnchorCheck | null {
+  const c = result.checks.find((x) => x.name === "anchor_matches");
+  if (!c) return null;
+  if (c.status === "fallo detectado") return "fallo detectado";
+  if (c.status === "no evaluado") return "no verificable";
+  if (c.status === "verificado") return c.passed ? "verificado" : "fallo detectado";
+  if (!c.passed) return "fallo detectado";
+  if (c.reason && /^no evaluado/i.test(c.reason.trim())) return "no verificable";
+  return "verificado";
+}

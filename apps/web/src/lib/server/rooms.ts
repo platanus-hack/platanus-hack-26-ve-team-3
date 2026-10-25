@@ -193,7 +193,9 @@ export async function roomPublicInfo(rawCode: string) {
   void _c;
   void _j;
   const eligibility = e.eligibility ? { method: e.eligibility.method, ...(e.eligibility.badgeUrlPrefix ? { badgeUrlPrefix: e.eligibility.badgeUrlPrefix } : {}) } : undefined;
-  return { electionId: e.id, title: e.title, ...status, ...(eligibility ? { eligibility } : {}) };
+  // Vista previa de la boleta ("Así es la boleta"): solo lo que se pinta en cada tarjeta; ni descripción, ni fechas, ni nada del organizador.
+  const options = e.options.map((o) => ({ id: o.id, label: o.label, ...(o.subtitle ? { subtitle: o.subtitle } : {}), ...(o.image ? { image: o.image } : {}) }));
+  return { electionId: e.id, title: e.title, ...status, ...(eligibility ? { eligibility } : {}), options };
 }
 
 const CLOSED_MESSAGE: Record<NonNullable<CloseReason>, string> = {

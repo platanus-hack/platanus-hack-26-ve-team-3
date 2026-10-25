@@ -13,6 +13,7 @@ import { ConfirmInline } from "@/components/ui/confirm-inline";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { WinnerScreen } from "@/components/results/WinnerScreen";
 import { QrCode } from "@/components/room/QrCode";
 import { RoomCard } from "@/components/room/RoomCard";
 import { remaining, useNow } from "@/components/room/useNow";
@@ -25,6 +26,7 @@ import { copyText } from "@/lib/client/download";
 import { formatInt } from "@/lib/client/format";
 import { appendVoters, consumeTokenReveal, loadOrgToken, loadVoters, rememberElection, saveOrgToken, type StoredVoter } from "@/lib/client/orgStore";
 import { roomApi } from "@/lib/client/room";
+import { useAuditResult } from "@/lib/client/useAuditResult";
 import { hasAuditPackage, nextOrganizerAction, type OrganizerAction } from "@/lib/client/phases";
 import { openWarnings, readinessLine, type Readiness } from "@/lib/client/reviews";
 import { CandidatesList } from "./CandidatesEditor";
@@ -87,6 +89,8 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const [openingRoom, setOpeningRoom] = useState(false);
   const clock = useServerClock();
   const now = useNow(1000);
+  // Al cierre: la misma carta del ganador que ve el votante en /live, con el veredicto real de GET /audit (nunca un booleano local).
+  const audit = useAuditResult(electionId, election?.status ?? null);
 
   // Token del organizador: sessionStorage; la primera vez tras crear la elección se revela en «Más › Token».
   useEffect(() => {
@@ -291,6 +295,9 @@ export function OrgPanel({ electionId }: { electionId: string }) {
   const liveUrl = typeof window === "undefined" ? `/e/${encodeURIComponent(electionId)}/live` : `${window.location.origin}/e/${encodeURIComponent(electionId)}/live`;
   const shareUrl = phase === "registration" ? (roomOpen ? status!.joinUrl! : null) : liveUrl;
   const candidatesCount = election.candidates?.length ?? 0;
+  // Carta del ganador: las opciones del tally cruzadas por `id` con las de la elección (foto y subtítulo), igual que /live.
+  const optionById = new Map(election.options.map((o) => [o.id, o]));
+  const closedOptions = tally ? tally.options.map((o) => ({ ...o, subtitle: optionById.get(o.id)?.subtitle, image: optionById.get(o.id)?.image })) : [];
 
   const phaseAction = (a: OrganizerAction | null, icon?: React.ReactNode) =>
     a ? (
@@ -453,8 +460,10 @@ export function OrgPanel({ electionId }: { electionId: string }) {
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-6">
-          <LiveBreakdown tally={tally} options={election.options} final />
-          <div className="flex flex-col gap-4">
+          {/* Carta del ganador a lo ancho (la misma de /live). Debajo, solo la línea «Ganó X por N votos» (sin repetir el ranking) y la columna de participación y acciones. */}
+          {tally ? <WinnerScreen electionId={electionId} status={phase} options={closedOptions} totalVotes={tally.totalVotes} audit={audit} className="lg:col-span-2" /> : null}
+          <LiveBreakdown tally={tally} options={election.options} final headlineOnly className="lg:col-start-1" />
+          <div className="flex flex-col gap-4 lg:col-start-2">
             <TurnoutCard tally={tally} />
             {action ? (
               <>

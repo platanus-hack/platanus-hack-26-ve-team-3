@@ -15,7 +15,7 @@ import { drawWinners } from "../../../../packages/protocol-adapter/src/draw";
 export type Phase = "draft" | "registration" | "open" | "closed" | "tallying" | "auditable" | "drawn" | "failed";
 
 const FIXTURES = path.resolve(__dirname, "../../public/fixtures/protocol");
-const validPkg = JSON.parse(readFileSync(path.join(FIXTURES, "valid.json"), "utf8")) as { commitments: string[]; finalHash: string; ledger: { proof: { nullifier: string } }[] };
+const validPkg = JSON.parse(readFileSync(path.join(FIXTURES, "valid.json"), "utf8")) as { commitments: string[]; finalHash: string; ledger: { idx: number; prevHash: string; hash: string; proof: { nullifier: string } }[] };
 
 export const E2E = {
   electionId: "e2e-samanes",
@@ -33,6 +33,8 @@ export const E2E = {
     { id: "p-pintura", label: "Pintura de áreas comunes", amount: 900 },
   ],
   fixtureNullifier: validPkg.ledger[0].proof.nullifier,
+  /** Hash encadenado de esa boleta en el registro (SHA-256), tal como lo publica el ledger. */
+  fixtureBallotHash: validPkg.ledger[0].hash,
   finalHash: validPkg.finalHash,
 };
 
@@ -317,7 +319,8 @@ export class MockV1 {
         return this.json(route, { electionId: E2E.electionId, voterId: E2E.voterId, displayName: "Participante", inviteToken: E2E.token, inviteUrl: `${url.origin}/v/${E2E.token}` }, 201);
       }
       const elig = this.eligibility ? { eligibility: { method: this.eligibility.method, ...(this.eligibility.badgeUrlPrefix ? { badgeUrlPrefix: this.eligibility.badgeUrlPrefix } : {}) } } : {};
-      return this.json(route, { electionId: E2E.electionId, title: E2E.title, ...rest, ...elig, ...clock });
+      // Vista previa de la boleta en /j: las mismas opciones (con foto y subtítulo si las hay) que luego pinta la boleta.
+      return this.json(route, { electionId: E2E.electionId, title: E2E.title, ...rest, ...elig, ...clock, options: this.options });
     }
 
     if (p === "/api/elections" && m === "POST") {
@@ -358,8 +361,11 @@ export class MockV1 {
       this.nullifier = proof.nullifier;
       return this.json(route, { electionId: E2E.electionId, inclusionId: proof.nullifier, nullifier: proof.nullifier, index: 6, hash: `0x${"3c".repeat(32)}`, receivedAt: "2026-10-24T15:00:00.000Z", includedAt: "2026-10-24T15:00:00.000Z", state: "incluido" }, 201);
     }
-    if (p === `${E}/ledger`)
-      return this.json(route, { electionId: E2E.electionId, status: this.phase, groupRoot: "0", scope: "0", genesisHash: `0x${"00".repeat(32)}`, finalHash: E2E.finalHash, count: 7, proofsPublished: this.phase !== "open", entries: [] });
+    if (p === `${E}/ledger`) {
+      // Como el servidor real: durante la votación no se publican entradas (C3); al cierre, las boletas del paquete fixture.
+      const published = this.phase !== "open";
+      return this.json(route, { electionId: E2E.electionId, status: this.phase, groupRoot: "0", scope: "0", genesisHash: `0x${"00".repeat(32)}`, finalHash: E2E.finalHash, count: published ? validPkg.ledger.length : 7, proofsPublished: published, entries: published ? validPkg.ledger : [] });
+    }
     if (p.startsWith(`${E}/receipt/`)) {
       const n = decodeURIComponent(p.split("/").pop() ?? "");
       return n === this.nullifier ? this.json(route, { electionId: E2E.electionId, inclusionId: n, nullifier: n, index: 6, hash: `0x${"3c".repeat(32)}`, receivedAt: "2026-10-24T15:00:00.000Z", includedAt: "2026-10-24T15:00:00.000Z", state: "incluido" }) : this.json(route, { error: "no existe", code: "not_found" }, 404);
